@@ -11,6 +11,7 @@ interface Event {
   type: string;
   cost: number;
   organizer: string;
+  organizer_user_id: string | null;
   description: string;
   image_url: string;
   stream_url: string;
@@ -25,6 +26,10 @@ interface Session {
   start_time: string;
   end_time: string;
   registration_open_time: string;
+  room_code: string;
+  room_password: string;
+  room_note: string;
+  responsible_user_id: string | null;
 }
 
 interface Registration {
@@ -39,7 +44,7 @@ interface Registration {
 }
 
 export default function EventPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const supabase = createClient();
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -50,6 +55,7 @@ export default function EventPage() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOrganizer, setIsOrganizer] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [myMembers, setMyMembers] = useState<any[]>([]);
@@ -62,6 +68,10 @@ export default function EventPage() {
 
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
+
+  const [showResponsible, setShowResponsible] = useState(false);
+  const [responsibleUserId, setResponsibleUserId] = useState("");
+  const [roomData, setRoomData] = useState<Record<string, { code: string; password: string; note: string }>>({});
 
   useEffect(() => {
     const init = async () => {
@@ -85,9 +95,7 @@ export default function EventPage() {
           regs.map(async (r) => {
             const { data: team } = await supabase.from("teams").select("name").eq("id", r.team_id).single();
             let roster: string[] = [];
-            try {
-              roster = JSON.parse(r.roster || "[]");
-            } catch {}
+            try { roster = JSON.parse(r.roster || "[]"); } catch {}
             return { ...r, team_name: team?.name || "—", roster };
           })
         );
@@ -106,6 +114,9 @@ export default function EventPage() {
           .eq("user_id", user.id)
           .single();
         if (roleData) setIsAdmin(true);
+
+        const { data: ev2 } = await supabase.from("events").select("organizer_user_id").eq("id", id).single();
+        if (ev2?.organizer_user_id === user.id) setIsOrganizer(true);
 
         const { data: member } = await supabase
           .from("team_members")
@@ -182,7 +193,6 @@ export default function EventPage() {
     if (error) {
       setMessage("Ошибка: " + error.message);
     } else {
-      // Запись в ленту активности
       await supabase.from("activity_log").insert({
         user_id: currentUser.id,
         team_id: myTeam.id,
@@ -208,22 +218,10 @@ export default function EventPage() {
       .eq("event_id", id)
       .eq("team_id", myTeam?.id);
 
-    if (!myRegs || myRegs.length === 0) {
-      setMessage("Заявка не найдена.");
-      return;
-    }
-
+    if (!myRegs || myRegs.length === 0) return;
     const myReg = myRegs[0];
 
-    const { error: deleteError } = await supabase
-      .from("event_registrations")
-      .delete()
-      .eq("id", myReg.id);
-
-    if (deleteError) {
-      setMessage("Ошибка при отмене: " + deleteError.message);
-      return;
-    }
+    await supabase.from("event_registrations").delete().eq("id", myReg.id);
 
     if (myReg.status === "confirmed") {
       const { data: firstWaiting } = await supabase
@@ -236,9 +234,7 @@ export default function EventPage() {
         .single();
 
       if (firstWaiting) {
-        await supabase.from("event_registrations")
-          .update({ status: "confirmed" })
-          .eq("id", firstWaiting.id);
+        await supabase.from("event_registrations").update({ status: "confirmed" }).eq("id", firstWaiting.id);
       }
     }
 
@@ -258,15 +254,55 @@ export default function EventPage() {
   const saveResults = async () => {
     if (!event) return;
     for (const r of confirmed) {
-      const score = scores[r.id] || 0;
       await supabase.from("event_results").upsert({
         event_id: event.id,
         team_id: r.team_id,
-        score,
+        score: scores[r.id] || 0,
         is_winner: r.team_id === winnerTeamId,
       }, { onConflict: "event_id,team_id" });
     }
     setMessage("Результаты сохранены!");
+  };
+
+  const assignResponsible = async (sessionId: string) => {
+    if (!responsibleUserId) return;
+    await supabase.from("event_sessions").update({ responsible_user_id: responsibleUserId }).eq("id", sessionId);
+    fetchSessions();
+    setResponsibleUserId("");
+    setMessage("Ответственный назначен.");
+  };
+
+  const fetchSessions = async () => {
+    const { data } = await supabase
+      .from("event_sessions")
+      .select("*")
+      .eq("event_id", id)
+      .order("start_time", { ascending: true });
+    if (data) setSessions(data);
+  };
+
+  const saveRoomData = async (sessionId: string) => {
+    const data = roomData[sessionId];
+    if (!data) return;
+    await supabase.from("event_sessions").update({
+      room_code: data.code,
+      room_password: data.password,
+      room_note: data.note,
+    }).eq("id", sessionId);
+    setMessage("Данные комнаты сохранены.");
+
+    const confirmedRegs = registrations.filter(r => r.status === "confirmed");
+    for (const reg of confirmedRegs) {
+      const { data: team } = await supabase.from("teams").select("leader_id, name").eq("id", reg.team_id).single();
+      if (team?.leader_id) {
+        await supabase.from("messages").insert({
+          to_user_id: team.leader_id,
+          from_user_id: currentUser?.id,
+          subject: `Данные комнаты: ${event?.title}`,
+          body: `Команда: ${team.name}\nКод: ${data.code}\nПароль: ${data.password}${data.note ? `\nПримечание: ${data.note}` : ""}`,
+        });
+      }
+    }
   };
 
   const refreshRegistrations = async () => {
@@ -280,9 +316,7 @@ export default function EventPage() {
         data.map(async (r) => {
           const { data: team } = await supabase.from("teams").select("name").eq("id", r.team_id).single();
           let roster: string[] = [];
-          try {
-            roster = JSON.parse(r.roster || "[]");
-          } catch {}
+          try { roster = JSON.parse(r.roster || "[]"); } catch {}
           return { ...r, team_name: team?.name || "—", roster };
         })
       );
@@ -304,6 +338,7 @@ export default function EventPage() {
   const confirmed = registrations.filter(r => r.status === "confirmed");
   const waiting = registrations.filter(r => r.status === "waiting");
   const hasStarted = sessions.length > 0 && new Date() >= new Date(sessions[0].start_time);
+  const canViewRoom = isAdmin || isOrganizer || (myTeam && confirmed.some(r => r.team_id === myTeam.id));
 
   return (
     <div className="min-h-screen p-6">
@@ -332,18 +367,17 @@ export default function EventPage() {
           <div><span className="text-gray-400">Блокировка состава:</span> за {event.roster_lock_minutes || 10} мин. до начала</div>
         </div>
 
-        {/* Кнопка результатов */}
-        <Link
-          href={`/tournaments/${id}/results`}
-          className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded hover:bg-blue-600"
-        >
+        <Link href={`/tournaments/${id}/results`} className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">
           📊 Результаты
         </Link>
 
-        {isAdmin && (
+        {(isAdmin || isOrganizer) && (
           <div className="mt-4 flex gap-2 flex-wrap">
             <button onClick={toggleRegistrationsVisibility} className="px-3 py-1 bg-gray-600 rounded text-sm">
               {event.show_registrations ? "Скрыть участников" : "Показать участников"}
+            </button>
+            <button onClick={() => setShowResponsible(!showResponsible)} className="px-3 py-1 bg-blue-600 rounded text-sm">
+              Назначить ответственных
             </button>
             <Link href={`/admin/events/${id}/stats`} className="px-3 py-1 bg-red-600 rounded text-sm">
               Модерация статистики
@@ -355,12 +389,61 @@ export default function EventPage() {
       {/* Сессии */}
       <div className="mt-6">
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
-        {sessions.map((s) => (
-          <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
-            <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
-            {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru")}</p>}
-          </div>
-        ))}
+        {sessions.map((s) => {
+          const isResponsible = s.responsible_user_id === currentUser?.id;
+          const canEditRoom = isAdmin || isOrganizer || isResponsible;
+          return (
+            <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
+              <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
+              {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru")}</p>}
+
+              {showResponsible && (isAdmin || isOrganizer) && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="flex-1 p-2 text-black rounded text-sm"
+                    placeholder="ID ответственного"
+                    value={responsibleUserId}
+                    onChange={(e) => setResponsibleUserId(e.target.value)}
+                  />
+                  <button onClick={() => assignResponsible(s.id)} className="px-3 py-1 bg-green-600 rounded text-sm">Назначить</button>
+                </div>
+              )}
+
+              {canEditRoom && (
+                <div className="mt-3 bg-gray-700 p-3 rounded">
+                  <p className="text-sm font-semibold mb-2">Данные комнаты</p>
+                  <input
+                    className="w-full p-2 text-black rounded mb-2"
+                    placeholder="Код комнаты"
+                    value={roomData[s.id]?.code || s.room_code}
+                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], code: e.target.value } })}
+                  />
+                  <input
+                    className="w-full p-2 text-black rounded mb-2"
+                    placeholder="Пароль"
+                    value={roomData[s.id]?.password || s.room_password}
+                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], password: e.target.value } })}
+                  />
+                  <input
+                    className="w-full p-2 text-black rounded mb-2"
+                    placeholder="Примечание"
+                    value={roomData[s.id]?.note || s.room_note}
+                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], note: e.target.value } })}
+                  />
+                  <button onClick={() => saveRoomData(s.id)} className="px-3 py-1 bg-blue-600 rounded text-sm">Сохранить и отправить</button>
+                </div>
+              )}
+
+              {canViewRoom && (s.room_code || s.room_password) && !canEditRoom && (
+                <div className="mt-3 bg-gray-700 p-3 rounded">
+                  <p><span className="text-gray-400">Код:</span> {s.room_code}</p>
+                  <p><span className="text-gray-400">Пароль:</span> {s.room_password}</p>
+                  {s.room_note && <p><span className="text-gray-400">Примечание:</span> {s.room_note}</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Запись */}
@@ -380,32 +463,18 @@ export default function EventPage() {
                       type="checkbox"
                       checked={selectedRoster.includes(m.user_id)}
                       onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedRoster([...selectedRoster, m.user_id]);
-                        } else {
-                          setSelectedRoster(selectedRoster.filter(id => id !== m.user_id));
-                        }
+                        if (e.target.checked) setSelectedRoster([...selectedRoster, m.user_id]);
+                        else setSelectedRoster(selectedRoster.filter(id => id !== m.user_id));
                       }}
                     />
                     {m.nickname} ({m.role_in_team === "leader" ? "Лидер" : m.role_in_team === "deputy" ? "Зам" : m.position === "main" ? "Основа" : "Запас"})
                   </label>
                 ))}
-                <button
-                  onClick={() => {
-                    const mainIds = myMembers.filter((m: any) => m.position === "main").map((m: any) => m.user_id);
-                    setSelectedRoster(mainIds);
-                  }}
-                  className="text-xs text-blue-400 mt-1"
-                >
-                  Заполнить основным составом
-                </button>
               </div>
             )}
           </div>
 
-          <button onClick={registerTeam} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">
-            Записаться
-          </button>
+          <button onClick={registerTeam} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">Записаться</button>
           {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
@@ -417,24 +486,17 @@ export default function EventPage() {
         </div>
       )}
 
-      {/* Кнопка добавления статистики */}
       {alreadyRegistered && registrationStatus === "confirmed" && hasStarted && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h3 className="text-lg font-semibold mb-3">Статистика</h3>
-          <p className="text-gray-400 text-sm mb-3">
-            Вы участвовали в этом мероприятии. Можете добавить свою статистику.
-          </p>
-          <Link
-            href={`/tournaments/${id}/add-stats`}
-            className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 inline-block"
-          >
+          <Link href={`/tournaments/${id}/add-stats`} className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 inline-block">
             + Добавить статистику
           </Link>
         </div>
       )}
 
       {/* Результаты */}
-      {hasStarted && isAdmin && (
+      {hasStarted && (isAdmin || isOrganizer) && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h2 className="text-xl font-semibold mb-3">Результаты</h2>
           {confirmed.map(r => (
@@ -443,10 +505,7 @@ export default function EventPage() {
                 type="number"
                 placeholder="Счёт"
                 className="p-2 text-black rounded w-24"
-                onChange={(e) => {
-                  const score = parseInt(e.target.value) || 0;
-                  setScores(prev => ({ ...prev, [r.id]: score }));
-                }}
+                onChange={(e) => setScores(prev => ({ ...prev, [r.id]: parseInt(e.target.value) || 0 }))}
               />
               <span className="text-blue-400">{r.team_name_override || r.team_name}</span>
               <button
@@ -457,53 +516,38 @@ export default function EventPage() {
               </button>
             </div>
           ))}
-          <button onClick={saveResults} className="mt-2 px-4 py-2 bg-green-600 rounded hover:bg-green-700">
-            Сохранить результаты
-          </button>
+          <button onClick={saveResults} className="mt-2 px-4 py-2 bg-green-600 rounded hover:bg-green-700">Сохранить результаты</button>
         </div>
       )}
 
       {/* Заявки */}
-      {(event.show_registrations || isAdmin) && (
+      {(event.show_registrations || isAdmin || isOrganizer) && (
         <div className="mt-6">
           <h2 className="text-xl font-semibold mb-4">Заявки</h2>
-
           {confirmed.map((r) => (
             <div key={r.id} className="bg-gray-800 p-3 rounded mb-2">
               <div className="flex justify-between items-center">
                 <div>
-                  <button
-                    onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)}
-                    className="text-blue-400 hover:underline"
-                  >
+                  <button onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)} className="text-blue-400 hover:underline">
                     {r.team_name_override || r.team_name}
                   </button>
                   {r.is_winner && <span className="ml-2 text-yellow-400">🏆 Победитель</span>}
                 </div>
                 <span className="text-green-400">✓</span>
               </div>
-
               {selectedRegistrationId === r.id && (
                 <div className="mt-2 text-sm text-gray-300">
-                  {r.roster.length > 0 ? (
-                    r.roster.map((userId: string) => {
-                      const player = allPlayers.find((p: any) => p.id === userId);
-                      return <div key={userId}>— {player?.nickname || userId}</div>;
-                    })
-                  ) : (
-                    <p className="text-gray-500">Состав не указан</p>
-                  )}
+                  {r.roster.length > 0 ? r.roster.map((userId: string) => {
+                    const player = allPlayers.find((p: any) => p.id === userId);
+                    return <div key={userId}>— {player?.nickname || userId}</div>;
+                  }) : <p className="text-gray-500">Состав не указан</p>}
                 </div>
               )}
             </div>
           ))}
-
           {waiting.map((r) => (
             <div key={r.id} className="bg-gray-800 p-3 rounded flex justify-between mb-2">
-              <button
-                onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)}
-                className="text-blue-400 hover:underline"
-              >
+              <button onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)} className="text-blue-400 hover:underline">
                 {r.team_name_override || r.team_name}
               </button>
               <span className="text-yellow-400">⏳</span>

@@ -15,7 +15,7 @@ export default function Sidebar() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
- const menuItems = [
+  const menuItems = [
     { href: "/", label: "Главная" },
     { href: "/teams", label: "Команды и гильдии" },
     { href: "/tournaments", label: "Турниры" },
@@ -25,6 +25,8 @@ export default function Sidebar() {
     { href: "/betting", label: "Ставки" },
     { href: "/diamonds", label: "Купить Алмазы" },
     { href: "/knowledge-base", label: "База знаний" },
+    { href: "/messages", label: "Сообщения" },
+    { href: "/notifications", label: "Уведомления" },
     { href: "/profile", label: "Профиль" },
     { href: "/contacts", label: "Контакты" },
   ];
