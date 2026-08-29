@@ -8,7 +8,7 @@ import { useState } from "react";
 export default function AuthPage() {
   const supabase = createClient();
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [message, setMessage] = useState("");
   const [resetSent, setResetSent] = useState(false);
 

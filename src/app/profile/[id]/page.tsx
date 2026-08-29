@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 export default function PublicProfilePage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const supabase = createClient();
   const [profile, setProfile] = useState<any>(null);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
