@@ -19,6 +19,7 @@ interface Event {
   max_teams: number;
   show_registrations: boolean;
   roster_lock_minutes: number;
+  min_players: number;
 }
 
 interface Session {
@@ -178,9 +179,10 @@ export default function EventPage() {
   const registerTeam = async () => {
     if (!myTeam) { setMessage("У вас нет верифицированной команды."); return; }
 
-    // Проверка выбранного состава
-    if (selectedRoster.length === 0) {
-      setMessage("Неверное количество участников. Выберите хотя бы одного игрока.");
+    // Проверка минимального количества игроков, заданного для мероприятия
+    const minPlayers = event?.min_players || 4;
+    if (selectedRoster.length < minPlayers) {
+      setMessage(`В составе команды должно быть минимум ${minPlayers} игроков.`);
       return;
     }
 
@@ -414,6 +416,7 @@ export default function EventPage() {
           {event.cost > 0 && <div><span className="text-gray-400">Стоимость:</span> {event.cost} ₽</div>}
           {event.organizer && <div><span className="text-gray-400">Организатор:</span> {event.organizer}</div>}
           {event.max_teams > 0 && <div><span className="text-gray-400">Лимит команд:</span> {event.max_teams}</div>}
+          <div><span className="text-gray-400">Мин. игроков:</span> {event.min_players || 4}</div>
           <div><span className="text-gray-400">Блокировка состава:</span> за {event.roster_lock_minutes || 10} мин. до начала</div>
         </div>
 
@@ -503,7 +506,7 @@ export default function EventPage() {
 
           <div className="mb-3">
             <button onClick={() => setShowRosterForm(!showRosterForm)} className="text-sm text-blue-400">
-              {showRosterForm ? "Скрыть состав" : "Выбрать состав"} ({selectedRoster.length} чел.)
+              {showRosterForm ? "Скрыть состав" : "Выбрать состав"} ({selectedRoster.length}/{event.min_players || 4})
             </button>
             {showRosterForm && (
               <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">

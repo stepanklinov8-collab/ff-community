@@ -21,6 +21,7 @@ export default function CreateEventPage() {
   const [description, setDescription] = useState("");
   const [streamUrl, setStreamUrl] = useState("");
   const [maxTeams, setMaxTeams] = useState("0");
+  const [minPlayers, setMinPlayers] = useState("4");
   const [rosterLock, setRosterLock] = useState("10");
   const [publishAt, setPublishAt] = useState("");
   const [organizerId, setOrganizerId] = useState("");
@@ -86,6 +87,7 @@ export default function CreateEventPage() {
         stream_url: streamUrl,
         image_url: imageUrl,
         max_teams: parseInt(maxTeams) || 0,
+        min_players: parseInt(minPlayers) || 4,
         roster_lock_minutes: parseInt(rosterLock) || 10,
         publish_at: publishAt ? new Date(publishAt).toISOString() : null,
         is_published: !publishAt,
@@ -150,6 +152,11 @@ export default function CreateEventPage() {
         <div>
           <label className="text-gray-400 text-sm block mb-1">Лимит команд (0 = без ограничений)</label>
           <input className="w-full p-2 text-black rounded" type="number" value={maxTeams} onChange={(e) => setMaxTeams(e.target.value)} />
+        </div>
+
+        <div>
+          <label className="text-gray-400 text-sm block mb-1">Минимум игроков в составе</label>
+          <input className="w-full p-2 text-black rounded" type="number" value={minPlayers} onChange={(e) => setMinPlayers(e.target.value)} />
         </div>
 
         <div>
