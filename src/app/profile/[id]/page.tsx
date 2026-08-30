@@ -14,6 +14,15 @@ export default function PublicProfilePage() {
   const [badges, setBadges] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Для админа
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [warnings, setWarnings] = useState<any>({
+    activeWarnings: [],
+    warningCount: 0,
+    history: [],
+    activeBan: null,
+  });
+
   useEffect(() => {
     const init = async () => {
       const { data: profiles } = await supabase.from("profiles").select("*").eq("id", id).single();
@@ -73,6 +82,23 @@ export default function PublicProfilePage() {
       if (blogger) newBadges.push("Блогер");
 
       setBadges(newBadges);
+
+      // Проверяем, является ли текущий пользователь админом, и если да, загружаем преды
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { data: currentRoleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", currentUser.id)
+          .single();
+        if (currentRoleData) {
+          setIsAdmin(true);
+          const res = await fetch(`/api/profile/warnings?userId=${id}`);
+          const warnData = await res.json();
+          setWarnings(warnData);
+        }
+      }
+
       setLoading(false);
     };
     init();
@@ -88,6 +114,22 @@ export default function PublicProfilePage() {
     if (badge.startsWith("Игрок команды")) return "bg-blue-600";
     if (badge.startsWith("Участник гильдии")) return "bg-purple-700";
     return "bg-gray-600";
+  };
+
+  const unbanUser = async () => {
+    if (!confirm("Разблокировать игрока?")) return;
+    const res = await fetch("/api/admin/warnings", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetType: "player", targetId: id }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setWarnings({ ...warnings, activeBan: null });
+      alert("Бан снят");
+    } else {
+      alert("Ошибка: " + (data.error || "неизвестная ошибка"));
+    }
   };
 
   if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
@@ -147,6 +189,56 @@ export default function PublicProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Блок для админа: предупреждения и бан */}
+      {isAdmin && (
+        <div className="mt-6 bg-gray-800 p-4 rounded">
+          <h2 className="text-xl font-semibold mb-3">Предупреждения и блокировки</h2>
+          <p className="text-gray-400">Активных предупреждений: {warnings.warningCount}</p>
+
+          {warnings.activeBan && (
+            <div className="bg-red-900 p-3 rounded my-3">
+              <p className="font-bold text-red-200">Заблокирован: {warnings.activeBan.reason}</p>
+              <p className="text-xs text-red-400">
+                С {new Date(warnings.activeBan.created_at).toLocaleString("ru")}
+              </p>
+              <button
+                onClick={unbanUser}
+                className="mt-2 px-4 py-2 bg-green-600 rounded text-sm hover:bg-green-700"
+              >
+                Разблокировать
+              </button>
+            </div>
+          )}
+
+          {warnings.activeWarnings.length > 0 && (
+            <div className="space-y-2 mt-3">
+              {warnings.activeWarnings.map((w: any) => (
+                <div key={w.id} className="bg-gray-700 p-3 rounded">
+                  <p>
+                    Уровень {w.level}{" "}
+                    {w.expires_at ? `(до ${new Date(w.expires_at).toLocaleDateString("ru")})` : "(навсегда)"}
+                  </p>
+                  <p className="text-gray-400 text-sm">{w.reason}</p>
+                  <p className="text-xs text-gray-500">{new Date(w.created_at).toLocaleString("ru")}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <details className="mt-4">
+            <summary className="text-blue-400 cursor-pointer">История предупреждений</summary>
+            <div className="mt-2 space-y-2">
+              {warnings.history.map((h: any) => (
+                <div key={h.id} className="bg-gray-700 p-2 rounded text-sm">
+                  <p>{new Date(h.created_at).toLocaleString("ru")} — Уровень {h.level}</p>
+                  <p className="text-gray-400">{h.reason}</p>
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
     </div>
   );
 }

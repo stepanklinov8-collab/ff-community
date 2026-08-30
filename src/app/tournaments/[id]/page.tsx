@@ -182,6 +182,34 @@ export default function EventPage() {
     const maxTeams = event?.max_teams || 0;
     const status = maxTeams > 0 && confirmedCount >= maxTeams ? "waiting" : "confirmed";
 
+    // Проверка бана игрока
+    const { data: playerBan } = await supabase
+      .from("bans")
+      .select("id")
+      .eq("target_type", "player")
+      .eq("target_id", currentUser.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (playerBan) {
+      setMessage("Вы заблокированы и не можете участвовать в мероприятиях.");
+      return;
+    }
+
+    // Проверка бана команды
+    const { data: teamBan } = await supabase
+      .from("bans")
+      .select("id")
+      .eq("target_type", "team")
+      .eq("target_id", myTeam.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (teamBan) {
+      setMessage("Ваша команда заблокирована и не может участвовать в мероприятиях.");
+      return;
+    }
+
     const { error } = await supabase.from("event_registrations").insert({
       event_id: id,
       team_id: myTeam.id,
@@ -199,6 +227,15 @@ export default function EventPage() {
         event_id: id,
         activity_type: "registration",
         description: `Команда ${myTeam.name} записалась на мероприятие`,
+      });
+
+      // Уведомление о регистрации
+      await supabase.from("notifications").insert({
+        user_id: currentUser.id,
+        type: "registration",
+        title: "Регистрация на мероприятие",
+        body: `Ваша команда ${myTeam.name} зарегистрирована на "${event?.title}"`,
+        link: `/tournaments/${id}`,
       });
 
       setAlreadyRegistered(true);
@@ -237,6 +274,14 @@ export default function EventPage() {
         await supabase.from("event_registrations").update({ status: "confirmed" }).eq("id", firstWaiting.id);
       }
     }
+
+    // Уведомление об отмене
+    await supabase.from("notifications").insert({
+      user_id: currentUser.id,
+      type: "cancellation",
+      title: "Регистрация отменена",
+      body: `Вы отменили регистрацию команды ${myTeam?.name} на "${event?.title}"`,
+    });
 
     setAlreadyRegistered(false);
     setRegistrationStatus("");

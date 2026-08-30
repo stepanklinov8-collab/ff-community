@@ -23,6 +23,7 @@ export default function CreateEventPage() {
   const [maxTeams, setMaxTeams] = useState("0");
   const [rosterLock, setRosterLock] = useState("10");
   const [publishAt, setPublishAt] = useState("");
+  const [organizerId, setOrganizerId] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
@@ -72,6 +73,8 @@ export default function CreateEventPage() {
       imageUrl = urlData.publicUrl;
     }
 
+    const currentUser = (await supabase.auth.getUser()).data.user;
+
     const { data: event, error: eventError } = await supabase
       .from("events")
       .insert({
@@ -86,7 +89,8 @@ export default function CreateEventPage() {
         roster_lock_minutes: parseInt(rosterLock) || 10,
         publish_at: publishAt ? new Date(publishAt).toISOString() : null,
         is_published: !publishAt,
-        created_by: (await supabase.auth.getUser()).data.user?.id,
+        created_by: currentUser?.id,
+        organizer_user_id: organizerId.trim() || currentUser?.id,
       })
       .select("id")
       .single();
@@ -129,7 +133,7 @@ export default function CreateEventPage() {
           <option value="solo">Соло-турнир</option>
         </select>
         <input className="w-full p-2 text-black rounded" type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="Стоимость (0 = бесплатно)" />
-        <input className="w-full p-2 text-black rounded" placeholder="Организатор" value={organizer} onChange={(e) => setOrganizer(e.target.value)} />
+        <input className="w-full p-2 text-black rounded" placeholder="Организатор (имя)" value={organizer} onChange={(e) => setOrganizer(e.target.value)} />
         <textarea className="w-full p-2 text-black rounded" placeholder="Описание" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
 
         <div>
@@ -151,6 +155,13 @@ export default function CreateEventPage() {
         <div>
           <label className="text-gray-400 text-sm block mb-1">Блокировка состава (минут до начала)</label>
           <input className="w-full p-2 text-black rounded" type="number" value={rosterLock} onChange={(e) => setRosterLock(e.target.value)} />
+        </div>
+
+        <div>
+          <label className="text-gray-400 text-sm block mb-1">
+            ID организатора (если пусто — организатором станете вы)
+          </label>
+          <input className="w-full p-2 text-black rounded" placeholder="Введите ID пользователя" value={organizerId} onChange={(e) => setOrganizerId(e.target.value)} />
         </div>
 
         <div>

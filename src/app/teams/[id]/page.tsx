@@ -63,6 +63,13 @@ export default function TeamPage() {
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferUserId, setTransferUserId] = useState("");
 
+  // Предупреждения команды
+  const [teamWarnings, setTeamWarnings] = useState<any>({
+    activeWarnings: [],
+    warningCount: 0,
+    activeBan: null,
+  });
+
   const mainCount = members.filter(m => m.position === "main").length;
 
   const fetchTeam = useCallback(async () => {
@@ -116,7 +123,13 @@ export default function TeamPage() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
       if (user) {
-        if (teamData?.leader_id === user.id) setIsLeader(true);
+        if (teamData?.leader_id === user.id) {
+          setIsLeader(true);
+          // Загружаем предупреждения команды
+          const res = await fetch(`/api/team/warnings?teamId=${id}`);
+          const data = await res.json();
+          setTeamWarnings(data);
+        }
         const isM = members.some(m => m.user_id === user.id);
         setIsMember(isM);
         if (!isM) {
@@ -227,6 +240,21 @@ export default function TeamPage() {
 
   const sendJoinRequest = async () => {
     if (!currentUser) return;
+
+    // Проверка бана игрока
+    const { data: playerBan } = await supabase
+      .from("bans")
+      .select("id")
+      .eq("target_type", "player")
+      .eq("target_id", currentUser.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (playerBan) {
+      setInviteMessage("Вы заблокированы и не можете вступать в команды.");
+      return;
+    }
+
     await supabase.from("join_requests").insert({ team_id: id, user_id: currentUser.id });
     setHasPendingRequest(true);
     setInviteMessage("Заявка отправлена!");
@@ -378,6 +406,25 @@ export default function TeamPage() {
           })}
         </div>
       </div>
+
+      {/* Предупреждения команды (видны только лидеру) */}
+      {isLeader && teamWarnings.warningCount > 0 && (
+        <div className="mt-6 bg-gray-800 p-4 rounded border border-yellow-600">
+          <h3 className="text-lg font-semibold mb-2">Предупреждения команды ({teamWarnings.warningCount})</h3>
+          {teamWarnings.activeBan && (
+            <div className="bg-red-900 p-3 rounded mb-3">
+              <p className="font-bold text-red-200">Команда заблокирована!</p>
+              <p className="text-red-300 text-sm">{teamWarnings.activeBan.reason}</p>
+            </div>
+          )}
+          {teamWarnings.activeWarnings.map((w: any) => (
+            <div key={w.id} className="bg-gray-700 p-2 rounded mb-2 text-sm">
+              <p>Уровень {w.level} {w.expires_at ? `(до ${new Date(w.expires_at).toLocaleDateString("ru")})` : "(навсегда)"}</p>
+              <p className="text-gray-400">{w.reason}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Поиск и добавление */}
       {isLeader && (

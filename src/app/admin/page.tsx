@@ -23,6 +23,12 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
+  // Для предупреждений команде
+  const [showTeamWarning, setShowTeamWarning] = useState(false);
+  const [teamWarnLevel, setTeamWarnLevel] = useState(1);
+  const [teamWarnReason, setTeamWarnReason] = useState("");
+  const [teamWarnExpires, setTeamWarnExpires] = useState<"week" | "forever">("week");
+
   useEffect(() => {
     const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -57,6 +63,21 @@ export default function AdminPage() {
       .eq("id", teamId);
 
     if (!error) {
+      // Уведомление лидеру
+      const { data: teamData } = await supabase
+        .from("teams")
+        .select("leader_id, name")
+        .eq("id", teamId)
+        .single();
+      if (teamData?.leader_id) {
+        await supabase.from("notifications").insert({
+          user_id: teamData.leader_id,
+          type: "verification",
+          title: "Команда верифицирована",
+          body: `Ваша команда "${teamData.name}" прошла верификацию`,
+          link: `/teams/${teamId}`,
+        });
+      }
       setTeams(teams.map(t => t.id === teamId ? { ...t, verified: true } : t));
       setMessage("Команда верифицирована!");
     } else {
@@ -91,6 +112,47 @@ export default function AdminPage() {
       setMessage("Команда удалена.");
     } else {
       setMessage("Ошибка: " + error.message);
+    }
+  };
+
+  // Выдать предупреждение команде
+  const giveTeamWarning = async () => {
+    if (!selectedTeam) return;
+    const expiresAt = teamWarnExpires === "week" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+    const res = await fetch("/api/admin/warnings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetType: "team",
+        targetId: selectedTeam.id,
+        level: teamWarnLevel,
+        reason: teamWarnReason,
+        expiresAt,
+        isBan: false,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      // Уведомление лидеру команды
+      const { data: teamData } = await supabase
+        .from("teams")
+        .select("leader_id, name")
+        .eq("id", selectedTeam.id)
+        .single();
+      if (teamData?.leader_id) {
+        await supabase.from("notifications").insert({
+          user_id: teamData.leader_id,
+          type: "warning",
+          title: "Предупреждение команде",
+          body: `Вашей команде "${teamData.name}" выдано предупреждение: ${teamWarnReason}`,
+          link: `/teams/${selectedTeam.id}`,
+        });
+      }
+      setMessage("Предупреждение команде выдано");
+      setShowTeamWarning(false);
+      setTeamWarnReason("");
+    } else {
+      setMessage("Ошибка: " + (data.error || "неизвестная ошибка"));
     }
   };
 
@@ -200,7 +262,7 @@ export default function AdminPage() {
                 <p>{new Date(selectedTeam.created_at).toLocaleString("ru")}</p>
               </div>
 
-              <div className="flex gap-2 pt-3">
+              <div className="flex gap-2 pt-3 flex-wrap">
                 {!selectedTeam.verified ? (
                   <button
                     onClick={() => verifyTeam(selectedTeam.id)}
@@ -217,6 +279,17 @@ export default function AdminPage() {
                   </button>
                 )}
                 <button
+                  onClick={() => {
+                    setShowTeamWarning(true);
+                    setTeamWarnReason("");
+                    setTeamWarnLevel(1);
+                    setTeamWarnExpires("week");
+                  }}
+                  className="px-4 py-2 bg-orange-600 rounded hover:bg-orange-700"
+                >
+                  Предупредить
+                </button>
+                <button
                   onClick={() => deleteTeam(selectedTeam.id)}
                   className="px-4 py-2 bg-red-600 rounded hover:bg-red-700"
                 >
@@ -230,78 +303,61 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Мероприятия */}
+      {/* Модалка предупреждения команде */}
+      {showTeamWarning && selectedTeam && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded max-w-md w-full">
+            <button onClick={() => setShowTeamWarning(false)} className="float-right text-gray-400">✕</button>
+            <h2 className="text-xl font-bold mb-4">Предупреждение для {selectedTeam.name}</h2>
+            <label className="block text-sm mb-1">Уровень</label>
+            <select className="w-full p-2 text-black rounded mb-2" value={teamWarnLevel} onChange={(e) => setTeamWarnLevel(Number(e.target.value))}>
+              <option value={1}>1 - на конкретное мероприятие</option>
+              <option value={2}>2 - на все мероприятия</option>
+            </select>
+            <label className="block text-sm mb-1">Причина</label>
+            <input className="w-full p-2 text-black rounded mb-2" value={teamWarnReason} onChange={(e) => setTeamWarnReason(e.target.value)} placeholder="Причина" />
+            <label className="block text-sm mb-1">Срок</label>
+            <select className="w-full p-2 text-black rounded mb-4" value={teamWarnExpires} onChange={(e) => setTeamWarnExpires(e.target.value as "week" | "forever")}>
+              <option value="week">Неделя</option>
+              <option value="forever">Навсегда</option>
+            </select>
+            <button onClick={giveTeamWarning} className="w-full p-2 bg-orange-600 rounded">Выдать пред</button>
+          </div>
+        </div>
+      )}
+
+      {/* Остальные секции админки */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Мероприятия</h2>
         <div className="flex gap-2 flex-wrap">
-          <Link
-            href="/admin/events/create"
-            className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 inline-block"
-          >
-            + Новое мероприятие
-          </Link>
-          <Link
-            href="/admin/events/manage"
-            className="px-4 py-2 bg-yellow-600 rounded hover:bg-yellow-700 inline-block"
-          >
-            Управление мероприятиями
-          </Link>
+          <Link href="/admin/events/create" className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 inline-block">+ Новое мероприятие</Link>
+          <Link href="/admin/events/manage" className="px-4 py-2 bg-yellow-600 rounded hover:bg-yellow-700 inline-block">Управление мероприятиями</Link>
         </div>
       </div>
 
-      {/* Предложенные мероприятия */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Предложенные мероприятия</h2>
-        <Link
-          href="/admin/events/proposals"
-          className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 inline-block"
-        >
-          Просмотр предложений
-        </Link>
+        <Link href="/admin/events/proposals" className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 inline-block">Просмотр предложений</Link>
       </div>
 
-      {/* Пользователи */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Пользователи</h2>
-        <Link
-          href="/admin/users"
-          className="px-4 py-2 bg-purple-600 rounded hover:bg-purple-700 inline-block"
-        >
-          Управление пользователями
-        </Link>
+        <Link href="/admin/users" className="px-4 py-2 bg-purple-600 rounded hover:bg-purple-700 inline-block">Управление пользователями</Link>
       </div>
 
-      {/* Модерация статистики */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Модерация статистики</h2>
-        <Link
-          href="/admin/stats"
-          className="px-4 py-2 bg-orange-600 rounded hover:bg-orange-700 inline-block"
-        >
-          Проверить статистику
-        </Link>
+        <Link href="/admin/stats" className="px-4 py-2 bg-orange-600 rounded hover:bg-orange-700 inline-block">Проверить статистику</Link>
       </div>
 
-      {/* Контакты */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Контакты</h2>
-        <Link
-          href="/admin/contacts"
-          className="px-4 py-2 bg-teal-600 rounded hover:bg-teal-700 inline-block"
-        >
-          Управление контактами
-        </Link>
+        <Link href="/admin/contacts" className="px-4 py-2 bg-teal-600 rounded hover:bg-teal-700 inline-block">Управление контактами</Link>
       </div>
 
-      {/* Блогеры */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Блогеры</h2>
-        <Link
-          href="/admin/bloggers"
-          className="px-4 py-2 bg-pink-600 rounded hover:bg-pink-700 inline-block"
-        >
-          Управление блогерами
-        </Link>
+        <Link href="/admin/bloggers" className="px-4 py-2 bg-pink-600 rounded hover:bg-pink-700 inline-block">Управление блогерами</Link>
       </div>
     </div>
   );

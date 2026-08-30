@@ -35,10 +35,13 @@ export default function ProposalsPage() {
     fetch();
   }, []);
 
-  const approve = async (eventId: string) => {
-    await supabase.from("events").update({ is_published: true }).eq("id", eventId);
+  const approve = async (eventId: string, createdBy: string) => {
+    await supabase.from("events").update({
+      is_published: true,
+      organizer_user_id: createdBy, // автор предложения становится организатором
+    }).eq("id", eventId);
     setProposals(proposals.filter(p => p.id !== eventId));
-    setMessage("Мероприятие опубликовано!");
+    setMessage("Мероприятие опубликовано, автор назначен организатором!");
   };
 
   const reject = async (eventId: string) => {
@@ -74,7 +77,7 @@ export default function ProposalsPage() {
                   <p className="text-gray-500 text-xs mt-2">Предложил: {p.created_by || "—"}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => approve(p.id)} className="px-3 py-1 bg-green-600 rounded text-sm">Опубликовать</button>
+                  <button onClick={() => approve(p.id, p.created_by)} className="px-3 py-1 bg-green-600 rounded text-sm">Опубликовать</button>
                   <button onClick={() => reject(p.id)} className="px-3 py-1 bg-red-600 rounded text-sm">Отклонить</button>
                 </div>
               </div>

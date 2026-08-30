@@ -31,6 +31,12 @@ export default function ProfilePage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [badges, setBadges] = useState<string[]>([]);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
+  const [warnings, setWarnings] = useState<any>({
+    activeWarnings: [],
+    warningCount: 0,
+    history: [],
+    activeBan: null,
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -69,6 +75,17 @@ export default function ProfilePage() {
         const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
         const cost = Math.round(kills * 10 + matches * 5);
         setStats({ kills, matches, ratio, cost });
+
+        // Загрузка предупреждений через API
+        const session = await supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        if (token) {
+          const res = await fetch("/api/profile/warnings", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const warnData = await res.json();
+          setWarnings(warnData);
+        }
 
         // Записи на мероприятия
         const { data: member } = await supabase
@@ -259,6 +276,41 @@ export default function ProfilePage() {
         <Link href="/stats/add" className="inline-block p-3 bg-blue-500 rounded hover:bg-blue-600">
           Добавить статистику
         </Link>
+      </div>
+
+      {/* Предупреждения */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Мои предупреждения ({warnings.warningCount})</h2>
+        {warnings.activeBan && (
+          <div className="bg-red-900 p-3 rounded mb-4">
+            <p className="font-bold text-red-200">Вы заблокированы!</p>
+            <p className="text-red-300 text-sm">{warnings.activeBan.reason}</p>
+            <p className="text-xs text-red-400">{new Date(warnings.activeBan.created_at).toLocaleString("ru")}</p>
+          </div>
+        )}
+        {warnings.activeWarnings.length === 0 ? (
+          <p className="text-gray-400">Нет активных предупреждений.</p>
+        ) : (
+          <div className="space-y-2 mb-4">
+            {warnings.activeWarnings.map((w: any) => (
+              <div key={w.id} className="bg-gray-800 p-3 rounded">
+                <p>Уровень: {w.level} {w.expires_at ? "(до " + new Date(w.expires_at).toLocaleDateString("ru") + ")" : "(навсегда)"}</p>
+                <p className="text-gray-400 text-sm">{w.reason}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <details>
+          <summary className="text-blue-400 cursor-pointer">История предупреждений</summary>
+          <div className="mt-2 space-y-2">
+            {warnings.history.map((h: any) => (
+              <div key={h.id} className="bg-gray-700 p-2 rounded text-sm">
+                <p>{new Date(h.created_at).toLocaleString("ru")} — Уровень {h.level}</p>
+                <p className="text-gray-400">{h.reason}</p>
+              </div>
+            ))}
+          </div>
+        </details>
       </div>
 
       <div className="mb-6">
