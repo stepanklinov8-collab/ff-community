@@ -13,6 +13,7 @@ interface Team {
   leader_id: string;
   verified: boolean;
   created_at: string;
+  leader_nickname?: string;
 }
 
 export default function AdminPage() {
@@ -48,7 +49,24 @@ export default function AdminPage() {
         .from("teams")
         .select("*")
         .order("created_at", { ascending: false });
-      if (data) setTeams(data);
+
+      if (data) {
+        // Обогащаем никнеймом лидера
+        const enriched = await Promise.all(
+          data.map(async (team) => {
+            if (team.leader_id) {
+              const { data: profile } = await supabase
+                .from("profiles")
+                .select("nickname")
+                .eq("id", team.leader_id)
+                .single();
+              return { ...team, leader_nickname: profile?.nickname || "—" };
+            }
+            return { ...team, leader_nickname: "—" };
+          })
+        );
+        setTeams(enriched);
+      }
       setLoading(false);
     };
 
@@ -250,6 +268,16 @@ export default function AdminPage() {
               <div>
                 <span className="text-gray-400">Соцсеть:</span>
                 <p>{selectedTeam.social_link || "Не указана"}</p>
+              </div>
+              <div>
+                <span className="text-gray-400">Лидер (подал заявку):</span>
+                <p>
+                  {selectedTeam.leader_id ? (
+                    <Link href={`/profile/${selectedTeam.leader_id}`} className="text-blue-400 hover:underline">
+                      {selectedTeam.leader_nickname || selectedTeam.leader_id}
+                    </Link>
+                  ) : "—"}
+                </p>
               </div>
               <div>
                 <span className="text-gray-400">Статус:</span>

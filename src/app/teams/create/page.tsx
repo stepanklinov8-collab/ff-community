@@ -31,7 +31,7 @@ export default function CreateTeamPage() {
     // Проверяем, состоит ли уже в команде
     const { data: existingMember, error: memberError } = await supabase
       .from("team_members")
-      .select("team_id, role_in_team, teams(name)")
+      .select("team_id, role_in_team, teams(name, type)")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -41,30 +41,36 @@ export default function CreateTeamPage() {
     }
 
     if (existingMember) {
-      if (existingMember.role_in_team === "leader") {
-        setMessage(`Вы капитан команды "${(existingMember as any).teams?.name}". Сначала передайте права или удалите команду.`);
+      const memberTeam = (existingMember as any).teams;
+      const teamType = memberTeam?.type;
+
+      if (existingMember.role_in_team === "leader" && teamType === "team") {
+        setMessage(`Вы капитан команды "${memberTeam?.name}". Сначала передайте права или удалите команду.`);
         return;
       }
 
-      const confirmLeave = confirm(
-        `Вы состоите в команде "${(existingMember as any).teams?.name}". При создании новой команды вы покинете текущую. Продолжить?`
-      );
-      if (!confirmLeave) {
-        setMessage("Создание отменено.");
-        return;
-      }
+      // Если состоит в обычной команде (не гильдии), нужно подтверждение на выход
+      if (teamType === "team") {
+        const confirmLeave = confirm(
+          `Вы состоите в команде "${memberTeam?.name}". При создании новой команды вы покинете текущую. Продолжить?`
+        );
+        if (!confirmLeave) {
+          setMessage("Создание отменено.");
+          return;
+        }
 
-      // Удаляем из текущей команды
-      const { error: leaveError } = await supabase
-        .from("team_members")
-        .delete()
-        .eq("team_id", existingMember.team_id)
-        .eq("user_id", user.id);
+        const { error: leaveError } = await supabase
+          .from("team_members")
+          .delete()
+          .eq("team_id", existingMember.team_id)
+          .eq("user_id", user.id);
 
-      if (leaveError) {
-        setMessage("Ошибка при выходе из текущей команды: " + leaveError.message);
-        return;
+        if (leaveError) {
+          setMessage("Ошибка при выходе из текущей команды: " + leaveError.message);
+          return;
+        }
       }
+      // Если teamType === "guild", ничего не делаем — остаёмся в гильдии
     }
 
     setMessage("Создание...");
