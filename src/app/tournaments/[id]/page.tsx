@@ -177,6 +177,13 @@ export default function EventPage() {
 
   const registerTeam = async () => {
     if (!myTeam) { setMessage("У вас нет верифицированной команды."); return; }
+
+    // Проверка выбранного состава
+    if (selectedRoster.length === 0) {
+      setMessage("Неверное количество участников. Выберите хотя бы одного игрока.");
+      return;
+    }
+
     setMessage("Регистрация...");
     const confirmedCount = registrations.filter(r => r.status === "confirmed").length;
     const maxTeams = event?.max_teams || 0;
@@ -229,7 +236,6 @@ export default function EventPage() {
         description: `Команда ${myTeam.name} записалась на мероприятие`,
       });
 
-      // Уведомление о регистрации
       await supabase.from("notifications").insert({
         user_id: currentUser.id,
         type: "registration",
@@ -275,7 +281,6 @@ export default function EventPage() {
       }
     }
 
-    // Уведомление об отмене
     await supabase.from("notifications").insert({
       user_id: currentUser.id,
       type: "cancellation",
