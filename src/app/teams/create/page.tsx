@@ -20,14 +20,54 @@ export default function CreateTeamPage() {
       return;
     }
 
-    setMessage("Создание...");
+    setMessage("Проверка...");
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
     if (userError || !user) {
       setMessage("Ошибка: вы не авторизованы");
       return;
     }
+
+    // Проверяем, состоит ли уже в команде
+    const { data: existingMember, error: memberError } = await supabase
+      .from("team_members")
+      .select("team_id, role_in_team, teams(name)")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (memberError) {
+      setMessage("Ошибка проверки членства: " + memberError.message);
+      return;
+    }
+
+    if (existingMember) {
+      if (existingMember.role_in_team === "leader") {
+        setMessage(`Вы капитан команды "${(existingMember as any).teams?.name}". Сначала передайте права или удалите команду.`);
+        return;
+      }
+
+      const confirmLeave = confirm(
+        `Вы состоите в команде "${(existingMember as any).teams?.name}". При создании новой команды вы покинете текущую. Продолжить?`
+      );
+      if (!confirmLeave) {
+        setMessage("Создание отменено.");
+        return;
+      }
+
+      // Удаляем из текущей команды
+      const { error: leaveError } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("team_id", existingMember.team_id)
+        .eq("user_id", user.id);
+
+      if (leaveError) {
+        setMessage("Ошибка при выходе из текущей команды: " + leaveError.message);
+        return;
+      }
+    }
+
+    setMessage("Создание...");
 
     const { data, error } = await supabase.from("teams").insert({
       name,
@@ -39,27 +79,34 @@ export default function CreateTeamPage() {
 
     if (error) {
       setMessage("Ошибка: " + error.message);
-    } else {
-      // Добавляем лидера в состав
-      if (data) {
-        await supabase.from("team_members").insert({
-          team_id: data.id,
-          user_id: user.id,
-          role_in_team: "leader",
-          position: "main",
-        });
-
-        // Запись в ленту активности
-        await supabase.from("activity_log").insert({
-          user_id: user.id,
-          team_id: data.id,
-          activity_type: "team_created",
-          description: `Создана команда ${name}`,
-        });
-      }
-      setMessage("Команда создана и отправлена на модерацию!");
-      setTimeout(() => router.push("/profile"), 1500);
+      return;
     }
+
+    // Добавляем лидера в состав
+    if (data) {
+      const { error: memberInsertError } = await supabase.from("team_members").insert({
+        team_id: data.id,
+        user_id: user.id,
+        role_in_team: "leader",
+        position: "main",
+      });
+
+      if (memberInsertError) {
+        setMessage("Ошибка добавления в состав: " + memberInsertError.message);
+        return;
+      }
+
+      // Запись в ленту активности
+      await supabase.from("activity_log").insert({
+        user_id: user.id,
+        team_id: data.id,
+        activity_type: "team_created",
+        description: `Создана команда ${name}`,
+      });
+    }
+
+    setMessage("Команда создана и отправлена на модерацию!");
+    setTimeout(() => router.push("/profile"), 1500);
   };
 
   return (
