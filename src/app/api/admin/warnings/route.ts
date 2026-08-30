@@ -6,16 +6,14 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Выдать пред или заблокировать
 export async function POST(request: Request) {
-  const { targetType, targetId, level, reason, expiresAt, isBan } = await request.json();
+  const { targetType, targetId, level, reason, expiresAt, isBan, eventId } = await request.json();
 
   if (!targetType || !targetId) {
     return NextResponse.json({ error: "Не указана цель" }, { status: 400 });
   }
 
   if (isBan) {
-    // Блокировка
     const { error } = await supabaseAdmin.from("bans").insert({
       target_type: targetType,
       target_id: targetId,
@@ -26,26 +24,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // Обычное предупреждение
   const { error } = await supabaseAdmin.from("warnings").insert({
     target_type: targetType,
     target_id: targetId,
     level: level || 1,
     reason: reason || "",
     expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+    event_id: eventId || null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Проверяем порог для игрока (5) или команды (3)
-  const { count } = await supabaseAdmin
-    .from("warnings")
-    .select("id", { count: "exact", head: true })
-    .eq("target_type", targetType)
-    .eq("target_id", targetId)
-    .is("expires_at", null); // считаем только вечные, или по-другому?
-
-  // Проще: считаем все активные преды
+  // Проверяем активные преды
   const { data: activeWarnings } = await supabaseAdmin
     .from("warnings")
     .select("id")
@@ -56,7 +46,6 @@ export async function POST(request: Request) {
   const activeCount = activeWarnings?.length || 0;
 
   if ((targetType === 'player' && activeCount >= 5) || (targetType === 'team' && activeCount >= 3)) {
-    // Автоблокировка
     await supabaseAdmin.from("bans").insert({
       target_type: targetType,
       target_id: targetId,
@@ -68,7 +57,6 @@ export async function POST(request: Request) {
   return NextResponse.json({ success: true, activeCount });
 }
 
-// Снять бан (разблокировать)
 export async function DELETE(request: Request) {
   const { targetType, targetId } = await request.json();
   await supabaseAdmin.from("bans").update({ is_active: false })

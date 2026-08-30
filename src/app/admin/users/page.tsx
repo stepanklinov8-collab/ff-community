@@ -18,32 +18,30 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  // Редактирование ника и ID
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editNickname, setEditNickname] = useState("");
   const [editGameId, setEditGameId] = useState("");
 
-  // Модальные окна
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [modalType, setModalType] = useState<"message" | "warning" | "ban" | "roles" | null>(null);
 
-  // Поля для сообщения
   const [msgSubject, setMsgSubject] = useState("");
   const [msgBody, setMsgBody] = useState("");
 
-  // Поля для предупреждения
   const [warnLevel, setWarnLevel] = useState(1);
   const [warnReason, setWarnReason] = useState("");
   const [warnExpires, setWarnExpires] = useState<"week" | "forever">("week");
+  const [warnEventId, setWarnEventId] = useState("");
 
-  // Поля для бана
+  const [eventsList, setEventsList] = useState<any[]>([]);
+
   const [banReason, setBanReason] = useState("");
 
-  // Поля для плашек
   const [availableRoles, setAvailableRoles] = useState<string[]>(["blogger", "moderator", "superadmin"]);
 
   useEffect(() => {
     fetchUsers();
+    fetchEvents();
   }, []);
 
   const fetchUsers = async () => {
@@ -65,6 +63,15 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchEvents = async () => {
+    const { data } = await supabase
+      .from("events")
+      .select("id, title")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false });
+    if (data) setEventsList(data);
   };
 
   const startEdit = (user: User) => {
@@ -89,7 +96,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Открыть модалку
   const openModal = (user: User, type: "message" | "warning" | "ban" | "roles") => {
     setSelectedUser(user);
     setModalType(type);
@@ -98,10 +104,10 @@ export default function AdminUsersPage() {
     setWarnLevel(1);
     setWarnReason("");
     setWarnExpires("week");
+    setWarnEventId("");
     setBanReason("");
   };
 
-  // Отправить сообщение
   const sendMessage = async () => {
     if (!selectedUser || !msgSubject || !msgBody) {
       setMessage("Заполните тему и текст сообщения");
@@ -114,7 +120,6 @@ export default function AdminUsersPage() {
     });
     const data = await res.json();
     if (data.success) {
-      // Добавляем уведомление получателю
       await supabase.from("notifications").insert({
         user_id: selectedUser.id,
         type: "message",
@@ -122,7 +127,6 @@ export default function AdminUsersPage() {
         body: `У вас новое сообщение: ${msgSubject}`,
         link: "/messages",
       });
-
       setMessage("Сообщение отправлено");
       setModalType(null);
     } else {
@@ -130,7 +134,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Выдать предупреждение
   const giveWarning = async () => {
     if (!selectedUser) return;
     const expiresAt = warnExpires === "week" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
@@ -144,18 +147,17 @@ export default function AdminUsersPage() {
         reason: warnReason,
         expiresAt,
         isBan: false,
+        eventId: warnEventId || null,
       }),
     });
     const data = await res.json();
     if (data.success) {
-      // Добавляем уведомление игроку
       await supabase.from("notifications").insert({
         user_id: selectedUser.id,
         type: "warning",
         title: "Выдано предупреждение",
         body: `Причина: ${warnReason}`,
       });
-
       setMessage("Предупреждение выдано");
       setModalType(null);
     } else {
@@ -163,7 +165,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Заблокировать пользователя
   const banUser = async () => {
     if (!selectedUser) return;
     const res = await fetch("/api/admin/warnings", {
@@ -185,7 +186,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Управление плашками
   const toggleRole = async (userId: string, role: string, action: "add" | "remove") => {
     const res = await fetch("/api/admin/roles", {
       method: "POST",
@@ -277,7 +277,6 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Модальные окна */}
       {modalType && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-gray-800 p-6 rounded max-w-md w-full">
@@ -300,6 +299,19 @@ export default function AdminUsersPage() {
                   <option value={1}>1 - на конкретное мероприятие</option>
                   <option value={2}>2 - на все мероприятия</option>
                 </select>
+
+                {warnLevel === 1 && (
+                  <>
+                    <label className="block text-sm mb-1">Мероприятие</label>
+                    <select className="w-full p-2 text-black rounded mb-2" value={warnEventId} onChange={(e) => setWarnEventId(e.target.value)}>
+                      <option value="">Выберите мероприятие</option>
+                      {eventsList.map(ev => (
+                        <option key={ev.id} value={ev.id}>{ev.title}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+
                 <label className="block text-sm mb-1">Причина</label>
                 <input className="w-full p-2 text-black rounded mb-2" value={warnReason} onChange={(e) => setWarnReason(e.target.value)} placeholder="Причина" />
                 <label className="block text-sm mb-1">Срок</label>
