@@ -14,6 +14,7 @@ interface User {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [canDeleteUsers, setCanDeleteUsers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -22,7 +23,9 @@ export default function AdminUsersPage() {
   const [editGameId, setEditGameId] = useState("");
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [modalType, setModalType] = useState<"message" | "warning" | "ban" | "roles" | null>(null);
+  const [modalType, setModalType] = useState<"message" | "warning" | "ban" | "roles" | "delete" | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const [msgSubject, setMsgSubject] = useState("");
   const [msgBody, setMsgBody] = useState("");
@@ -51,6 +54,7 @@ export default function AdminUsersPage() {
           created_at: u.created_at,
         })));
       }
+      setCanDeleteUsers(Boolean(data.canDeleteUsers));
     } catch (err) {
       console.error("Ошибка загрузки пользователей:", err);
       setMessage("Ошибка загрузки пользователей");
@@ -95,7 +99,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  const openModal = (user: User, type: "message" | "warning" | "ban" | "roles") => {
+  const openModal = (user: User, type: "message" | "warning" | "ban" | "roles" | "delete") => {
     setSelectedUser(user);
     setModalType(type);
     setMsgSubject("");
@@ -105,6 +109,29 @@ export default function AdminUsersPage() {
     setWarnExpires("week");
     setWarnEventId("");
     setBanReason("");
+    setDeleteConfirmation("");
+  };
+
+  const deleteUser = async () => {
+    if (!selectedUser || deleteConfirmation !== "УДАЛИТЬ") return;
+    setDeleting(true);
+    try {
+      const response = await authFetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUser.id, confirmation: deleteConfirmation }),
+      });
+      const payload = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || !payload.success) throw new Error(payload.error || "Не удалось удалить игрока");
+      setUsers((current) => current.filter((user) => user.id !== selectedUser.id));
+      setModalType(null);
+      setSelectedUser(null);
+      setMessage("Профиль игрока удалён");
+    } catch (deleteError) {
+      setMessage(deleteError instanceof Error ? `Ошибка: ${deleteError.message}` : "Ошибка удаления игрока");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const sendMessage = async () => {
@@ -253,6 +280,7 @@ export default function AdminUsersPage() {
                         <button onClick={() => openModal(user, "warning")} className="px-2 py-1 bg-yellow-600 rounded text-xs">Пред</button>
                         <button onClick={() => openModal(user, "ban")} className="px-2 py-1 bg-red-600 rounded text-xs">Бан</button>
                         <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Плашки</button>
+                        {canDeleteUsers && <button onClick={() => openModal(user, "delete")} className="rounded bg-red-950 px-2 py-1 text-xs text-red-200 ring-1 ring-red-700">Удалить</button>}
                       </div>
                     )}
                   </td>
@@ -331,6 +359,29 @@ export default function AdminUsersPage() {
                     </div>
                   ))}
                 </div>
+              </>
+            )}
+
+            {modalType === "delete" && (
+              <>
+                <h2 className="mb-3 text-xl font-bold text-red-400">Удалить профиль {selectedUser.nickname}?</h2>
+                <p className="mb-4 text-sm text-slate-300">
+                  Игрок потеряет доступ к аккаунту и исчезнет из рейтинга. Активные данные, аватар и участие в команде будут удалены. Журналы модерации сохранятся.
+                </p>
+                <label className="mb-1 block text-sm text-slate-400">Для подтверждения введите УДАЛИТЬ</label>
+                <input
+                  className="mb-4 w-full rounded p-2 text-black"
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  autoComplete="off"
+                />
+                <button
+                  onClick={deleteUser}
+                  disabled={deleteConfirmation !== "УДАЛИТЬ" || deleting}
+                  className="w-full rounded bg-red-700 p-2 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {deleting ? "Удаление…" : "Удалить профиль навсегда"}
+                </button>
               </>
             )}
           </div>
