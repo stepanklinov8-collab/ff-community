@@ -23,7 +23,6 @@ export async function GET(request: Request) {
     return Response.json({
       profile: {
         id: user.id,
-        email: user.email,
         nickname: data?.nickname || user.user_metadata?.nickname || "",
         avatarUrl: data?.avatar_url || "",
         gameId: data?.game_id || user.user_metadata?.game_id || "",

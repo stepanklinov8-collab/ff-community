@@ -236,16 +236,26 @@ export default function TeamPage() {
 
   const uploadAvatar = async () => {
     if (!avatarFile || !team) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
+      setInviteMessage("Эмблема должна быть JPEG, PNG или WebP размером до 5 МБ.");
+      return;
+    }
     setUploadingAvatar(true);
-    const fileName = `team_${team.id}_${Date.now()}`;
-    const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, avatarFile);
-    if (uploadError) { setInviteMessage("Ошибка: " + uploadError.message); setUploadingAvatar(false); return; }
-    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-    await supabase.from("teams").update({ avatar_url: urlData.publicUrl }).eq("id", team.id);
-    setAvatarUrl(urlData.publicUrl);
-    setAvatarFile(null);
-    setUploadingAvatar(false);
-    setInviteMessage("Аватар обновлён!");
+    setInviteMessage("");
+    try {
+      const formData = new FormData();
+      formData.set("avatar", avatarFile);
+      const response = await authFetch(`/api/teams/${team.id}/avatar`, { method: "POST", body: formData });
+      const payload = await response.json() as { avatarUrl?: string; error?: string };
+      if (!response.ok || !payload.avatarUrl) throw new Error(payload.error || "Не удалось загрузить эмблему");
+      setAvatarUrl(payload.avatarUrl);
+      setAvatarFile(null);
+      setInviteMessage("Эмблема обновлена!");
+    } catch (uploadError) {
+      setInviteMessage(uploadError instanceof Error ? uploadError.message : "Не удалось загрузить эмблему");
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const transferLeadership = async () => {
@@ -364,10 +374,14 @@ export default function TeamPage() {
                   <span className="text-xs uppercase bg-gray-700 px-2 py-1 rounded">{team.type === "guild" ? "Гильдия" : "Команда"}</span>
                   {team.verified && <span className="text-green-400 text-sm">✓</span>}
                 </div>
-                {isLeader && (
-                  <div className="flex gap-2 mt-2">
-                    <input className="text-sm text-white w-40" type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
-                    {avatarFile && <button onClick={uploadAvatar} disabled={uploadingAvatar} className="px-3 py-1 bg-blue-500 rounded text-sm">{uploadingAvatar ? "..." : "Загрузить"}</button>}
+                {canManage && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="cursor-pointer rounded bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600">
+                      Выбрать эмблему
+                      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+                    </label>
+                    {avatarFile && <button onClick={uploadAvatar} disabled={uploadingAvatar} className="rounded bg-blue-500 px-3 py-1 text-sm disabled:opacity-50">{uploadingAvatar ? "Загрузка…" : "Сохранить"}</button>}
+                    <span className="text-xs text-slate-400">до 5 МБ</span>
                   </div>
                 )}
               </div>

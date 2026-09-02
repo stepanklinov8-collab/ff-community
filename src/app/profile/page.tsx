@@ -211,33 +211,20 @@ export default function ProfilePage() {
 
     setUploading(true);
     setMessage("");
-    const extension = avatarFile.name.split(".").pop()?.toLowerCase() || "webp";
-    const fileName = `${user.id}/avatar-${Date.now()}.${extension}`;
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(fileName, avatarFile, { contentType: avatarFile.type, upsert: false });
-    if (uploadError) {
-      setMessage(`Ошибка загрузки: ${uploadError.message}`);
-      setUploading(false);
-      return;
-    }
-
-    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: user.id,
-      avatar_url: urlData.publicUrl,
-      nickname: user.user_metadata?.nickname || "",
-      updated_at: new Date().toISOString(),
-    });
-    if (profileError) {
-      await supabase.storage.from("avatars").remove([fileName]);
-      setMessage(`Ошибка обновления профиля: ${profileError.message}`);
-    } else {
-      setAvatarUrl(urlData.publicUrl);
+    try {
+      const formData = new FormData();
+      formData.set("avatar", avatarFile);
+      const response = await authFetch("/api/profile/avatar", { method: "POST", body: formData });
+      const payload = await response.json() as { avatarUrl?: string; error?: string };
+      if (!response.ok || !payload.avatarUrl) throw new Error(payload.error || "Не удалось загрузить аватар");
+      setAvatarUrl(payload.avatarUrl);
       setAvatarFile(null);
       setMessage("Аватар обновлён.");
+    } catch (uploadError) {
+      setMessage(uploadError instanceof Error ? uploadError.message : "Не удалось загрузить аватар");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   if (loading) return <div className="page-shell"><p className="text-slate-400">Загрузка профиля…</p></div>;
@@ -272,11 +259,14 @@ export default function ProfilePage() {
               {badges.map((badge) => <span key={badge} className="badge badge-blue">{badge}</span>)}
             </div>
             <p className="mt-1 text-sm text-slate-400">Игровой ID: {profileForm.gameId || user.user_metadata?.game_id || "не указан"}</p>
-            <p className="text-sm text-slate-500">{user.email}</p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
             <button type="button" onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
-            <input className="max-w-xs text-xs text-slate-300" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+            <label className="btn-secondary cursor-pointer text-sm">
+              Выбрать аватар
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+            </label>
+            <p className="max-w-xs text-right text-xs text-slate-500">JPEG, PNG или WebP, до 5 МБ</p>
             {avatarFile && <button type="button" onClick={uploadAvatar} disabled={uploading} className="btn-secondary text-sm">{uploading ? "Загрузка…" : "Обновить аватар"}</button>}
           </div>
         </div>
@@ -297,7 +287,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Киллы", stats.kills], ["Матчи", stats.matches], ["K/M", stats.ratio], ["Стоимость", "???"]].map(([label, value]) => (
+        {[["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio], ["Стоимость", "???"]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>
