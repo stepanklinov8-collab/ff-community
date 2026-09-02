@@ -1,14 +1,27 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
-import { Geist, Inter } from "next/font/google";
-import { cn } from "@/lib/utils";
-
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+import LanguageProvider from "@/components/LanguageProvider";
+import SiteFooter from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "FF-Community",
-  description: "Платформа для FF-комьюнити",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  title: {
+    default: "OMCITE Arena — турниры и сообщество Free Fire",
+    template: "%s · OMCITE Arena",
+  },
+  description: "Команды, гильдии, турниры, тренировки и статистика сообщества OMCITE.",
+  applicationName: "OMCITE Arena",
+  icons: {
+    icon: "/brand/omcite-emblem.jpg",
+  },
+  openGraph: {
+    title: "OMCITE Arena",
+    description: "Турниры и сообщество Free Fire",
+    images: ["/brand/omcite-hero.jpg"],
+    locale: "ru_RU",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -17,12 +30,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={cn("font-sans", inter.variable)}>
-      <body className="bg-gray-900 text-white min-h-screen">
-        <Sidebar />
-        <main className="pt-16 px-4 max-w-7xl mx-auto">
-          {children}
-        </main>
+    <html lang="ru" suppressHydrationWarning>
+      <body>
+        <LanguageProvider>
+          <Sidebar />
+          <main className="app-main">
+            {children}
+            <SiteFooter />
+          </main>
+        </LanguageProvider>
       </body>
     </html>
   );

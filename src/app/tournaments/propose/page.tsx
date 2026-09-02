@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Session {
   startTime: string;
@@ -12,7 +12,6 @@ interface Session {
 }
 
 export default function ProposeEventPage() {
-  const supabase = createClient();
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [type, setType] = useState("training");
@@ -51,51 +50,29 @@ export default function ProposeEventPage() {
 
     setMessage("Отправка...");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setMessage("Вы не авторизованы");
-      return;
-    }
-
-    const { data: event, error: eventError } = await supabase
-      .from("events")
-      .insert({
+    const response = await authFetch("/api/events/proposals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         title,
         type,
-        cost: parseInt(cost) || 0,
+        cost: parseInt(cost, 10) || 0,
         organizer,
         description,
-        is_published: false,
-        publish_at: null,
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
-
-    if (eventError || !event) {
-      setMessage("Ошибка: " + (eventError?.message || "неизвестная ошибка"));
+        sessions: sessions.map((session) => ({
+          startTime: new Date(session.startTime).toISOString(),
+          endTime: session.endTime ? new Date(session.endTime).toISOString() : null,
+          registrationOpenTime: session.regOpenTime ? new Date(session.regOpenTime).toISOString() : null,
+        })),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error || "Не удалось отправить предложение");
       return;
     }
-
-    const sessionInserts = sessions.map((s) => ({
-      event_id: event.id,
-      start_time: new Date(s.startTime).toISOString(),
-      end_time: s.endTime ? new Date(s.endTime).toISOString() : null,
-      registration_open_time: s.regOpenTime ? new Date(s.regOpenTime).toISOString() : null,
-    }));
-
-    const { error: sessionError } = await supabase
-      .from("event_sessions")
-      .insert(sessionInserts);
-
-    if (sessionError) {
-      setMessage("Ошибка при создании сессий: " + sessionError.message);
-    } else {
-      setMessage("Мероприятие предложено! Админ рассмотрит его.");
-      setTimeout(() => router.push("/tournaments"), 1500);
-    }
+    setMessage("Мероприятие предложено! Администратор рассмотрит его.");
+    setTimeout(() => router.push("/tournaments"), 1500);
   };
 
   return (

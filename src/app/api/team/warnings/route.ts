@@ -1,16 +1,27 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createAdminClient } from "@/utils/supabase/admin";
+import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
 export async function GET(request: Request) {
+  try {
+  const auth = await requireUser(request);
   const { searchParams } = new URL(request.url);
   const teamId = searchParams.get("teamId");
   if (!teamId) {
-    return NextResponse.json({ error: "teamId обязателен" }, { status: 400 });
+    return Response.json({ error: "teamId обязателен" }, { status: 400 });
+  }
+
+  const supabaseAdmin = createAdminClient();
+  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("superadmin");
+  if (!isAdmin) {
+    const { data: membership } = await supabaseAdmin
+      .from("team_members")
+      .select("role_in_team")
+      .eq("team_id", teamId)
+      .eq("user_id", auth.user.id)
+      .maybeSingle();
+    if (!membership) {
+      return Response.json({ error: "Недостаточно прав" }, { status: 403 });
+    }
   }
 
   // Активные предупреждения
@@ -21,7 +32,7 @@ export async function GET(request: Request) {
     .eq("target_id", teamId)
     .or(`expires_at.is.null,expires_at.gt.NOW()`);
 
-  if (warnError) return NextResponse.json({ error: warnError.message }, { status: 500 });
+  if (warnError) throw warnError;
 
   // Активный бан
   const { data: activeBan } = await supabaseAdmin
@@ -32,9 +43,12 @@ export async function GET(request: Request) {
     .eq("is_active", true)
     .maybeSingle();
 
-  return NextResponse.json({
+  return Response.json({
     activeWarnings: activeWarnings || [],
     warningCount: (activeWarnings || []).length,
     activeBan: activeBan || null,
   });
+  } catch (error) {
+    return authErrorResponse(error);
+  }
 }

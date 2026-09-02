@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Team {
   id: string;
@@ -17,7 +17,6 @@ interface Team {
 }
 
 export default function AdminPage() {
-  const supabase = createClient();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -30,106 +29,62 @@ export default function AdminPage() {
   const [teamWarnReason, setTeamWarnReason] = useState("");
   const [teamWarnExpires, setTeamWarnExpires] = useState<"week" | "forever">("week");
 
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
-
-      if (data) setIsAdmin(true);
-    };
-
-    const fetchTeams = async () => {
-      const { data } = await supabase
-        .from("teams")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (data) {
-        // Обогащаем никнеймом лидера
-        const enriched = await Promise.all(
-          data.map(async (team) => {
-            if (team.leader_id) {
-              const { data: profile } = await supabase
-                .from("profiles")
-                .select("nickname")
-                .eq("id", team.leader_id)
-                .single();
-              return { ...team, leader_nickname: profile?.nickname || "—" };
-            }
-            return { ...team, leader_nickname: "—" };
-          })
-        );
-        setTeams(enriched);
-      }
-      setLoading(false);
-    };
-
-    checkAdmin();
-    fetchTeams();
+  const fetchTeams = useCallback(async () => {
+    const response = await authFetch("/api/admin/teams");
+    const payload = await response.json() as { teams?: Team[] };
+    setIsAdmin(response.ok);
+    if (response.ok) setTeams(payload.teams ?? []);
+    setLoading(false);
   }, []);
 
-  const verifyTeam = async (teamId: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .update({ verified: true })
-      .eq("id", teamId);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchTeams(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchTeams]);
 
-    if (!error) {
-      // Уведомление лидеру
-      const { data: teamData } = await supabase
-        .from("teams")
-        .select("leader_id, name")
-        .eq("id", teamId)
-        .single();
-      if (teamData?.leader_id) {
-        await supabase.from("notifications").insert({
-          user_id: teamData.leader_id,
-          type: "verification",
-          title: "Команда верифицирована",
-          body: `Ваша команда "${teamData.name}" прошла верификацию`,
-          link: `/teams/${teamId}`,
-        });
-      }
+  const verifyTeam = async (teamId: string) => {
+    const response = await authFetch("/api/admin/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, verified: true }),
+    });
+
+    if (response.ok) {
       setTeams(teams.map(t => t.id === teamId ? { ...t, verified: true } : t));
       setMessage("Команда верифицирована!");
     } else {
-      setMessage("Ошибка: " + error.message);
+      const payload = await response.json();
+      setMessage("Ошибка: " + (payload.error ?? "не удалось изменить статус"));
     }
   };
 
   const unverifyTeam = async (teamId: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .update({ verified: false })
-      .eq("id", teamId);
+    const response = await authFetch("/api/admin/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, verified: false }),
+    });
 
-    if (!error) {
+    if (response.ok) {
       setTeams(teams.map(t => t.id === teamId ? { ...t, verified: false } : t));
       setMessage("Верификация отозвана.");
     } else {
-      setMessage("Ошибка: " + error.message);
+      const payload = await response.json();
+      setMessage("Ошибка: " + (payload.error ?? "не удалось изменить статус"));
     }
   };
 
   const deleteTeam = async (teamId: string) => {
     if (!confirm("Удалить команду навсегда?")) return;
-    const { error } = await supabase
-      .from("teams")
-      .delete()
-      .eq("id", teamId);
+    const response = await authFetch(`/api/admin/teams?teamId=${encodeURIComponent(teamId)}`, { method: "DELETE" });
 
-    if (!error) {
+    if (response.ok) {
       setTeams(teams.filter(t => t.id !== teamId));
       setSelectedTeam(null);
       setMessage("Команда удалена.");
     } else {
-      setMessage("Ошибка: " + error.message);
+      const payload = await response.json();
+      setMessage("Ошибка: " + (payload.error ?? "удаление недоступно"));
     }
   };
 
@@ -137,7 +92,7 @@ export default function AdminPage() {
   const giveTeamWarning = async () => {
     if (!selectedTeam) return;
     const expiresAt = teamWarnExpires === "week" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
-    const res = await fetch("/api/admin/warnings", {
+    const res = await authFetch("/api/admin/warnings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -151,21 +106,6 @@ export default function AdminPage() {
     });
     const data = await res.json();
     if (data.success) {
-      // Уведомление лидеру команды
-      const { data: teamData } = await supabase
-        .from("teams")
-        .select("leader_id, name")
-        .eq("id", selectedTeam.id)
-        .single();
-      if (teamData?.leader_id) {
-        await supabase.from("notifications").insert({
-          user_id: teamData.leader_id,
-          type: "warning",
-          title: "Предупреждение команде",
-          body: `Вашей команде "${teamData.name}" выдано предупреждение: ${teamWarnReason}`,
-          link: `/teams/${selectedTeam.id}`,
-        });
-      }
       setMessage("Предупреждение команде выдано");
       setShowTeamWarning(false);
       setTeamWarnReason("");
@@ -174,33 +114,14 @@ export default function AdminPage() {
     }
   };
 
-  const makeSuperadmin = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase
-      .from("user_roles")
-      .upsert({ user_id: user.id, role: "superadmin" });
-
-    if (!error) {
-      setIsAdmin(true);
-      setMessage("Вы стали суперадмином!");
-    } else {
-      setMessage("Ошибка: " + error.message);
-    }
-  };
-
   if (!isAdmin) {
     return (
       <div className="min-h-screen p-6">
         <h1 className="text-3xl font-bold mb-6 text-red-500">Админ-панель</h1>
         <p className="text-gray-400 mb-4">У вас нет прав администратора.</p>
-        <button
-          onClick={makeSuperadmin}
-          className="p-3 bg-red-600 rounded hover:bg-red-700"
-        >
-          Стать суперадмином (первый запуск)
-        </button>
+        <Link href="/" className="inline-flex p-3 bg-gray-700 rounded hover:bg-gray-600">
+          Вернуться на главную
+        </Link>
         {message && <p className="mt-4 p-3 bg-gray-800 rounded">{message}</p>}
       </div>
     );

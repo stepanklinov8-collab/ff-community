@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/client";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface User {
   id: string;
@@ -13,7 +13,6 @@ interface User {
 }
 
 export default function AdminUsersPage() {
-  const supabase = createClient();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -33,25 +32,20 @@ export default function AdminUsersPage() {
   const [warnExpires, setWarnExpires] = useState<"week" | "forever">("week");
   const [warnEventId, setWarnEventId] = useState("");
 
-  const [eventsList, setEventsList] = useState<any[]>([]);
+  const [eventsList, setEventsList] = useState<EventOption[]>([]);
 
   const [banReason, setBanReason] = useState("");
 
-  const [availableRoles, setAvailableRoles] = useState<string[]>(["blogger", "moderator", "superadmin"]);
+  const availableRoles = ["blogger", "moderator", "superadmin"];
 
-  useEffect(() => {
-    fetchUsers();
-    fetchEvents();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await authFetch("/api/admin/users");
       const data = await res.json();
       if (data.users) {
-        setUsers(data.users.map((u: any) => ({
+        setUsers((data.users as AuthUserPayload[]).map((u) => ({
           id: u.id,
-          email: u.email,
+          email: u.email ?? "—",
           nickname: u.user_metadata?.nickname || "—",
           game_id: u.user_metadata?.game_id || "—",
           created_at: u.created_at,
@@ -63,16 +57,21 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchEvents = async () => {
-    const { data } = await supabase
-      .from("events")
-      .select("id, title")
-      .eq("is_published", true)
-      .order("created_at", { ascending: false });
-    if (data) setEventsList(data);
-  };
+  const fetchEvents = useCallback(async () => {
+    const response = await authFetch("/api/admin/events");
+    const payload = await response.json() as { events?: EventOption[] };
+    if (response.ok) setEventsList((payload.events ?? []).map(({ id, title }) => ({ id, title })));
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchUsers();
+      void fetchEvents();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchEvents, fetchUsers]);
 
   const startEdit = (user: User) => {
     setEditUserId(user.id);
@@ -81,7 +80,7 @@ export default function AdminUsersPage() {
   };
 
   const saveEdit = async (userId: string) => {
-    const res = await fetch("/api/admin/users", {
+    const res = await authFetch("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, nickname: editNickname, gameId: editGameId }),
@@ -113,20 +112,13 @@ export default function AdminUsersPage() {
       setMessage("Заполните тему и текст сообщения");
       return;
     }
-    const res = await fetch("/api/admin/message", {
+    const res = await authFetch("/api/admin/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ toUserId: selectedUser.id, subject: msgSubject, body: msgBody }),
     });
     const data = await res.json();
     if (data.success) {
-      await supabase.from("notifications").insert({
-        user_id: selectedUser.id,
-        type: "message",
-        title: "Новое сообщение",
-        body: `У вас новое сообщение: ${msgSubject}`,
-        link: "/messages",
-      });
       setMessage("Сообщение отправлено");
       setModalType(null);
     } else {
@@ -137,7 +129,7 @@ export default function AdminUsersPage() {
   const giveWarning = async () => {
     if (!selectedUser) return;
     const expiresAt = warnExpires === "week" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
-    const res = await fetch("/api/admin/warnings", {
+    const res = await authFetch("/api/admin/warnings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -152,12 +144,6 @@ export default function AdminUsersPage() {
     });
     const data = await res.json();
     if (data.success) {
-      await supabase.from("notifications").insert({
-        user_id: selectedUser.id,
-        type: "warning",
-        title: "Выдано предупреждение",
-        body: `Причина: ${warnReason}`,
-      });
       setMessage("Предупреждение выдано");
       setModalType(null);
     } else {
@@ -167,7 +153,7 @@ export default function AdminUsersPage() {
 
   const banUser = async () => {
     if (!selectedUser) return;
-    const res = await fetch("/api/admin/warnings", {
+    const res = await authFetch("/api/admin/warnings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -187,7 +173,7 @@ export default function AdminUsersPage() {
   };
 
   const toggleRole = async (userId: string, role: string, action: "add" | "remove") => {
-    const res = await fetch("/api/admin/roles", {
+    const res = await authFetch("/api/admin/roles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, role, action }),
@@ -354,4 +340,16 @@ export default function AdminUsersPage() {
       <Link href="/admin" className="block mt-6 text-blue-400 hover:underline">← Админ-панель</Link>
     </div>
   );
+}
+
+interface EventOption {
+  id: string;
+  title: string;
+}
+
+interface AuthUserPayload {
+  id: string;
+  email?: string;
+  user_metadata?: { nickname?: string; game_id?: string };
+  created_at: string;
 }

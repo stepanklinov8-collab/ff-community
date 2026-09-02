@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import Image from "next/image";
 
 interface Player {
   id: string;
@@ -16,7 +17,7 @@ interface Player {
 }
 
 export default function RatingPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [players, setPlayers] = useState<Player[]>([]);
   const [filter, setFilter] = useState<string>("ratio");
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +28,7 @@ export default function RatingPage() {
       // Получаем всех пользователей из profiles
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, nickname, avatar_url");
+        .select("id, nickname, game_id, avatar_url");
 
       if (!profiles) {
         setLoading(false);
@@ -46,12 +47,12 @@ export default function RatingPage() {
           const kills = stats?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
           const matches = stats?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
           const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
-          const cost = Math.round(kills * 10 + matches * 5);
+          const cost = 0;
 
           return {
             id: p.id,
             nickname: p.nickname || "—",
-            game_id: "", // заполним позже из auth metadata
+            game_id: p.game_id || "—",
             avatar_url: p.avatar_url || "",
             kills,
             matches,
@@ -61,20 +62,11 @@ export default function RatingPage() {
         })
       );
 
-      // Получаем game_id из auth.users (через admin API в будущем, пока из profiles)
-      const { data: authUsers } = await supabase.auth.admin.listUsers();
-      if (authUsers?.users) {
-        for (const p of enriched) {
-          const u = authUsers.users.find((au: any) => au.id === p.id);
-          if (u) p.game_id = u.user_metadata?.game_id || "—";
-        }
-      }
-
       setPlayers(enriched);
       setLoading(false);
     };
     fetchPlayers();
-  }, []);
+  }, [supabase]);
 
   const filteredPlayers = players
     .filter(p => p.nickname.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -140,7 +132,7 @@ export default function RatingPage() {
             >
               <div className="w-10 h-10 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                 {p.avatar_url ? (
-                  <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                  <Image src={p.avatar_url} alt={`Аватар ${p.nickname}`} width={40} height={40} unoptimized className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
                     {p.nickname?.[0]?.toUpperCase() || "?"}
@@ -153,7 +145,7 @@ export default function RatingPage() {
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-300">У/С: {p.ratio}</p>
-                <p className="text-xs text-yellow-400">Стоимость: {p.cost} ₽</p>
+                <p className="text-xs text-yellow-400">Стоимость: {p.cost} ₽ · Рейтинг: ???</p>
               </div>
             </Link>
           ))}

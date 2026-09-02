@@ -1,29 +1,14 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createAdminClient } from "@/utils/supabase/admin";
+import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
 export async function GET(request: Request) {
+  try {
+  const auth = await requireUser(request);
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-
-  // Если userId не передан, но есть авторизация, используем текущего пользователя
-  let targetUserId = userId;
-  if (!targetUserId) {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader) {
-      return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-    }
-    targetUserId = user.id;
-  }
+  const requestedUserId = searchParams.get("userId");
+  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("superadmin");
+  const targetUserId = requestedUserId && isAdmin ? requestedUserId : auth.user.id;
+  const supabaseAdmin = createAdminClient();
 
   // Получаем активные преды (не истекшие)
   const { data: activeWarnings, error: warnError } = await supabaseAdmin
@@ -34,7 +19,7 @@ export async function GET(request: Request) {
     .or(`expires_at.is.null,expires_at.gt.NOW()`);
 
   if (warnError) {
-    return NextResponse.json({ error: warnError.message }, { status: 500 });
+    throw warnError;
   }
 
   // Получаем историю предов (все)
@@ -47,7 +32,7 @@ export async function GET(request: Request) {
     .limit(20);
 
   if (historyError) {
-    return NextResponse.json({ error: historyError.message }, { status: 500 });
+    throw historyError;
   }
 
   // Проверяем, есть ли активный бан
@@ -59,10 +44,13 @@ export async function GET(request: Request) {
     .eq("is_active", true)
     .maybeSingle();
 
-  return NextResponse.json({
+  return Response.json({
     activeWarnings: activeWarnings || [],
     warningCount: (activeWarnings || []).length,
     history: history || [],
     activeBan: activeBan || null,
   });
+  } catch (error) {
+    return authErrorResponse(error);
+  }
 }

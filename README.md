@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OMCITE ARENA
 
-## Getting Started
+Платформа OMCITE для сообщества Free Fire: команды и гильдии, многосессионные мероприятия, составы, лист замены, статистика, комментарии, модерация и уведомления.
 
-First, run the development server:
+## Локальный запуск
+
+1. Скопируйте `.env.example` в `.env.local` и заполните переменные.
+2. Установите зависимости: `npm ci`.
+3. Запустите проверку типов: `npx tsc --noEmit --incremental false`.
+4. Запустите сайт: `npm run dev`.
+
+## База данных
+
+Миграция находится в `supabase/migrations/202609010001_omcite_foundation.sql`. Она добавляет новые поля и таблицы без удаления старых данных, переносит существующие заявки на вступление и назначает подтверждённый аккаунт `stepanklinov8@gmail.com` суперадминистратором. Если аккаунт зарегистрируется позже, роль будет назначена автоматически после подтверждения email.
+
+Перед применением в production:
+
+- сделайте резервную копию Supabase;
+- сначала выполните миграцию на копии проекта;
+- проверьте отчёт SQL Editor и только затем подтвердите транзакцию;
+- после проверки примените тот же файл в production.
+
+Фактическая REST-схема production была сверена в режиме чтения: миграция учитывает старые `activity_log.action/details`, JSONB-составы, старую таблицу победителей и переносит их в новые совместимые поля/таблицы. Старые столбцы и строки не удаляются.
+
+После миграции в Supabase Dashboard отключите подтверждение email в `Authentication → Providers → Email`, если регистрация должна сразу создавать активную сессию. Перед деплоем также замените service-role key, если он когда-либо попадал в чат, лог или скриншот.
+
+## Excel-импорт статистики
+
+Готовый шаблон скачивается в админ-панели. Одна строка — статистика одного игрока в одной сессии:
+
+| Колонка | Обязательность | Описание |
+| --- | --- | --- |
+| Game ID | Game ID или Email | Игровой ID из профиля |
+| Email | Game ID или Email | Email аккаунта |
+| Event ID | Да | UUID мероприятия |
+| Session ID | Нет | UUID конкретного времени |
+| Kills | Да | Целое число от 0 |
+| Matches | Да | Целое число от 0 |
+| Comment | Нет | Примечание администратора |
+
+«Откат импорта» возвращает статистику к значениям до выбранной загрузки Excel. Файл импорта и каждое старое/новое значение сохраняются в журнале.
+
+## Push-уведомления
+
+Нужен Firebase Web app с Cloud Messaging и Web Push certificate. Обработчик уведомлений:
+
+`GET /api/cron/event-notifications`
+
+Запрос должен содержать `Authorization: Bearer <CRON_SECRET>`. Для бесплатного Vercel периодичность раз в 5 минут недоступна, поэтому в проект добавлен фоновый запуск через GitHub Actions (`.github/workflows/event-notifications.yml`). В настройках репозитория нужно создать секреты `SITE_URL` и `CRON_SECRET`. Повторная отправка исключается журналом `push_delivery_logs`.
+
+Полная пошаговая настройка Firebase и соответствие всех переменных описаны в [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+
+## Проверка перед деплоем
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+npm run lint
+npx tsc --noEmit
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Затем заполните переменные из `.env.example` в Vercel, привяжите production-домен и выполните smoke-тест регистрации, приглашения, записи на сессию, отмены с повышением резерва, загрузки статистики и push-уведомления.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Безопасность
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- служебный ключ Supabase используется только на сервере;
+- административные API проверяют access token и роль;
+- коды и пароли комнат выдаются только организатору, ответственному, администратору и подтверждённой команде;
+- регистрация сессии и переходы игроков выполняются атомарными SQL-функциями;
+- разрешённые доказательства статистики: до 5 файлов, каждый до 5 МБ, JPEG/PNG/WebP.

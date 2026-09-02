@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { authFetch } from "@/utils/api/auth-fetch";
+import CommentsSection from "@/components/CommentsSection";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
 
 interface Event {
   id: string;
@@ -20,6 +24,8 @@ interface Event {
   show_registrations: boolean;
   roster_lock_minutes: number;
   min_players: number;
+  comments_enabled?: boolean;
+  payment_url?: string | null;
 }
 
 interface Session {
@@ -27,14 +33,16 @@ interface Session {
   start_time: string;
   end_time: string;
   registration_open_time: string;
-  room_code: string;
-  room_password: string;
-  room_note: string;
+  room_code?: string;
+  room_password?: string;
+  room_note?: string;
+  can_edit_room?: boolean;
   responsible_user_id: string | null;
 }
 
 interface Registration {
   id: string;
+  session_id: string | null;
   team_id: string;
   team_name: string;
   team_name_override: string;
@@ -44,63 +52,77 @@ interface Registration {
   roster: string[];
 }
 
+interface TeamMember {
+  user_id: string;
+  role_in_team: string;
+  position: string;
+  nickname: string;
+}
+
+interface PlayerSummary {
+  id: string;
+  nickname: string;
+}
+
 export default function EventPage() {
   const { id } = useParams<{ id: string }>();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
-  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
-  const [registrationStatus, setRegistrationStatus] = useState("");
+  const [canManageTeam, setCanManageTeam] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  const [myMembers, setMyMembers] = useState<any[]>([]);
+  const [myMembers, setMyMembers] = useState<TeamMember[]>([]);
   const [selectedRoster, setSelectedRoster] = useState<string[]>([]);
   const [showRosterForm, setShowRosterForm] = useState(false);
-  const [canEditRoster, setCanEditRoster] = useState(true);
 
   const [scores, setScores] = useState<Record<string, number>>({});
   const [winnerTeamId, setWinnerTeamId] = useState("");
 
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
-  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [allPlayers, setAllPlayers] = useState<PlayerSummary[]>([]);
 
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleUserId, setResponsibleUserId] = useState("");
   const [roomData, setRoomData] = useState<Record<string, { code: string; password: string; note: string }>>({});
+
+  const loadRegistrations = useCallback(async (authenticated: boolean) => {
+    const response = authenticated
+      ? await authFetch(`/api/events/${id}/registrations`)
+      : await fetch(`/api/events/${id}/registrations`);
+    if (!response.ok) return;
+    const payload = await response.json() as { registrations?: Registration[] };
+    setRegistrations(payload.registrations ?? []);
+  }, [id]);
 
   useEffect(() => {
     const init = async () => {
       const { data: ev } = await supabase.from("events").select("*").eq("id", id).single();
       if (ev) setEvent(ev);
 
-      const { data: sess } = await supabase
-        .from("event_sessions")
+      const publicSessions = await supabase
+        .from("event_sessions_public")
         .select("*")
         .eq("event_id", id)
         .order("start_time", { ascending: true });
-      if (sess) setSessions(sess);
-
-      const { data: regs } = await supabase
-        .from("event_registrations")
-        .select("id, team_id, status, is_winner, created_at, roster, team_name_override")
-        .eq("event_id", id)
-        .order("created_at", { ascending: true });
-      if (regs) {
-        const enriched = await Promise.all(
-          regs.map(async (r) => {
-            const { data: team } = await supabase.from("teams").select("name").eq("id", r.team_id).single();
-            let roster: string[] = [];
-            try { roster = JSON.parse(r.roster || "[]"); } catch {}
-            return { ...r, team_name: team?.name || "—", roster };
-          })
-        );
-        setRegistrations(enriched);
+      const legacySessions = publicSessions.error
+        ? await supabase
+            .from("event_sessions")
+            .select("id, start_time, end_time, registration_open_time, responsible_user_id")
+            .eq("event_id", id)
+            .order("start_time", { ascending: true })
+        : null;
+      const sess = publicSessions.data ?? legacySessions?.data;
+      if (sess) {
+        setSessions(sess);
+        setSelectedSessionId((current) => current || sess[0]?.id || "");
       }
 
       const { data: profiles } = await supabase.from("profiles").select("id, nickname");
@@ -108,7 +130,20 @@ export default function EventPage() {
 
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
+      await loadRegistrations(Boolean(user));
       if (user) {
+        try {
+          const roomResponse = await authFetch(`/api/events/${id}/rooms`);
+          if (roomResponse.ok) {
+            const roomPayload = await roomResponse.json();
+            setSessions((current) => current.map((session) => ({
+              ...session,
+              ...(roomPayload.sessions?.find((room: { id: string }) => room.id === session.id) ?? {}),
+            })));
+          }
+        } catch {
+          // Room credentials are optional and remain hidden when access is denied.
+        }
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
@@ -119,13 +154,29 @@ export default function EventPage() {
         const { data: ev2 } = await supabase.from("events").select("organizer_user_id").eq("id", id).single();
         if (ev2?.organizer_user_id === user.id) setIsOrganizer(true);
 
-        const { data: member } = await supabase
+        const { data: memberships } = await supabase
           .from("team_members")
           .select("team_id, role_in_team")
-          .eq("user_id", user.id)
-          .single();
+          .eq("user_id", user.id);
 
-        if (member) {
+        if (memberships?.length) {
+          let member: (typeof memberships)[number] | null = null;
+          for (const candidate of memberships) {
+            const { data: candidateTeam } = await supabase
+              .from("teams")
+              .select("id, type, verified")
+              .eq("id", candidate.team_id)
+              .maybeSingle();
+            if (candidateTeam?.type === "team" && candidateTeam.verified) {
+              member = candidate;
+              break;
+            }
+          }
+          if (!member) {
+            setLoading(false);
+            return;
+          }
+          setCanManageTeam(["leader", "senior_deputy", "deputy"].includes(member.role_in_team));
           const { data: team } = await supabase
             .from("teams")
             .select("id, name")
@@ -141,7 +192,7 @@ export default function EventPage() {
               .eq("team_id", team.id);
             if (members) {
               const enrichedMembers = await Promise.all(
-                members.map(async (m: any) => {
+                members.map(async (m) => {
                   const { data: profile } = await supabase
                     .from("profiles")
                     .select("nickname")
@@ -151,13 +202,14 @@ export default function EventPage() {
                 })
               );
               setMyMembers(enrichedMembers);
+              setSelectedRoster(
+                enrichedMembers
+                  .filter((item) => item.position === "main")
+                  .slice(0, 4)
+                  .map((item) => item.user_id),
+              );
             }
 
-            const found = regs?.find((r: any) => r.team_id === team.id);
-            if (found) {
-              setAlreadyRegistered(true);
-              setRegistrationStatus(found.status);
-            }
           }
         }
       }
@@ -165,19 +217,12 @@ export default function EventPage() {
       setLoading(false);
     };
     init();
-  }, [id]);
-
-  useEffect(() => {
-    if (!event || !sessions.length) return;
-    const now = new Date();
-    const lockMinutes = event.roster_lock_minutes || 10;
-    const firstSession = sessions[0];
-    const lockTime = new Date(new Date(firstSession.start_time).getTime() - lockMinutes * 60000);
-    setCanEditRoster(now < lockTime);
-  }, [event, sessions]);
+  }, [id, loadRegistrations, supabase]);
 
   const registerTeam = async () => {
     if (!myTeam) { setMessage("У вас нет верифицированной команды."); return; }
+    if (!currentUser) { setMessage("Войдите, чтобы записать команду."); return; }
+    if (!selectedSessionId) { setMessage("Выберите время участия."); return; }
 
     // Проверка минимального количества игроков, заданного для мероприятия
     const minPlayers = event?.min_players || 4;
@@ -187,67 +232,16 @@ export default function EventPage() {
     }
 
     setMessage("Регистрация...");
-    const confirmedCount = registrations.filter(r => r.status === "confirmed").length;
-    const maxTeams = event?.max_teams || 0;
-    const status = maxTeams > 0 && confirmedCount >= maxTeams ? "waiting" : "confirmed";
-
-    // Проверка бана игрока
-    const { data: playerBan } = await supabase
-      .from("bans")
-      .select("id")
-      .eq("target_type", "player")
-      .eq("target_id", currentUser.id)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (playerBan) {
-      setMessage("Вы заблокированы и не можете участвовать в мероприятиях.");
-      return;
-    }
-
-    // Проверка бана команды
-    const { data: teamBan } = await supabase
-      .from("bans")
-      .select("id")
-      .eq("target_type", "team")
-      .eq("target_id", myTeam.id)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (teamBan) {
-      setMessage("Ваша команда заблокирована и не может участвовать в мероприятиях.");
-      return;
-    }
-
-    const { error } = await supabase.from("event_registrations").insert({
-      event_id: id,
-      team_id: myTeam.id,
-      status,
-      registered_by: currentUser.id,
-      roster: JSON.stringify(selectedRoster),
+    const { data, error } = await supabase.rpc("register_team_for_session", {
+      p_session_id: selectedSessionId,
+      p_team_id: myTeam.id,
+      p_roster: selectedRoster,
     });
 
     if (error) {
       setMessage("Ошибка: " + error.message);
     } else {
-      await supabase.from("activity_log").insert({
-        user_id: currentUser.id,
-        team_id: myTeam.id,
-        event_id: id,
-        activity_type: "registration",
-        description: `Команда ${myTeam.name} записалась на мероприятие`,
-      });
-
-      await supabase.from("notifications").insert({
-        user_id: currentUser.id,
-        type: "registration",
-        title: "Регистрация на мероприятие",
-        body: `Ваша команда ${myTeam.name} зарегистрирована на "${event?.title}"`,
-        link: `/tournaments/${id}`,
-      });
-
-      setAlreadyRegistered(true);
-      setRegistrationStatus(status);
+      const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы в основном составе!" : "⏳ Вы в листе ожидания.");
       refreshRegistrations();
     }
@@ -257,41 +251,17 @@ export default function EventPage() {
     if (!alreadyRegistered) return;
     if (!confirm("Отменить регистрацию?")) return;
 
-    const { data: myRegs } = await supabase
-      .from("event_registrations")
-      .select("id, status")
-      .eq("event_id", id)
-      .eq("team_id", myTeam?.id);
+    if (!selectedRegistration) return;
 
-    if (!myRegs || myRegs.length === 0) return;
-    const myReg = myRegs[0];
-
-    await supabase.from("event_registrations").delete().eq("id", myReg.id);
-
-    if (myReg.status === "confirmed") {
-      const { data: firstWaiting } = await supabase
-        .from("event_registrations")
-        .select("id")
-        .eq("event_id", id)
-        .eq("status", "waiting")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
-
-      if (firstWaiting) {
-        await supabase.from("event_registrations").update({ status: "confirmed" }).eq("id", firstWaiting.id);
-      }
+    const { error } = await supabase.rpc("cancel_session_registration", {
+      p_registration_id: selectedRegistration.id,
+      p_reason: "Отменено руководством команды",
+    });
+    if (error) {
+      setMessage("Ошибка: " + error.message);
+      return;
     }
 
-    await supabase.from("notifications").insert({
-      user_id: currentUser.id,
-      type: "cancellation",
-      title: "Регистрация отменена",
-      body: `Вы отменили регистрацию команды ${myTeam?.name} на "${event?.title}"`,
-    });
-
-    setAlreadyRegistered(false);
-    setRegistrationStatus("");
     setMessage("Регистрация отменена.");
     refreshRegistrations();
   };
@@ -299,27 +269,53 @@ export default function EventPage() {
   const toggleRegistrationsVisibility = async () => {
     if (!event) return;
     const newVisibility = !event.show_registrations;
-    await supabase.from("events").update({ show_registrations: newVisibility }).eq("id", event.id);
+    const response = await authFetch(`/api/events/${id}/manage`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "visibility", showRegistrations: newVisibility }),
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      setMessage(payload.error ?? "Не удалось изменить видимость заявок");
+      return;
+    }
     setEvent({ ...event, show_registrations: newVisibility });
   };
 
   const saveResults = async () => {
     if (!event) return;
-    for (const r of confirmed) {
-      await supabase.from("event_results").upsert({
-        event_id: event.id,
-        team_id: r.team_id,
-        score: scores[r.id] || 0,
-        is_winner: r.team_id === winnerTeamId,
-      }, { onConflict: "event_id,team_id" });
+    const response = await authFetch(`/api/events/${id}/results`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        results: confirmed.map((registration) => ({
+          teamId: registration.team_id,
+          score: scores[registration.id] || 0,
+          isWinner: registration.team_id === winnerTeamId,
+        })),
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      setMessage(payload.error ?? "Не удалось сохранить результаты");
+      return;
     }
-    setMessage("Результаты сохранены!");
+    setMessage("Результаты сохранены.");
   };
 
   const assignResponsible = async (sessionId: string) => {
     if (!responsibleUserId) return;
-    await supabase.from("event_sessions").update({ responsible_user_id: responsibleUserId }).eq("id", sessionId);
-    fetchSessions();
+    const response = await authFetch(`/api/events/${id}/manage`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "responsible", sessionId, userId: responsibleUserId }),
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      setMessage(payload.error ?? "Не удалось назначить ответственного");
+      return;
+    }
+    await fetchSessions();
     setResponsibleUserId("");
     setMessage("Ответственный назначен.");
   };
@@ -336,44 +332,26 @@ export default function EventPage() {
   const saveRoomData = async (sessionId: string) => {
     const data = roomData[sessionId];
     if (!data) return;
-    await supabase.from("event_sessions").update({
-      room_code: data.code,
-      room_password: data.password,
-      room_note: data.note,
-    }).eq("id", sessionId);
-    setMessage("Данные комнаты сохранены.");
-
-    const confirmedRegs = registrations.filter(r => r.status === "confirmed");
-    for (const reg of confirmedRegs) {
-      const { data: team } = await supabase.from("teams").select("leader_id, name").eq("id", reg.team_id).single();
-      if (team?.leader_id) {
-        await supabase.from("messages").insert({
-          to_user_id: team.leader_id,
-          from_user_id: currentUser?.id,
-          subject: `Данные комнаты: ${event?.title}`,
-          body: `Команда: ${team.name}\nКод: ${data.code}\nПароль: ${data.password}${data.note ? `\nПримечание: ${data.note}` : ""}`,
-        });
-      }
+    const response = await authFetch(`/api/events/${id}/rooms`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        roomCode: data.code ?? "",
+        roomPassword: data.password ?? "",
+        roomNote: data.note ?? "",
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      setMessage(payload.error ?? "Не удалось сохранить данные комнаты");
+      return;
     }
+    setMessage("Данные комнаты сохранены.");
   };
 
   const refreshRegistrations = async () => {
-    const { data } = await supabase
-      .from("event_registrations")
-      .select("id, team_id, status, is_winner, created_at, roster, team_name_override")
-      .eq("event_id", id)
-      .order("created_at", { ascending: true });
-    if (data) {
-      const enriched = await Promise.all(
-        data.map(async (r) => {
-          const { data: team } = await supabase.from("teams").select("name").eq("id", r.team_id).single();
-          let roster: string[] = [];
-          try { roster = JSON.parse(r.roster || "[]"); } catch {}
-          return { ...r, team_name: team?.name || "—", roster };
-        })
-      );
-      setRegistrations(enriched);
-    }
+    await loadRegistrations(Boolean(currentUser));
   };
 
   const typeLabels: Record<string, string> = {
@@ -387,9 +365,20 @@ export default function EventPage() {
   if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
   if (!event) return <div className="min-h-screen p-6"><p>Мероприятие не найдено.</p></div>;
 
-  const confirmed = registrations.filter(r => r.status === "confirmed");
-  const waiting = registrations.filter(r => r.status === "waiting");
-  const hasStarted = sessions.length > 0 && new Date() >= new Date(sessions[0].start_time);
+  const sessionRegistrations = registrations.filter((registration) => registration.session_id === selectedSessionId);
+  const confirmed = sessionRegistrations.filter(r => r.status === "confirmed");
+  const waiting = sessionRegistrations.filter(r => r.status === "waiting");
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId);
+  const selectedRegistration = myTeam
+    ? sessionRegistrations.find((registration) => registration.team_id === myTeam.id && registration.status !== "cancelled")
+    : undefined;
+  const alreadyRegistered = Boolean(selectedRegistration);
+  const registrationStatus = selectedRegistration?.status ?? "";
+  const lockTime = selectedSession
+    ? new Date(new Date(selectedSession.start_time).getTime() - (event.roster_lock_minutes || 10) * 60_000)
+    : null;
+  const canEditRoster = !lockTime || new Date() < lockTime;
+  const hasStarted = Boolean(selectedSession && new Date() >= new Date(selectedSession.start_time));
   const canViewRoom = isAdmin || isOrganizer || (myTeam && confirmed.some(r => r.team_id === myTeam.id));
 
   return (
@@ -401,7 +390,7 @@ export default function EventPage() {
         <h1 className="text-3xl font-bold mt-3 text-blue-500">{event.title}</h1>
 
         {event.image_url && (
-          <img src={event.image_url} alt={event.title} className="w-full max-w-md rounded-lg mt-4" />
+          <Image src={event.image_url} alt={event.title} width={900} height={500} unoptimized className="w-full max-w-md rounded-lg mt-4 object-cover" />
         )}
 
         <p className="text-gray-300 mt-4">{event.description || "Нет описания"}</p>
@@ -423,6 +412,11 @@ export default function EventPage() {
         <Link href={`/tournaments/${id}/results`} className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">
           📊 Результаты
         </Link>
+        {event.payment_url && (
+          <a href={event.payment_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-block mt-4 px-4 py-2 bg-amber-500 text-black font-semibold rounded hover:bg-amber-400">
+            Оплатить участие у организатора
+          </a>
+        )}
 
         {(isAdmin || isOrganizer) && (
           <div className="mt-4 flex gap-2 flex-wrap">
@@ -432,9 +426,11 @@ export default function EventPage() {
             <button onClick={() => setShowResponsible(!showResponsible)} className="px-3 py-1 bg-blue-600 rounded text-sm">
               Назначить ответственных
             </button>
-            <Link href={`/admin/events/${id}/stats`} className="px-3 py-1 bg-red-600 rounded text-sm">
-              Модерация статистики
-            </Link>
+            {isAdmin && (
+              <Link href={`/admin/events/${id}/stats`} className="px-3 py-1 bg-red-600 rounded text-sm">
+                Модерация статистики
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -444,7 +440,7 @@ export default function EventPage() {
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
         {sessions.map((s) => {
           const isResponsible = s.responsible_user_id === currentUser?.id;
-          const canEditRoom = isAdmin || isOrganizer || isResponsible;
+          const canEditRoom = Boolean(s.can_edit_room || isAdmin || isOrganizer || isResponsible);
           return (
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
@@ -500,9 +496,20 @@ export default function EventPage() {
       </div>
 
       {/* Запись */}
-      {myTeam && !alreadyRegistered && (
+      {myTeam && canManageTeam && !alreadyRegistered && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <p className="mb-3">Команда: <Link href={`/teams/${myTeam.id}`} className="text-blue-400">{myTeam.name}</Link></p>
+
+          <div className="mb-4">
+            <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
+            <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {new Date(session.start_time).toLocaleString("ru")}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="mb-3">
             <button onClick={() => setShowRosterForm(!showRosterForm)} className="text-sm text-blue-400">
@@ -510,7 +517,7 @@ export default function EventPage() {
             </button>
             {showRosterForm && (
               <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                {myMembers.map((m: any) => (
+                {myMembers.map((m) => (
                   <label key={m.user_id} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -527,13 +534,21 @@ export default function EventPage() {
             )}
           </div>
 
-          <button onClick={registerTeam} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">Записаться</button>
+          <button onClick={registerTeam} disabled={!canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
+            {canEditRoster ? "Записаться на выбранное время" : "Состав заблокирован"}
+          </button>
           {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
-      {alreadyRegistered && (
+      {alreadyRegistered && canManageTeam && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
+          <label className="text-sm text-gray-300 block mb-2">Выбранное время</label>
+          <select className="mb-3" value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
+            ))}
+          </select>
           <p className="mb-2">{registrationStatus === "confirmed" ? "✅ Вы в основном составе" : "⏳ Вы в листе ожидания"}</p>
           <button onClick={cancelRegistration} className="px-4 py-2 bg-red-500 rounded hover:bg-red-600">Отменить запись</button>
         </div>
@@ -591,7 +606,7 @@ export default function EventPage() {
               {selectedRegistrationId === r.id && (
                 <div className="mt-2 text-sm text-gray-300">
                   {r.roster.length > 0 ? r.roster.map((userId: string) => {
-                    const player = allPlayers.find((p: any) => p.id === userId);
+                    const player = allPlayers.find((p) => p.id === userId);
                     return <div key={userId}>— {player?.nickname || userId}</div>;
                   }) : <p className="text-gray-500">Состав не указан</p>}
                 </div>
@@ -608,6 +623,7 @@ export default function EventPage() {
           ))}
         </div>
       )}
+      {event.comments_enabled !== false && <CommentsSection eventId={id} />}
     </div>
   );
 }

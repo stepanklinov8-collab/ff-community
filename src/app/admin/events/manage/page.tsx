@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Event {
   id: string;
@@ -36,8 +37,13 @@ interface Registration {
   roster: string[];
 }
 
+interface PlayerSummary {
+  id: string;
+  nickname: string;
+}
+
 export default function ManageEventsPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -58,25 +64,25 @@ export default function ManageEventsPage() {
 
   // Просмотр состава заявки
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
-  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [allPlayers, setAllPlayers] = useState<PlayerSummary[]>([]);
 
-  useEffect(() => {
-    fetchEvents();
-    const fetchPlayers = async () => {
-      const { data } = await supabase.from("profiles").select("id, nickname");
-      if (data) setAllPlayers(data);
-    };
-    fetchPlayers();
+  const fetchEvents = useCallback(async () => {
+    const response = await authFetch("/api/admin/events");
+    const payload = await response.json() as { events?: Event[] };
+    if (response.ok) setEvents(payload.events ?? []);
+    else setMessage("Не удалось загрузить мероприятия");
+    setLoading(false);
   }, []);
 
-  const fetchEvents = async () => {
-    const { data } = await supabase
-      .from("events")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setEvents(data);
-    setLoading(false);
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchEvents();
+      void supabase.from("profiles").select("id, nickname").then(({ data }) => {
+        if (data) setAllPlayers(data);
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchEvents, supabase]);
 
   const selectEvent = async (event: Event) => {
     setSelectedEvent(event);
@@ -89,24 +95,9 @@ export default function ManageEventsPage() {
       .order("start_time", { ascending: true });
     if (sess) setSessions(sess);
 
-    const { data: regs } = await supabase
-      .from("event_registrations")
-      .select("id, team_id, status, created_at, roster, team_name_override")
-      .eq("event_id", event.id)
-      .order("created_at", { ascending: true });
-    if (regs) {
-      const enriched = await Promise.all(
-        regs.map(async (r) => {
-          const { data: team } = await supabase.from("teams").select("name").eq("id", r.team_id).single();
-          let roster: string[] = [];
-          try {
-            roster = JSON.parse(r.roster || "[]");
-          } catch {}
-          return { ...r, team_name: team?.name || "—", roster };
-        })
-      );
-      setRegistrations(enriched);
-    }
+    const response = await authFetch(`/api/events/${event.id}/registrations`);
+    const payload = await response.json() as { registrations?: Registration[] };
+    if (response.ok) setRegistrations(payload.registrations ?? []);
   };
 
   const startEdit = () => {
@@ -124,39 +115,47 @@ export default function ManageEventsPage() {
   };
 
   const saveEdit = async () => {
-    const { error } = await supabase
-      .from("events")
-      .update({
+    if (!editId) return;
+    const response = await authFetch("/api/admin/events", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editId,
         title: editTitle,
         type: editType,
         description: editDescription,
         cost: parseInt(editCost) || 0,
         organizer: editOrganizer,
-        stream_url: editStreamUrl,
-        max_teams: parseInt(editMaxTeams) || 0,
-        roster_lock_minutes: parseInt(editRosterLock) || 10,
-        is_published: editPublished,
-      })
-      .eq("id", editId);
+        streamUrl: editStreamUrl,
+        maxTeams: parseInt(editMaxTeams) || 0,
+        rosterLockMinutes: parseInt(editRosterLock) || 10,
+        isPublished: editPublished,
+      }),
+    });
 
-    if (!error) {
+    if (response.ok) {
       setEditId(null);
       setMessage("Мероприятие обновлено!");
       fetchEvents();
       if (selectedEvent) selectEvent(selectedEvent);
     } else {
-      setMessage("Ошибка: " + error.message);
+      const payload = await response.json();
+      setMessage("Ошибка: " + (payload.error ?? "изменения не сохранены"));
     }
   };
 
   const togglePublish = async (event: Event) => {
-    await supabase.from("events").update({ is_published: !event.is_published }).eq("id", event.id);
+    await authFetch("/api/admin/events", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: event.id, isPublished: !event.is_published }),
+    });
     fetchEvents();
   };
 
   const deleteEvent = async (eventId: string) => {
     if (!confirm("Удалить мероприятие?")) return;
-    await supabase.from("events").delete().eq("id", eventId);
+    await authFetch(`/api/admin/events?eventId=${encodeURIComponent(eventId)}`, { method: "DELETE" });
     setSelectedEvent(null);
     setSessions([]);
     setRegistrations([]);
@@ -164,29 +163,37 @@ export default function ManageEventsPage() {
     setMessage("Мероприятие удалено.");
   };
 
+  const updateRegistration = async (
+    registrationId: string,
+    changes: { status?: "confirmed" | "waiting" | "cancelled"; teamNameOverride?: string },
+  ) => {
+    await authFetch("/api/admin/events", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "registration", registrationId, ...changes }),
+    });
+  };
+
   const moveToWaiting = async (regId: string) => {
-    await supabase.from("event_registrations").update({ status: "waiting" }).eq("id", regId);
+    await updateRegistration(regId, { status: "waiting" });
     if (selectedEvent) selectEvent(selectedEvent);
   };
 
   const moveToConfirmed = async (regId: string) => {
-    await supabase.from("event_registrations").update({ status: "confirmed" }).eq("id", regId);
+    await updateRegistration(regId, { status: "confirmed" });
     if (selectedEvent) selectEvent(selectedEvent);
   };
 
   const removeRegistration = async (regId: string, teamName: string) => {
     if (!confirm(`Удалить ${teamName} из заявок?`)) return;
-    await supabase.from("event_registrations").delete().eq("id", regId);
+    await authFetch(`/api/admin/events?registrationId=${encodeURIComponent(regId)}`, { method: "DELETE" });
     if (selectedEvent) selectEvent(selectedEvent);
   };
 
   const renameTeam = async (regId: string, currentName: string) => {
     const newName = prompt("Новое название команды на мероприятии:", currentName);
     if (newName && newName.trim()) {
-      await supabase
-        .from("event_registrations")
-        .update({ team_name_override: newName.trim() })
-        .eq("id", regId);
+      await updateRegistration(regId, { teamNameOverride: newName.trim() });
       if (selectedEvent) selectEvent(selectedEvent);
     }
   };
@@ -344,7 +351,7 @@ export default function ManageEventsPage() {
                               <div className="mt-2 text-xs text-gray-300">
                                 {r.roster.length > 0 ? (
                                   r.roster.map((userId: string) => {
-                                    const player = allPlayers.find((p: any) => p.id === userId);
+                                    const player = allPlayers.find((p) => p.id === userId);
                                     return <div key={userId}>— {player?.nickname || userId}</div>;
                                   })
                                 ) : (
@@ -382,7 +389,7 @@ export default function ManageEventsPage() {
                               <div className="mt-2 text-xs text-gray-300">
                                 {r.roster.length > 0 ? (
                                   r.roster.map((userId: string) => {
-                                    const player = allPlayers.find((p: any) => p.id === userId);
+                                    const player = allPlayers.find((p) => p.id === userId);
                                     return <div key={userId}>— {player?.nickname || userId}</div>;
                                   })
                                 ) : (

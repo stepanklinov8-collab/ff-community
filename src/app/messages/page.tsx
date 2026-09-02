@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
@@ -13,7 +13,7 @@ interface Message {
 }
 
 export default function MessagesPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Message | null>(null);
@@ -33,7 +33,7 @@ export default function MessagesPage() {
       setLoading(false);
     };
     fetchMessages();
-  }, []);
+  }, [supabase]);
 
   const openMessage = async (msg: Message) => {
     setSelected(msg);

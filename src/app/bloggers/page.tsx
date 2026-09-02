@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
@@ -15,8 +16,17 @@ interface Blogger {
   nickname: string;
 }
 
+interface BloggerRow {
+  id: string;
+  user_id: string;
+  channel_name: string;
+  channel_link: string;
+  contact_link: string;
+  followers_count: number;
+}
+
 export default function BloggersPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [bloggers, setBloggers] = useState<Blogger[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,7 +49,7 @@ export default function BloggersPage() {
 
       if (data) {
         const enriched = await Promise.all(
-          data.map(async (b: any) => {
+          (data as BloggerRow[]).map(async (b) => {
             const { data: profile } = await supabase
               .from("profiles")
               .select("nickname, avatar_url")
@@ -68,7 +78,7 @@ export default function BloggersPage() {
       setLoading(false);
     };
     init();
-  }, []);
+  }, [supabase]);
 
   const handleApply = async () => {
     if (!channelName || !channelLink || !followers) {
@@ -196,7 +206,7 @@ export default function BloggersPage() {
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                   {b.avatar_url ? (
-                    <img src={b.avatar_url} alt="" className="w-full h-full object-cover" />
+                    <Image src={b.avatar_url} alt={`Аватар ${b.nickname}`} width={48} height={48} unoptimized className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
                       {b.channel_name?.[0]?.toUpperCase() || "?"}

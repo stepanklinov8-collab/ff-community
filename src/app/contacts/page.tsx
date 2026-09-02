@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 interface Contact {
@@ -12,7 +12,7 @@ interface Contact {
 }
 
 export default function ContactsPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +26,7 @@ export default function ContactsPage() {
       setLoading(false);
     };
     fetchContacts();
-  }, []);
+  }, [supabase]);
 
   return (
     <div className="min-h-screen">

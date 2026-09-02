@@ -1,164 +1,93 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+
+type OrganizationType = "team" | "guild";
 
 export default function CreateTeamPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState("team");
+  const [type, setType] = useState<OrganizationType>("team");
   const [socialLink, setSocialLink] = useState("");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      setMessage("Введите название команды");
+    const normalizedName = name.trim();
+    if (normalizedName.length < 2 || normalizedName.length > 60) {
+      setMessage("Название должно содержать от 2 до 60 символов.");
       return;
     }
-
-    setMessage("Проверка...");
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      setMessage("Ошибка: вы не авторизованы");
-      return;
-    }
-
-    // Проверяем, состоит ли уже в команде
-    const { data: existingMember, error: memberError } = await supabase
-      .from("team_members")
-      .select("team_id, role_in_team, teams(name, type)")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (memberError) {
-      setMessage("Ошибка проверки членства: " + memberError.message);
-      return;
-    }
-
-    if (existingMember) {
-      const memberTeam = (existingMember as any).teams;
-      const teamType = memberTeam?.type;
-
-      if (existingMember.role_in_team === "leader" && teamType === "team") {
-        setMessage(`Вы капитан команды "${memberTeam?.name}". Сначала передайте права или удалите команду.`);
+    if (socialLink.trim()) {
+      try {
+        new URL(socialLink.trim());
+      } catch {
+        setMessage("Укажите полную ссылку, например https://vk.com/...");
         return;
       }
-
-      // Если состоит в обычной команде (не гильдии), нужно подтверждение на выход
-      if (teamType === "team") {
-        const confirmLeave = confirm(
-          `Вы состоите в команде "${memberTeam?.name}". При создании новой команды вы покинете текущую. Продолжить?`
-        );
-        if (!confirmLeave) {
-          setMessage("Создание отменено.");
-          return;
-        }
-
-        const { error: leaveError } = await supabase
-          .from("team_members")
-          .delete()
-          .eq("team_id", existingMember.team_id)
-          .eq("user_id", user.id);
-
-        if (leaveError) {
-          setMessage("Ошибка при выходе из текущей команды: " + leaveError.message);
-          return;
-        }
-      }
-      // Если teamType === "guild", ничего не делаем — остаёмся в гильдии
     }
 
-    setMessage("Создание...");
+    setSubmitting(true);
+    setMessage("");
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      setMessage("Сначала войдите в аккаунт.");
+      setSubmitting(false);
+      return;
+    }
 
-    const { data, error } = await supabase.from("teams").insert({
-      name,
-      description,
-      type,
-      social_link: socialLink,
-      leader_id: user.id,
-    }).select().single();
+    const { data, error } = await supabase.rpc("create_organization", {
+      p_name: normalizedName,
+      p_description: description.trim() || null,
+      p_type: type,
+      p_social_link: socialLink.trim() || null,
+    });
 
     if (error) {
-      setMessage("Ошибка: " + error.message);
+      const alreadyMember = error.message.includes("already belong");
+      setMessage(alreadyMember
+        ? `Вы уже состоите в ${type === "guild" ? "гильдии" : "команде"}. Сначала выйдите из неё или передайте лидерство.`
+        : `Не удалось создать: ${error.message}`);
+      setSubmitting(false);
       return;
     }
 
-    // Добавляем лидера в состав
-    if (data) {
-      const { error: memberInsertError } = await supabase.from("team_members").insert({
-        team_id: data.id,
-        user_id: user.id,
-        role_in_team: "leader",
-        position: "main",
-      });
-
-      if (memberInsertError) {
-        setMessage("Ошибка добавления в состав: " + memberInsertError.message);
-        return;
-      }
-
-      // Запись в ленту активности
-      await supabase.from("activity_log").insert({
-        user_id: user.id,
-        team_id: data.id,
-        activity_type: "team_created",
-        description: `Создана команда ${name}`,
-      });
-    }
-
-    setMessage("Команда создана и отправлена на модерацию!");
-    setTimeout(() => router.push("/profile"), 1500);
+    setMessage(`${type === "guild" ? "Гильдия" : "Команда"} создана и отправлена на проверку.`);
+    router.push(`/teams/${String(data)}`);
+    router.refresh();
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">Создание команды</h1>
-
-      <div className="max-w-md">
-        <input
-          className="w-full p-3 mb-4 text-black rounded"
-          placeholder="Название"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <textarea
-          className="w-full p-3 mb-4 text-black rounded"
-          placeholder="Описание"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-        />
-        <select
-          className="w-full p-3 mb-4 text-black rounded"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="team">Команда</option>
-          <option value="guild">Гильдия</option>
-        </select>
-        <input
-          className="w-full p-3 mb-6 text-black rounded"
-          placeholder="Ссылка на соцсеть"
-          value={socialLink}
-          onChange={(e) => setSocialLink(e.target.value)}
-        />
-        <button
-          className="w-full p-3 bg-blue-500 rounded hover:bg-blue-600 mb-4"
-          onClick={handleCreate}
-        >
-          Создать
-        </button>
-        {message && (
-          <p className="p-3 bg-gray-800 rounded text-center">{message}</p>
-        )}
-        <Link href="/profile" className="block mt-4 text-blue-400 hover:underline">
-          ← Назад в профиль
-        </Link>
+    <div className="page-shell">
+      <div className="mx-auto max-w-2xl">
+        <Link href="/profile" className="mb-5 inline-flex text-sm text-cyan-300 hover:text-cyan-200">← Вернуться в профиль</Link>
+        <section className="panel overflow-hidden">
+          <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(0,174,255,.22),transparent_45%)] p-6 sm:p-8">
+            <p className="eyebrow">Новая организация</p>
+            <h1 className="mt-2 text-3xl font-black">Создать команду или гильдию</h1>
+            <p className="mt-3 max-w-xl text-sm text-slate-400">Можно состоять одновременно в одной команде и одной гильдии. Новая организация появится в каталоге после проверки администратором.</p>
+          </div>
+          <div className="space-y-5 p-6 sm:p-8">
+            <div className="grid grid-cols-2 gap-3">
+              {(["team", "guild"] as OrganizationType[]).map((value) => (
+                <button key={value} type="button" onClick={() => setType(value)} className={`rounded-xl border p-4 text-left transition ${type === value ? "border-cyan-400 bg-cyan-400/10" : "border-white/10 bg-white/[.02] hover:border-white/25"}`}>
+                  <span className="block font-bold">{value === "team" ? "Команда" : "Гильдия"}</span>
+                  <span className="mt-1 block text-xs text-slate-400">До {value === "team" ? "12 игроков" : "60 участников"}</span>
+                </button>
+              ))}
+            </div>
+            <label className="field-label">Название<input className="field mt-2" maxLength={60} placeholder={type === "team" ? "Название команды" : "Название гильдии"} value={name} onChange={(event) => setName(event.target.value)} /></label>
+            <label className="field-label">Описание<textarea className="field mt-2 min-h-32 resize-y" maxLength={1000} placeholder="Расскажите о составе, целях и правилах" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+            <label className="field-label">Социальная сеть<input className="field mt-2" type="url" placeholder="https://vk.com/..." value={socialLink} onChange={(event) => setSocialLink(event.target.value)} /></label>
+            {message && <div className="rounded-xl border border-white/10 bg-white/[.03] p-4 text-sm text-slate-200">{message}</div>}
+            <button type="button" onClick={handleCreate} disabled={submitting} className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Создаём…" : `Создать ${type === "guild" ? "гильдию" : "команду"}`}</button>
+          </div>
+        </section>
       </div>
     </div>
   );

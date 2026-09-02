@@ -1,22 +1,61 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { authFetch } from "@/utils/api/auth-fetch";
+
+interface PublicProfile {
+  nickname: string;
+  game_id: string;
+  avatar_url: string;
+}
+
+interface PlayerTeam {
+  id: string;
+  name: string;
+  type: string;
+}
+
+interface WarningRow {
+  id: string;
+  level: number;
+  reason: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+interface BanRow {
+  reason: string;
+  created_at: string;
+}
+
+interface WarningsPayload {
+  activeWarnings: WarningRow[];
+  warningCount: number;
+  history: WarningRow[];
+  activeBan: BanRow | null;
+}
+
+interface MembershipTeam {
+  type: string;
+  name: string;
+}
 
 export default function PublicProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const supabase = createClient();
-  const [profile, setProfile] = useState<any>(null);
+  const supabase = useMemo(() => createClient(), []);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
-  const [team, setTeam] = useState<any>(null);
+  const [team, setTeam] = useState<PlayerTeam | null>(null);
   const [badges, setBadges] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Для админа
   const [isAdmin, setIsAdmin] = useState(false);
-  const [warnings, setWarnings] = useState<any>({
+  const [warnings, setWarnings] = useState<WarningsPayload>({
     activeWarnings: [],
     warningCount: 0,
     history: [],
@@ -25,12 +64,15 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: profiles } = await supabase.from("profiles").select("*").eq("id", id).single();
-      const { data: { user } } = await supabase.auth.admin.getUserById(id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("nickname, game_id, avatar_url")
+        .eq("id", id)
+        .single();
 
       setProfile({
-        nickname: profiles?.nickname || user?.user_metadata?.nickname || "—",
-        game_id: user?.user_metadata?.game_id || "—",
+        nickname: profiles?.nickname || "—",
+        game_id: profiles?.game_id || "—",
         avatar_url: profiles?.avatar_url || "",
       });
 
@@ -44,7 +86,7 @@ export default function PublicProfilePage() {
       const kills = statsData?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
       const matches = statsData?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
       const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
-      const cost = Math.round(kills * 10 + matches * 5);
+      const cost = 0;
       setStats({ kills, matches, ratio, cost });
 
       // Команда игрока
@@ -56,8 +98,9 @@ export default function PublicProfilePage() {
       const newBadges: string[] = [];
       if (memberships) {
         for (const m of memberships) {
-          const teamType = (m.teams as any)?.type;
-          const teamName = (m.teams as any)?.name || "";
+          const membershipTeam = m.teams as unknown as MembershipTeam | null;
+          const teamType = membershipTeam?.type;
+          const teamName = membershipTeam?.name || "";
           if (teamType === "guild") {
             if (m.role_in_team === "leader") newBadges.push(`Лидер гильдии ${teamName}`);
             else if (m.role_in_team === "senior_deputy") newBadges.push(`Старший зам гильдии ${teamName}`);
@@ -93,7 +136,7 @@ export default function PublicProfilePage() {
           .single();
         if (currentRoleData) {
           setIsAdmin(true);
-          const res = await fetch(`/api/profile/warnings?userId=${id}`);
+          const res = await authFetch(`/api/profile/warnings?userId=${id}`);
           const warnData = await res.json();
           setWarnings(warnData);
         }
@@ -102,7 +145,7 @@ export default function PublicProfilePage() {
       setLoading(false);
     };
     init();
-  }, [id]);
+  }, [id, supabase]);
 
   const getBadgeColor = (badge: string) => {
     if (badge.startsWith("Лидер") || badge.startsWith("Капитан")) return "bg-yellow-600";
@@ -118,7 +161,7 @@ export default function PublicProfilePage() {
 
   const unbanUser = async () => {
     if (!confirm("Разблокировать игрока?")) return;
-    const res = await fetch("/api/admin/warnings", {
+    const res = await authFetch("/api/admin/warnings", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ targetType: "player", targetId: id }),
@@ -143,7 +186,7 @@ export default function PublicProfilePage() {
         <div className="flex items-center gap-4 mb-4">
           <div className="w-20 h-20 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
             {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+              <Image src={profile.avatar_url} alt={`Аватар ${profile.nickname}`} width={80} height={80} unoptimized className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-2xl text-gray-400">
                 {profile.nickname?.[0]?.toUpperCase() || "?"}
@@ -178,6 +221,7 @@ export default function PublicProfilePage() {
           <div className="bg-gray-700 p-3 rounded text-center">
             <p className="text-gray-400 text-sm">Стоимость</p>
             <p className="text-xl font-bold text-yellow-400">{stats.cost} ₽</p>
+            <p className="text-xs text-gray-400">Рейтинг: ???</p>
           </div>
         </div>
 
@@ -213,7 +257,7 @@ export default function PublicProfilePage() {
 
           {warnings.activeWarnings.length > 0 && (
             <div className="space-y-2 mt-3">
-              {warnings.activeWarnings.map((w: any) => (
+              {warnings.activeWarnings.map((w) => (
                 <div key={w.id} className="bg-gray-700 p-3 rounded">
                   <p>
                     Уровень {w.level}{" "}
@@ -229,7 +273,7 @@ export default function PublicProfilePage() {
           <details className="mt-4">
             <summary className="text-blue-400 cursor-pointer">История предупреждений</summary>
             <div className="mt-2 space-y-2">
-              {warnings.history.map((h: any) => (
+              {warnings.history.map((h) => (
                 <div key={h.id} className="bg-gray-700 p-2 rounded text-sm">
                   <p>{new Date(h.created_at).toLocaleString("ru")} — Уровень {h.level}</p>
                   <p className="text-gray-400">{h.reason}</p>

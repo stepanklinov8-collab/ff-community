@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Team {
   id: string;
@@ -32,20 +35,40 @@ interface JoinRequest {
   status: string;
 }
 
+interface PlayerSearchResult {
+  id: string;
+  nickname: string;
+  game_id: string | null;
+}
+
+interface WarningRow {
+  id: string;
+  level: number;
+  reason: string;
+  expires_at: string | null;
+}
+
+interface TeamWarnings {
+  activeWarnings: WarningRow[];
+  warningCount: number;
+  activeBan: { reason: string } | null;
+}
+
 export default function TeamPage() {
-  const { id } = useParams();
-  const supabase = createClient();
+  const { id } = useParams<{ id: string }>();
+  const supabase = useMemo(() => createClient(), []);
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLeader, setIsLeader] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [canManage, setCanManage] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<PlayerSearchResult[]>([]);
 
   const [inviteMessage, setInviteMessage] = useState("");
   const [editMode, setEditMode] = useState(false);
@@ -64,7 +87,7 @@ export default function TeamPage() {
   const [transferUserId, setTransferUserId] = useState("");
 
   // Предупреждения команды
-  const [teamWarnings, setTeamWarnings] = useState<any>({
+  const [teamWarnings, setTeamWarnings] = useState<TeamWarnings>({
     activeWarnings: [],
     warningCount: 0,
     activeBan: null,
@@ -84,7 +107,7 @@ export default function TeamPage() {
       return data;
     }
     return null;
-  }, [id]);
+  }, [id, supabase]);
 
   const fetchMembers = useCallback(async () => {
     const { data } = await supabase.from("team_members")
@@ -96,11 +119,13 @@ export default function TeamPage() {
         return { ...m, nickname: profile?.nickname || "—", position: m.position || "main" };
       }));
       setMembers(enriched);
+      return enriched;
     }
-  }, [id]);
+    return [];
+  }, [id, supabase]);
 
   const fetchJoinRequests = useCallback(async () => {
-    const { data } = await supabase.from("join_requests")
+    const { data } = await supabase.from("team_join_requests")
       .select("id, user_id, status")
       .eq("team_id", id)
       .eq("status", "pending");
@@ -111,29 +136,32 @@ export default function TeamPage() {
       }));
       setJoinRequests(enriched);
     }
-  }, [id]);
+  }, [id, supabase]);
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       const teamData = await fetchTeam();
-      await fetchMembers();
+      const loadedMembers = await fetchMembers();
       await fetchJoinRequests();
 
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
       if (user) {
-        if (teamData?.leader_id === user.id) {
-          setIsLeader(true);
-          // Загружаем предупреждения команды
-          const res = await fetch(`/api/team/warnings?teamId=${id}`);
+        const membership = loadedMembers.find((member) => member.user_id === user.id);
+        const leader = teamData?.leader_id === user.id || membership?.role_in_team === "leader";
+        const manager = ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
+        setIsLeader(leader);
+        setCanManage(manager);
+        if (manager) {
+          const res = await authFetch(`/api/team/warnings?teamId=${id}`);
           const data = await res.json();
           setTeamWarnings(data);
         }
-        const isM = members.some(m => m.user_id === user.id);
+        const isM = Boolean(membership);
         setIsMember(isM);
         if (!isM) {
-          const { data: req } = await supabase.from("join_requests")
+          const { data: req } = await supabase.from("team_join_requests")
             .select("id").eq("team_id", id).eq("user_id", user.id).eq("status", "pending").single();
           if (req) setHasPendingRequest(true);
         }
@@ -141,31 +169,30 @@ export default function TeamPage() {
       setLoading(false);
     };
     init();
-  }, [fetchTeam, fetchMembers, fetchJoinRequests]);
+  }, [fetchTeam, fetchMembers, fetchJoinRequests, id, supabase]);
 
   const searchPlayers = async () => {
     if (!searchQuery.trim()) return;
-    const { data } = await supabase.from("profiles")
-      .select("id, nickname")
-      .or(`nickname.ilike.%${searchQuery}%,id.ilike.%${searchQuery}%`)
-      .limit(5);
-    if (data) setSearchResults(data);
+    const query = searchQuery.trim().replace(/[%,()]/g, "");
+    const [{ data: byNickname }, { data: byGameId }] = await Promise.all([
+      supabase.from("profiles").select("id, nickname, game_id").ilike("nickname", `%${query}%`).limit(5),
+      supabase.from("profiles").select("id, nickname, game_id").eq("game_id", query).limit(1),
+    ]);
+    const unique = new Map<string, PlayerSearchResult>();
+    for (const player of [...(byGameId ?? []), ...(byNickname ?? [])]) unique.set(player.id, player);
+    setSearchResults([...unique.values()].filter((player) => player.id !== currentUser?.id).slice(0, 5));
   };
 
   const addPlayer = async (userId: string, nickname: string) => {
-    if (mainCount >= 4) {
-      setInviteMessage("⚠️ Основа уже заполнена (макс 4). Назначьте игрока запасным.");
-      return;
-    }
-    const { error } = await supabase.from("team_members").insert({
-      team_id: id, user_id: userId, role_in_team: "main", position: "main",
+    const { error } = await supabase.rpc("send_team_invitation", {
+      p_team_id: id,
+      p_user_id: userId,
     });
     if (error) setInviteMessage("Ошибка: " + error.message);
     else {
-      setInviteMessage(`${nickname} добавлен!`);
+      setInviteMessage(`Приглашение для ${nickname} отправлено и действует 7 дней.`);
       setSearchResults([]);
       setSearchQuery("");
-      fetchMembers();
     }
   };
 
@@ -191,7 +218,13 @@ export default function TeamPage() {
 
   const saveProfile = async () => {
     const needsReverify = (editName !== team?.name) || (editType !== team?.type);
-    const updates: any = { name: editName, description: editDesc, type: editType, social_link: editSocial };
+    const updates: {
+      name: string;
+      description: string;
+      type: string;
+      social_link: string;
+      verified?: boolean;
+    } = { name: editName, description: editDesc, type: editType, social_link: editSocial };
     if (needsReverify) updates.verified = false;
     const { error } = await supabase.from("teams").update(updates).eq("id", id);
     if (!error) {
@@ -255,20 +288,27 @@ export default function TeamPage() {
       return;
     }
 
-    await supabase.from("join_requests").insert({ team_id: id, user_id: currentUser.id });
+    const { error } = await supabase.rpc("create_team_join_request", {
+      p_team_id: id,
+      p_message: null,
+    });
+    if (error) {
+      setInviteMessage("Ошибка: " + error.message);
+      return;
+    }
     setHasPendingRequest(true);
     setInviteMessage("Заявка отправлена!");
   };
 
   const handleJoinRequest = async (requestId: string, approve: boolean) => {
-    if (approve) {
-      if (mainCount >= 4) { setInviteMessage("⚠️ Основа заполнена."); return; }
-      const { data: req } = await supabase.from("join_requests").select("user_id").eq("id", requestId).single();
-      if (req) {
-        await supabase.from("team_members").insert({ team_id: id, user_id: req.user_id, role_in_team: "main", position: "main" });
-      }
+    const { error } = await supabase.rpc("review_team_join_request", {
+      p_request_id: requestId,
+      p_accept: approve,
+    });
+    if (error) {
+      setInviteMessage("Ошибка: " + error.message);
+      return;
     }
-    await supabase.from("join_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", requestId);
     fetchJoinRequests();
     fetchMembers();
   };
@@ -315,7 +355,7 @@ export default function TeamPage() {
           <>
             <div className="flex items-center gap-4 mb-4">
               <div className="w-16 h-16 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
-                {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover" /> :
+                {avatarUrl ? <Image src={avatarUrl} alt={`Эмблема ${team.name}`} width={64} height={64} unoptimized className="w-full h-full object-cover" /> :
                   <div className="w-full h-full flex items-center justify-center text-xl text-gray-400">{team.name?.[0]?.toUpperCase()}</div>}
               </div>
               <div>
@@ -417,7 +457,7 @@ export default function TeamPage() {
               <p className="text-red-300 text-sm">{teamWarnings.activeBan.reason}</p>
             </div>
           )}
-          {teamWarnings.activeWarnings.map((w: any) => (
+          {teamWarnings.activeWarnings.map((w) => (
             <div key={w.id} className="bg-gray-700 p-2 rounded mb-2 text-sm">
               <p>Уровень {w.level} {w.expires_at ? `(до ${new Date(w.expires_at).toLocaleDateString("ru")})` : "(навсегда)"}</p>
               <p className="text-gray-400">{w.reason}</p>
@@ -427,9 +467,9 @@ export default function TeamPage() {
       )}
 
       {/* Поиск и добавление */}
-      {isLeader && (
+      {canManage && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
-          <h3 className="text-lg font-semibold mb-3">Добавить игрока</h3>
+          <h3 className="text-lg font-semibold mb-3">Пригласить игрока</h3>
           <div className="flex gap-2 mb-3">
             <input className="flex-1 p-2 text-black rounded" placeholder="Ник или ID" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             <button onClick={searchPlayers} className="px-4 py-2 bg-blue-500 rounded">Найти</button>
@@ -437,14 +477,14 @@ export default function TeamPage() {
           {searchResults.map(p => (
             <div key={p.id} className="flex justify-between items-center bg-gray-700 p-2 rounded mb-1">
               <span>{p.nickname}</span>
-              <button onClick={() => addPlayer(p.id, p.nickname)} className="px-3 py-1 bg-green-600 rounded text-sm">Добавить</button>
+              <button onClick={() => addPlayer(p.id, p.nickname)} className="px-3 py-1 bg-green-600 rounded text-sm">Пригласить</button>
             </div>
           ))}
         </div>
       )}
 
       {/* Заявки */}
-      {isLeader && joinRequests.length > 0 && (
+      {canManage && joinRequests.length > 0 && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h3 className="text-lg font-semibold mb-3">Заявки на вступление</h3>
           {joinRequests.map(r => (

@@ -1,139 +1,173 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { authFetch } from "@/utils/api/auth-fetch";
+import { createClient } from "@/utils/supabase/client";
+
+interface Session {
+  id: string;
+  start_time: string;
+}
+
+interface Registration {
+  session_id: string | null;
+  status: string;
+  roster: string[];
+}
+
+const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const maxFileSize = 5 * 1024 * 1024;
 
 export default function AddEventStatsPage() {
-  const { id } = useParams();
-  const supabase = createClient();
+  const { id } = useParams<{ id: string }>();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [kills, setKills] = useState("");
   const [matches, setMatches] = useState("");
   const [screenshots, setScreenshots] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [eventTitle, setEventTitle] = useState("");
-  const [allowed, setAllowed] = useState(false);
+  const [eligibleSessions, setEligibleSessions] = useState<Session[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [checking, setChecking] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const checkParticipation = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setChecking(false); return; }
-
-      // Получаем событие
-      const { data: ev } = await supabase.from("events").select("title").eq("id", id).single();
-      if (ev) setEventTitle(ev.title);
-
-      // Проверяем, состоит ли пользователь в команде, зарегистрированной на событие
-      const { data: member } = await supabase
-        .from("team_members")
-        .select("team_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (member) {
-        const { data: reg } = await supabase
-          .from("event_registrations")
-          .select("id, status")
-          .eq("event_id", id)
-          .eq("team_id", member.team_id)
-          .eq("status", "confirmed")
-          .single();
-
-        if (reg) setAllowed(true);
+      if (!user) {
+        if (active) setChecking(false);
+        return;
       }
-      setChecking(false);
+      const [{ data: event }, { data: sessions }, registrationsResponse] = await Promise.all([
+        supabase.from("events").select("title").eq("id", id).single(),
+        supabase.from("event_sessions_public").select("id, start_time").eq("event_id", id),
+        authFetch(`/api/events/${id}/registrations`),
+      ]);
+      const payload = registrationsResponse.ok
+        ? await registrationsResponse.json() as { registrations?: Registration[] }
+        : { registrations: [] };
+      const eligibleIds = new Set(
+        (payload.registrations ?? [])
+          .filter((registration) =>
+            registration.status === "confirmed" &&
+            registration.session_id &&
+            registration.roster.includes(user.id)
+          )
+          .map((registration) => registration.session_id as string),
+      );
+      const available = (sessions ?? [])
+        .filter((session) => eligibleIds.has(session.id) && new Date(session.start_time) <= new Date())
+        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+      if (active) {
+        setEventTitle(event?.title ?? "");
+        setEligibleSessions(available);
+        setSelectedSessionId(available[0]?.id ?? "");
+        setChecking(false);
+      }
     };
-    checkParticipation();
-  }, [id]);
+    void checkParticipation();
+    return () => { active = false; };
+  }, [id, supabase]);
 
-  const handleSubmit = async () => {
-    if (!kills || !matches) { setMessage("Заполните киллы и матчи"); return; }
-    if (screenshots.length === 0) { setMessage("Прикрепите хотя бы один скриншот"); return; }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Загружаем скриншоты
-    const uploadedUrls: string[] = [];
-    for (const file of screenshots) {
-      const fileName = `event_stats_${user.id}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      const { error } = await supabase.storage.from("stats-screenshots").upload(fileName, file);
-      if (!error) {
-        const { data: urlData } = supabase.storage.from("stats-screenshots").getPublicUrl(fileName);
-        uploadedUrls.push(urlData.publicUrl);
-      }
+  const selectFiles = (files: File[]) => {
+    if (files.length > 5) {
+      setMessage("Можно прикрепить не более 5 файлов.");
+      return;
     }
-
-    const { error } = await supabase.from("player_stats").insert({
-      user_id: user.id,
-      event_id: id,
-      event_title: eventTitle,
-      kills: parseInt(kills),
-      matches_played: parseInt(matches),
-      screenshot_url: uploadedUrls.join(","),
-    });
-
-    if (error) {
-      setMessage("Ошибка: " + error.message);
-    } else {
-      setMessage("Статистика отправлена на модерацию!");
-      setTimeout(() => router.push(`/tournaments/${id}`), 1500);
+    const invalidType = files.find((file) => !allowedTypes.has(file.type));
+    if (invalidType) {
+      setMessage("Допустимы только JPEG, PNG и WebP.");
+      return;
     }
+    const oversized = files.find((file) => file.size > maxFileSize);
+    if (oversized) {
+      setMessage(`Файл «${oversized.name}» больше 5 МБ.`);
+      return;
+    }
+    setMessage("");
+    setScreenshots(files);
   };
 
-  if (checking) return <div className="min-h-screen p-6"><p>Проверка...</p></div>;
+  const handleSubmit = async () => {
+    const killsNumber = Number(kills);
+    const matchesNumber = Number(matches);
+    if (!selectedSessionId) { setMessage("Выберите завершившуюся сессию."); return; }
+    if (!Number.isInteger(killsNumber) || killsNumber < 0 || !Number.isInteger(matchesNumber) || matchesNumber < 1) {
+      setMessage("Укажите корректное количество киллов и матчей.");
+      return;
+    }
+    if (screenshots.length < 1) { setMessage("Прикрепите хотя бы один скриншот."); return; }
 
-  if (!allowed) {
+    const formData = new FormData();
+    formData.set("eventId", id);
+    formData.set("sessionId", selectedSessionId);
+    formData.set("kills", String(killsNumber));
+    formData.set("matches", String(matchesNumber));
+    screenshots.forEach((file) => formData.append("screenshots", file));
+
+    setSubmitting(true);
+    setMessage("Загрузка...");
+    const response = await authFetch("/api/stats/submissions", { method: "POST", body: formData });
+    const payload = await response.json();
+    setSubmitting(false);
+    if (!response.ok) {
+      setMessage(payload.error ?? "Не удалось отправить статистику.");
+      return;
+    }
+    setMessage("Статистика отправлена на модерацию.");
+    window.setTimeout(() => router.push(`/tournaments/${id}`), 1200);
+  };
+
+  if (checking) return <div className="min-h-screen p-6"><p>Проверка участия...</p></div>;
+  if (eligibleSessions.length === 0) {
     return (
       <div className="min-h-screen p-6">
-        <p>Вы не можете добавить статистику — ваша команда не участвовала в этом мероприятии.</p>
-        <Link href={`/tournaments/${id}`} className="text-blue-400">← Назад</Link>
+        <p>Нет начавшейся сессии, где вы указаны в подтверждённом составе.</p>
+        <Link href={`/tournaments/${id}`} className="text-cyan-300">← Назад</Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <Link href={`/tournaments/${id}`} className="text-blue-400 hover:underline">← К мероприятию</Link>
-      <h1 className="text-3xl font-bold mb-2 text-blue-500 mt-4">Добавить статистику</h1>
-      <p className="text-gray-400 mb-6">{eventTitle}</p>
+    <div className="min-h-screen p-4 md:p-7">
+      <Link href={`/tournaments/${id}`} className="text-cyan-300 hover:underline">← К мероприятию</Link>
+      <section className="cyber-card mt-5 max-w-xl p-6">
+        <span className="section-kicker">ПОДТВЕРЖДЕНИЕ РЕЗУЛЬТАТА</span>
+        <h1 className="mb-1 mt-2 text-3xl font-black">Добавить статистику</h1>
+        <p className="mb-6 text-slate-400">{eventTitle}</p>
 
-      <div className="bg-gray-800 p-6 rounded max-w-md">
-        <input
-          className="w-full p-2 mb-3 text-black rounded"
-          type="number"
-          placeholder="Киллы"
-          value={kills}
-          onChange={(e) => setKills(e.target.value)}
-        />
-        <input
-          className="w-full p-2 mb-3 text-black rounded"
-          type="number"
-          placeholder="Сыграно матчей"
-          value={matches}
-          onChange={(e) => setMatches(e.target.value)}
-        />
-        <div className="mb-4">
-          <label className="text-gray-400 text-sm block mb-1">Скриншоты (можно несколько)</label>
-          <input
-            className="w-full text-sm text-white"
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setScreenshots(Array.from(e.target.files || []))}
-          />
+        <label className="mb-4 block text-sm text-slate-300">
+          Сессия
+          <select className="mt-2" value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+            {eligibleSessions.map((session) => (
+              <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <input type="number" min={0} step={1} placeholder="Киллы" value={kills} onChange={(event) => setKills(event.target.value)} />
+          <input type="number" min={1} step={1} placeholder="Матчи" value={matches} onChange={(event) => setMatches(event.target.value)} />
         </div>
-        <button
-          onClick={handleSubmit}
-          className="w-full p-2 bg-green-500 rounded hover:bg-green-600"
-        >
-          Отправить на модерацию
+        <label className="mt-4 block text-sm text-slate-300">
+          Скриншоты — до 5 файлов по 5 МБ
+          <input
+            className="mt-2"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}
+          />
+        </label>
+        {screenshots.length > 0 && <p className="mt-2 text-xs text-slate-500">Выбрано файлов: {screenshots.length}</p>}
+        <button type="button" onClick={handleSubmit} disabled={submitting} className="primary-button mt-5 w-full disabled:opacity-50">
+          {submitting ? "Отправка..." : "Отправить на модерацию"}
         </button>
-        {message && <p className="mt-3 p-2 bg-gray-700 rounded">{message}</p>}
-      </div>
+        {message && <p className="mt-4 rounded-xl bg-slate-950/50 p-3 text-sm">{message}</p>}
+      </section>
     </div>
   );
 }

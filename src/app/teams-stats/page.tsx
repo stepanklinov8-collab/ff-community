@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
@@ -18,7 +19,7 @@ interface TeamStats {
 }
 
 export default function TeamsStatsPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [teams, setTeams] = useState<TeamStats[]>([]);
   const [filter, setFilter] = useState<string>("cost");
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,7 +93,7 @@ export default function TeamsStatsPage() {
       setLoading(false);
     };
     fetchTeams();
-  }, []);
+  }, [supabase]);
 
   const filteredTeams = teams
     .filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -158,7 +159,7 @@ export default function TeamsStatsPage() {
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                   {t.avatar_url ? (
-                    <img src={t.avatar_url} alt="" className="w-full h-full object-cover" />
+                    <Image src={t.avatar_url} alt={`Эмблема ${t.name}`} width={48} height={48} unoptimized className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
                       {t.name?.[0]?.toUpperCase() || "?"}

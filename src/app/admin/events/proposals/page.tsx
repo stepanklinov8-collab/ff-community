@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Event {
   id: string;
@@ -17,37 +17,44 @@ interface Event {
 }
 
 export default function ProposalsPage() {
-  const supabase = createClient();
   const [proposals, setProposals] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("*")
-        .eq("is_published", false)
-        .order("created_at", { ascending: false });
-      if (data) setProposals(data);
+      const response = await authFetch("/api/admin/events");
+      const payload = await response.json();
+      if (response.ok) setProposals(((payload.events ?? []) as Event[]).filter((event) => !event.is_published));
+      else setMessage(payload.error || "Не удалось загрузить предложения");
       setLoading(false);
     };
-    fetch();
+    void fetch();
   }, []);
 
   const approve = async (eventId: string, createdBy: string) => {
-    await supabase.from("events").update({
-      is_published: true,
-      organizer_user_id: createdBy, // автор предложения становится организатором
-    }).eq("id", eventId);
-    setProposals(proposals.filter(p => p.id !== eventId));
-    setMessage("Мероприятие опубликовано, автор назначен организатором!");
+    const response = await authFetch("/api/admin/events", {
+      method: "PATCH",
+      body: JSON.stringify({ id: eventId, isPublished: true, organizerUserId: createdBy }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error || "Не удалось опубликовать мероприятие");
+      return;
+    }
+    setProposals((current) => current.filter((proposal) => proposal.id !== eventId));
+    setMessage("Мероприятие опубликовано, автор назначен организатором.");
   };
 
   const reject = async (eventId: string) => {
     if (!confirm("Отклонить и удалить предложение?")) return;
-    await supabase.from("events").delete().eq("id", eventId);
-    setProposals(proposals.filter(p => p.id !== eventId));
+    const response = await authFetch(`/api/admin/events?eventId=${encodeURIComponent(eventId)}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error || "Не удалось отклонить предложение");
+      return;
+    }
+    setProposals((current) => current.filter((proposal) => proposal.id !== eventId));
     setMessage("Предложение отклонено.");
   };
 

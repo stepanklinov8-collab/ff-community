@@ -1,157 +1,120 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Contact {
   id: string;
   name: string;
-  role: string;
-  description: string;
-  social_link: string;
+  role: string | null;
+  description: string | null;
+  social_link: string | null;
+  profile_id: string | null;
+  phone: string | null;
 }
 
+const emptyForm = { name: "", role: "", description: "", socialLink: "", profileId: "", phone: "" };
+
 export default function AdminContactsPage() {
-  const supabase = createClient();
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [description, setDescription] = useState("");
-  const [socialLink, setSocialLink] = useState("");
-
-  const [editId, setEditId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchContacts();
+  const loadContacts = useCallback(async () => {
+    const response = await authFetch("/api/admin/contacts");
+    const payload = await response.json() as { contacts?: Contact[] };
+    if (response.ok) setContacts(payload.contacts ?? []);
+    else setMessage("Не удалось загрузить контакты.");
+    setLoading(false);
   }, []);
 
-  const fetchContacts = async () => {
-    const { data } = await supabase
-      .from("contacts")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (data) setContacts(data);
-    setLoading(false);
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadContacts(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadContacts]);
 
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      setMessage("Введите имя");
+  const updateField = (field: keyof typeof emptyForm, value: string) => setForm((current) => ({ ...current, [field]: value }));
+
+  const saveContact = async () => {
+    const response = await authFetch("/api/admin/contacts", {
+      method: editId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(editId ? { id: editId } : {}),
+        ...form,
+        profileId: form.profileId || null,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error ?? "Не удалось сохранить контакт.");
       return;
     }
-
-    if (editId) {
-      await supabase.from("contacts").update({
-        name,
-        role,
-        description,
-        social_link: socialLink,
-      }).eq("id", editId);
-      setMessage("Контакт обновлён!");
-    } else {
-      await supabase.from("contacts").insert({
-        name,
-        role,
-        description,
-        social_link: socialLink,
-      });
-      setMessage("Контакт добавлен!");
-    }
-
-    // Сброс формы
-    setName("");
-    setRole("");
-    setDescription("");
-    setSocialLink("");
+    setMessage(editId ? "Контакт обновлён." : "Контакт добавлен.");
     setEditId(null);
-    fetchContacts();
+    setForm(emptyForm);
+    await loadContacts();
   };
 
-  const editContact = (contact: Contact) => {
+  const startEdit = (contact: Contact) => {
     setEditId(contact.id);
-    setName(contact.name);
-    setRole(contact.role);
-    setDescription(contact.description);
-    setSocialLink(contact.social_link);
+    setForm({
+      name: contact.name,
+      role: contact.role ?? "",
+      description: contact.description ?? "",
+      socialLink: contact.social_link ?? "",
+      profileId: contact.profile_id ?? "",
+      phone: contact.phone ?? "",
+    });
   };
 
   const deleteContact = async (id: string) => {
-    if (!confirm("Удалить контакт?")) return;
-    await supabase.from("contacts").delete().eq("id", id);
-    fetchContacts();
+    if (!window.confirm("Удалить контакт?")) return;
+    const response = await authFetch(`/api/admin/contacts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) { setMessage("Не удалось удалить контакт."); return; }
     setMessage("Контакт удалён.");
+    await loadContacts();
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-red-500">Управление контактами</h1>
-      {message && <div className="mb-4 p-3 bg-gray-800 rounded">{message}</div>}
-
-      {/* Форма */}
-      <div className="bg-gray-800 p-4 rounded mb-6 max-w-md">
-        <h2 className="text-xl font-semibold mb-4">{editId ? "Редактировать" : "Добавить"} контакт</h2>
-        <input
-          className="w-full p-2 mb-2 text-black rounded"
-          placeholder="Имя (обязательно)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          className="w-full p-2 mb-2 text-black rounded"
-          placeholder="Должность (например: Организатор турниров)"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        />
-        <input
-          className="w-full p-2 mb-2 text-black rounded"
-          placeholder="За что отвечает"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input
-          className="w-full p-2 mb-4 text-black rounded"
-          placeholder="Ссылка на соцсеть (VK, Telegram и т.д.)"
-          value={socialLink}
-          onChange={(e) => setSocialLink(e.target.value)}
-        />
-        <div className="flex gap-2">
-          <button onClick={handleSubmit} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">
-            {editId ? "Сохранить" : "Добавить"}
-          </button>
-          {editId && (
-            <button onClick={() => { setEditId(null); setName(""); setRole(""); setDescription(""); setSocialLink(""); }} className="px-4 py-2 bg-gray-600 rounded">
-              Отмена
-            </button>
-          )}
+    <div className="min-h-screen p-4 md:p-7">
+      <span className="section-kicker">АДМИН-ПАНЕЛЬ</span>
+      <h1 className="mb-6 mt-2 text-3xl font-black">Контакты</h1>
+      {message && <p className="mb-4 rounded-xl bg-slate-950/50 p-3">{message}</p>}
+      <section className="cyber-card mb-6 max-w-2xl space-y-3 p-5">
+        <h2 className="text-xl font-bold">{editId ? "Редактировать контакт" : "Добавить контакт"}</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          <input placeholder="Имя" value={form.name} onChange={(event) => updateField("name", event.target.value)} />
+          <input placeholder="Роль / должность" value={form.role} onChange={(event) => updateField("role", event.target.value)} />
+          <input placeholder="Ссылка на соцсеть" type="url" value={form.socialLink} onChange={(event) => updateField("socialLink", event.target.value)} />
+          <input placeholder="Номер для связи" value={form.phone} onChange={(event) => updateField("phone", event.target.value)} />
+          <input placeholder="ID профиля на сайте" value={form.profileId} onChange={(event) => updateField("profileId", event.target.value)} />
+          <input placeholder="За что отвечает" value={form.description} onChange={(event) => updateField("description", event.target.value)} />
         </div>
-      </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={saveContact} className="primary-button">{editId ? "Сохранить" : "Добавить"}</button>
+          {editId && <button type="button" onClick={() => { setEditId(null); setForm(emptyForm); }} className="secondary-button">Отмена</button>}
+        </div>
+      </section>
 
-      {/* Список контактов */}
-      <h2 className="text-xl font-semibold mb-4">Существующие контакты</h2>
-      {loading ? <p>Загрузка...</p> : contacts.length === 0 ? (
-        <p className="text-gray-400">Контактов нет.</p>
-      ) : (
+      <h2 className="mb-4 text-xl font-bold">Опубликованные контакты</h2>
+      {loading ? <p>Загрузка...</p> : contacts.length === 0 ? <p className="text-slate-400">Контактов нет.</p> : (
         <div className="space-y-2">
-          {contacts.map((c) => (
-            <div key={c.id} className="bg-gray-800 p-3 rounded flex justify-between items-center">
-              <div>
-                <span className="font-semibold text-blue-400">{c.name}</span>
-                {c.role && <span className="text-gray-400 ml-2">— {c.role}</span>}
-              </div>
+          {contacts.map((contact) => (
+            <article key={contact.id} className="cyber-card flex flex-wrap items-center justify-between gap-3 p-4">
+              <div><strong className="text-cyan-300">{contact.name}</strong>{contact.role && <span className="ml-2 text-slate-400">— {contact.role}</span>}</div>
               <div className="flex gap-2">
-                <button onClick={() => editContact(c)} className="px-3 py-1 bg-blue-500 rounded text-sm">Редактировать</button>
-                <button onClick={() => deleteContact(c.id)} className="px-3 py-1 bg-red-500 rounded text-sm">Удалить</button>
+                <button type="button" onClick={() => startEdit(contact)} className="secondary-button">Редактировать</button>
+                <button type="button" onClick={() => deleteContact(contact.id)} className="secondary-button text-red-300">Удалить</button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
-
-      <Link href="/admin" className="block mt-6 text-blue-400 hover:underline">← Админ-панель</Link>
+      <Link href="/admin" className="mt-6 block text-cyan-300 hover:underline">← Админ-панель</Link>
     </div>
   );
 }

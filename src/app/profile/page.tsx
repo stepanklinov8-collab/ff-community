@@ -1,337 +1,346 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
+import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { authFetch } from "@/utils/api/auth-fetch";
+import { createClient } from "@/utils/supabase/client";
 
 interface Team {
   id: string;
   name: string;
-  type: string;
+  type: "team" | "guild";
+  verified: boolean;
+  role: string;
+}
+
+interface MembershipTeam {
+  id: string;
+  name: string;
+  type: "team" | "guild";
   verified: boolean;
 }
 
-interface Registration {
+interface MembershipRow {
+  role_in_team: string;
+  teams: MembershipTeam | MembershipTeam[] | null;
+}
+
+interface RegistrationRow {
   id: string;
   event_id: string;
   status: string;
+}
+
+interface Registration extends RegistrationRow {
   event_title: string;
 }
 
+interface WarningRow {
+  id: string;
+  level: number;
+  reason: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+interface WarningsPayload {
+  activeWarnings: WarningRow[];
+  warningCount: number;
+  history: WarningRow[];
+  activeBan: { reason: string; created_at: string } | null;
+}
+
+interface EditableProfile {
+  nickname: string;
+  gameId: string;
+  bio: string;
+  phone: string;
+  locale: "ru" | "kk" | "ky";
+}
+
+const allowedAvatarTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function normalizeTeam(value: MembershipRow["teams"]) {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function roleLabel(role: string, type: Team["type"]) {
+  const suffix = type === "guild" ? "гильдии" : "команды";
+  const labels: Record<string, string> = {
+    leader: type === "guild" ? "Лидер" : "Капитан",
+    senior_deputy: "Старший заместитель",
+    deputy: "Заместитель",
+    main: type === "guild" ? "Участник" : "Основной состав",
+    substitute: type === "guild" ? "Участник" : "Запасной",
+  };
+  return `${labels[role] ?? "Игрок"} ${suffix}`;
+}
+
 export default function ProfilePage() {
-  const supabase = createClient();
-  const [user, setUser] = useState<any>(null);
-  const [myTeams, setMyTeams] = useState<Team[]>([]);
-  const [myRegistrations, setMyRegistrations] = useState<Registration[]>([]);
+  const supabase = useMemo(() => createClient(), []);
+  const [user, setUser] = useState<User | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", locale: "ru" });
   const [badges, setBadges] = useState<string[]>([]);
-  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
-  const [warnings, setWarnings] = useState<any>({
-    activeWarnings: [],
-    warningCount: 0,
-    history: [],
-    activeBan: null,
+  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0 });
+  const [warnings, setWarnings] = useState<WarningsPayload>({
+    activeWarnings: [], warningCount: 0, history: [], activeBan: null,
   });
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("avatar_url")
-          .eq("id", user.id)
-          .single();
-        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData.user;
+      setUser(currentUser);
 
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .single();
-        if (roleData) setIsAdmin(true);
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
 
-        const { data: teams } = await supabase
-          .from("teams")
-          .select("id, name, type, verified")
-          .eq("leader_id", user.id);
-        if (teams) setMyTeams(teams);
+      setProfileForm((current) => ({
+        ...current,
+        nickname: currentUser.user_metadata?.nickname || "",
+        gameId: currentUser.user_metadata?.game_id || "",
+        locale: currentUser.user_metadata?.locale === "kk" || currentUser.user_metadata?.locale === "ky" ? currentUser.user_metadata.locale : "ru",
+      }));
 
-        // Статистика игрока
-        const { data: statsData } = await supabase
-          .from("player_stats")
-          .select("kills, matches_played")
-          .eq("user_id", user.id)
-          .eq("status", "approved");
+      const [profileResult, roleResult, statsResult, membershipsResult, bloggerResult] = await Promise.all([
+        supabase.from("profiles").select("avatar_url").eq("id", currentUser.id).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", currentUser.id).maybeSingle(),
+        supabase.from("player_stats").select("kills, matches_played").eq("user_id", currentUser.id).eq("status", "approved"),
+        supabase.from("team_members").select("role_in_team, teams(id, name, type, verified)").eq("user_id", currentUser.id),
+        supabase.from("bloggers").select("id").eq("user_id", currentUser.id).maybeSingle(),
+      ]);
 
-        const kills = statsData?.reduce((sum: number, s: any) => sum + (s.kills || 0), 0) || 0;
-        const matches = statsData?.reduce((sum: number, s: any) => sum + (s.matches_played || 0), 0) || 0;
-        const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
-        const cost = Math.round(kills * 10 + matches * 5);
-        setStats({ kills, matches, ratio, cost });
+      if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
+      const kills = statsResult.data?.reduce((sum, stat) => sum + (stat.kills || 0), 0) ?? 0;
+      const matches = statsResult.data?.reduce((sum, stat) => sum + (stat.matches_played || 0), 0) ?? 0;
+      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0 });
 
-        // Загрузка предупреждений через API
-        const session = await supabase.auth.getSession();
-        const token = session.data.session?.access_token;
-        if (token) {
-          const res = await fetch("/api/profile/warnings", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const warnData = await res.json();
-          setWarnings(warnData);
+      const memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
+      const currentTeams = memberships.flatMap((membership) => {
+        const team = normalizeTeam(membership.teams);
+        return team ? [{ ...team, role: membership.role_in_team }] : [];
+      });
+      setTeams(currentTeams);
+
+      const nextBadges = currentTeams.map((team) => `${roleLabel(team.role, team.type)} ${team.name}`);
+      if (roleResult.data?.role) nextBadges.push(roleResult.data.role === "superadmin" ? "Суперадмин" : "Модератор");
+      if (bloggerResult.data) nextBadges.push("Блогер");
+      setBadges(nextBadges);
+
+      try {
+        const profileResponse = await authFetch("/api/profile");
+        if (profileResponse.ok) {
+          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string } };
+          setProfileForm(profilePayload.profile);
+          if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
         }
+      } catch {
+        // Новые поля станут доступны сразу после применения миграции.
+      }
 
-        // Записи на мероприятия
-        const { data: member } = await supabase
-          .from("team_members")
-          .select("team_id")
-          .eq("user_id", user.id)
-          .single();
+      const teamIds = currentTeams.filter((team) => team.type === "team").map((team) => team.id);
+      if (teamIds.length > 0) {
+        const { data: registrationRows } = await supabase
+          .from("event_registrations")
+          .select("id, event_id, status")
+          .in("team_id", teamIds)
+          .neq("status", "cancelled");
+        const rows = (registrationRows ?? []) as RegistrationRow[];
+        const eventIds = [...new Set(rows.map((row) => row.event_id))];
+        const { data: eventRows } = eventIds.length
+          ? await supabase.from("events").select("id, title").in("id", eventIds)
+          : { data: [] as { id: string; title: string }[] };
+        const titleById = new Map((eventRows ?? []).map((event) => [event.id, event.title]));
+        setRegistrations(rows.map((row) => ({ ...row, event_title: titleById.get(row.event_id) ?? "Мероприятие" })));
+      }
 
-        if (member) {
-          const { data: regs } = await supabase
-            .from("event_registrations")
-            .select("id, event_id, status")
-            .eq("team_id", member.team_id);
-
-          if (regs) {
-            const enriched = await Promise.all(
-              regs.map(async (r) => {
-                const { data: ev } = await supabase
-                  .from("events")
-                  .select("title")
-                  .eq("id", r.event_id)
-                  .single();
-                return { ...r, event_title: ev?.title || "—" };
-              })
-            );
-            setMyRegistrations(enriched);
-          }
-        }
-
-        // Плашки
-        const newBadges: string[] = [];
-
-        const { data: memberships } = await supabase
-          .from("team_members")
-          .select("team_id, role_in_team, teams(type, name)")
-          .eq("user_id", user.id);
-
-        if (memberships) {
-          for (const m of memberships) {
-            const teamType = (m.teams as any)?.type;
-            const teamName = (m.teams as any)?.name || "";
-
-            if (teamType === "guild") {
-              if (m.role_in_team === "leader") newBadges.push(`Лидер гильдии ${teamName}`);
-              else if (m.role_in_team === "senior_deputy") newBadges.push(`Старший зам гильдии ${teamName}`);
-              else if (m.role_in_team === "deputy") newBadges.push(`Зам гильдии ${teamName}`);
-              else if (m.role_in_team === "main") newBadges.push(`Участник гильдии ${teamName}`);
-            } else if (teamType === "team") {
-              if (m.role_in_team === "leader") newBadges.push(`Капитан команды ${teamName}`);
-              else if (m.role_in_team === "senior_deputy") newBadges.push(`Старший зам команды ${teamName}`);
-              else if (m.role_in_team === "deputy") newBadges.push(`Зам команды ${teamName}`);
-              else if (m.role_in_team === "main") newBadges.push(`Игрок команды ${teamName}`);
-            }
-          }
-        }
-
-        if (roleData) {
-          newBadges.push(roleData.role === "superadmin" ? "Админ" : "Модератор");
-        }
-
-        const { data: blogger } = await supabase
-          .from("bloggers")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-        if (blogger) newBadges.push("Блогер");
-
-        setBadges(newBadges);
+      try {
+        const response = await authFetch("/api/profile/warnings");
+        if (response.ok) setWarnings((await response.json()) as WarningsPayload);
+      } catch {
+        // Профиль остаётся доступен, если блок предупреждений временно недоступен.
       }
       setLoading(false);
     };
-    init();
-  }, []);
+    void init();
+  }, [supabase]);
+
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    setMessage("");
+    try {
+      const response = await authFetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileForm),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Не удалось сохранить профиль");
+      setUser((current) => current ? {
+        ...current,
+        user_metadata: { ...current.user_metadata, nickname: profileForm.nickname, game_id: profileForm.gameId, locale: profileForm.locale },
+      } : current);
+      setEditingProfile(false);
+      setMessage("Профиль сохранён.");
+    } catch (saveError) {
+      setMessage(saveError instanceof Error ? saveError.message : "Не удалось сохранить профиль");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const uploadAvatar = async () => {
     if (!avatarFile || !user) return;
+    if (!allowedAvatarTypes.has(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
+      setMessage("Аватар должен быть JPEG, PNG или WebP размером до 5 МБ.");
+      return;
+    }
+
     setUploading(true);
-    const fileName = `user_${user.id}_${Date.now()}`;
-    const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, avatarFile);
-    if (uploadError) { setMessage("Ошибка: " + uploadError.message); setUploading(false); return; }
+    setMessage("");
+    const extension = avatarFile.name.split(".").pop()?.toLowerCase() || "webp";
+    const fileName = `${user.id}/avatar-${Date.now()}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, avatarFile, { contentType: avatarFile.type, upsert: false });
+    if (uploadError) {
+      setMessage(`Ошибка загрузки: ${uploadError.message}`);
+      setUploading(false);
+      return;
+    }
+
     const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-    await supabase.from("profiles").upsert({ id: user.id, avatar_url: urlData.publicUrl, nickname: user.user_metadata?.nickname || "" });
-    setAvatarUrl(urlData.publicUrl);
-    setAvatarFile(null);
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: user.id,
+      avatar_url: urlData.publicUrl,
+      nickname: user.user_metadata?.nickname || "",
+      updated_at: new Date().toISOString(),
+    });
+    if (profileError) {
+      await supabase.storage.from("avatars").remove([fileName]);
+      setMessage(`Ошибка обновления профиля: ${profileError.message}`);
+    } else {
+      setAvatarUrl(urlData.publicUrl);
+      setAvatarFile(null);
+      setMessage("Аватар обновлён.");
+    }
     setUploading(false);
-    setMessage("Аватар обновлён!");
   };
+
+  if (loading) return <div className="page-shell"><p className="text-slate-400">Загрузка профиля…</p></div>;
 
   if (!user) {
     return (
-      <div className="min-h-screen p-6">
-        <p>Пожалуйста, войдите.</p>
-        <Link href="/auth" className="text-blue-400">← Войти</Link>
+      <div className="page-shell">
+        <div className="panel mx-auto max-w-xl p-8 text-center">
+          <h1 className="mb-3 text-2xl font-bold">Войдите в аккаунт</h1>
+          <p className="mb-6 text-slate-400">Профиль, команды и заявки доступны после авторизации.</p>
+          <Link href="/auth" className="btn-primary">Войти или зарегистрироваться</Link>
+        </div>
       </div>
     );
   }
 
-  const getBadgeColor = (badge: string) => {
-    if (badge.startsWith("Лидер") || badge.startsWith("Капитан")) return "bg-yellow-600";
-    if (badge.startsWith("Старший зам")) return "bg-orange-600";
-    if (badge.startsWith("Зам")) return "bg-orange-700";
-    if (badge.startsWith("Админ")) return "bg-red-600";
-    if (badge.startsWith("Модератор")) return "bg-red-700";
-    if (badge.startsWith("Блогер")) return "bg-purple-600";
-    if (badge.startsWith("Игрок команды")) return "bg-blue-600";
-    if (badge.startsWith("Участник гильдии")) return "bg-purple-700";
-    return "bg-gray-600";
-  };
-
   return (
-    <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">Мой профиль</h1>
-
-      <div className="bg-gray-800 p-4 rounded mb-6 flex items-center gap-4">
-        <div className="w-20 h-20 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="Аватар" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-2xl text-gray-400">
-              {user.user_metadata?.nickname?.[0]?.toUpperCase() || "?"}
-            </div>
-          )}
-        </div>
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-lg font-semibold">{user.user_metadata?.nickname || "—"}</p>
-            {badges.map(badge => (
-              <span key={badge} className={`text-xs px-2 py-0.5 rounded ${getBadgeColor(badge)}`}>{badge}</span>
-            ))}
-          </div>
-          {isAdmin && <p className="text-gray-400 text-sm">{user.email}</p>}
-          <p className="text-gray-400 text-sm">ID: {user.user_metadata?.game_id || "—"}</p>
-          <div className="flex gap-2 mt-2">
-            <input className="text-sm text-white w-40" type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
-            {avatarFile && (
-              <button onClick={uploadAvatar} disabled={uploading} className="px-3 py-1 bg-blue-500 rounded text-sm hover:bg-blue-600 disabled:opacity-50">
-                {uploading ? "..." : "Загрузить"}
-              </button>
+    <div className="page-shell space-y-6">
+      <section className="panel overflow-hidden">
+        <div className="h-24 bg-[radial-gradient(circle_at_30%_0%,rgba(0,174,255,.35),transparent_55%),linear-gradient(120deg,#08111f,#03070d)]" />
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:p-7">
+          <div className="-mt-16 h-28 w-28 shrink-0 overflow-hidden rounded-2xl border-4 border-[#07101b] bg-slate-800 shadow-xl">
+            {avatarUrl ? (
+              <Image src={avatarUrl} alt="Аватар" width={112} height={112} unoptimized className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center text-4xl font-black text-cyan-300">{user.user_metadata?.nickname?.[0]?.toUpperCase() || "?"}</div>
             )}
           </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black sm:text-3xl">{profileForm.nickname || user.user_metadata?.nickname || "Игрок"}</h1>
+              {badges.map((badge) => <span key={badge} className="badge badge-blue">{badge}</span>)}
+            </div>
+            <p className="mt-1 text-sm text-slate-400">Игровой ID: {profileForm.gameId || user.user_metadata?.game_id || "не указан"}</p>
+            <p className="text-sm text-slate-500">{user.email}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <button type="button" onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
+            <input className="max-w-xs text-xs text-slate-300" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+            {avatarFile && <button type="button" onClick={uploadAvatar} disabled={uploading} className="btn-secondary text-sm">{uploading ? "Загрузка…" : "Обновить аватар"}</button>}
+          </div>
         </div>
-      </div>
+      </section>
 
-      {message && <div className="mb-4 p-3 bg-gray-800 rounded">{message}</div>}
+      {message && <div className="panel p-4 text-sm text-cyan-100">{message}</div>}
 
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Мои команды</h2>
-        {loading ? <p>Загрузка...</p> : myTeams.length === 0 ? (
-          <p className="text-gray-400 mb-4">Вы пока не создали ни одной команды.</p>
-        ) : (
-          <div className="space-y-2 mb-4">
-            {myTeams.map((team) => (
-              <Link key={team.id} href={`/teams/${team.id}`} className="bg-gray-800 p-3 rounded flex justify-between items-center hover:bg-gray-700">
-                <span>{team.name} ({team.type === "guild" ? "Гильдия" : "Команда"})</span>
-                {team.verified ? <span className="text-green-400 text-sm">✓ Верифицирована</span> : <span className="text-yellow-400 text-sm">⏳ На модерации</span>}
+      {editingProfile && (
+        <section className="panel grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
+          <div className="sm:col-span-2"><p className="eyebrow">Настройки аккаунта</p><h2 className="section-title mt-2">Редактирование профиля</h2></div>
+          <label className="field-label">Игровой ник<input className="field mt-2" maxLength={32} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
+          <label className="field-label">Игровой ID<input className="field mt-2" maxLength={32} value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
+          <label className="field-label">Телефон или контакт<input className="field mt-2" maxLength={32} placeholder="Необязательно" value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+          <label className="field-label">Язык<select className="field mt-2" value={profileForm.locale} onChange={(event) => setProfileForm((current) => ({ ...current, locale: event.target.value as EditableProfile["locale"] }))}><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="ky">Кыргызча</option></select></label>
+          <label className="field-label sm:col-span-2">О себе<textarea className="field mt-2 min-h-28 resize-y" maxLength={500} value={profileForm.bio} onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))} /></label>
+          <div className="sm:col-span-2"><button type="button" onClick={saveProfile} disabled={savingProfile} className="btn-primary disabled:opacity-50">{savingProfile ? "Сохраняем…" : "Сохранить изменения"}</button></div>
+        </section>
+      )}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[["Киллы", stats.kills], ["Матчи", stats.matches], ["K/M", stats.ratio], ["Стоимость", "???"]].map(([label, value]) => (
+          <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
+        ))}
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="panel p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="section-title">Команда и гильдия</h2>{teams.length < 2 && <Link href="/teams/create" className="btn-secondary text-sm">Создать</Link>}</div>
+          {teams.length === 0 ? <p className="text-slate-400">Вы пока не состоите в команде или гильдии.</p> : (
+            <div className="space-y-3">{teams.map((team) => (
+              <Link key={team.id} href={`/teams/${team.id}`} className="card-link flex items-center justify-between gap-3 p-4">
+                <div><p className="font-bold">{team.name}</p><p className="text-xs text-slate-400">{roleLabel(team.role, team.type)}</p></div>
+                <span className={team.verified ? "badge badge-green" : "badge badge-yellow"}>{team.verified ? "Проверена" : "На проверке"}</span>
               </Link>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/stats/add" className="inline-block p-3 bg-green-500 rounded hover:bg-green-600">
-            + Добавить статистику
-          </Link>
-          <Link href="/teams/create" className="inline-block p-3 bg-blue-500 rounded hover:bg-blue-600">+ Создать команду</Link>
+            ))}</div>
+          )}
         </div>
-      </div>
 
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Моя статистика</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Киллы</p>
-            <p className="text-xl font-bold">{stats.kills}</p>
-          </div>
-          <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Матчи</p>
-            <p className="text-xl font-bold">{stats.matches}</p>
-          </div>
-          <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">У/С</p>
-            <p className="text-xl font-bold">{stats.ratio}</p>
-          </div>
-          <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Стоимость</p>
-            <p className="text-xl font-bold text-yellow-400">{stats.cost} ₽</p>
-          </div>
-        </div>
-        <Link href="/stats/add" className="inline-block p-3 bg-blue-500 rounded hover:bg-blue-600">
-          Добавить статистику
-        </Link>
-      </div>
-
-      {/* Предупреждения */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Мои предупреждения ({warnings.warningCount})</h2>
-        {warnings.activeBan && (
-          <div className="bg-red-900 p-3 rounded mb-4">
-            <p className="font-bold text-red-200">Вы заблокированы!</p>
-            <p className="text-red-300 text-sm">{warnings.activeBan.reason}</p>
-            <p className="text-xs text-red-400">{new Date(warnings.activeBan.created_at).toLocaleString("ru")}</p>
-          </div>
-        )}
-        {warnings.activeWarnings.length === 0 ? (
-          <p className="text-gray-400">Нет активных предупреждений.</p>
-        ) : (
-          <div className="space-y-2 mb-4">
-            {warnings.activeWarnings.map((w: any) => (
-              <div key={w.id} className="bg-gray-800 p-3 rounded">
-                <p>Уровень: {w.level} {w.expires_at ? "(до " + new Date(w.expires_at).toLocaleDateString("ru") + ")" : "(навсегда)"}</p>
-                <p className="text-gray-400 text-sm">{w.reason}</p>
-              </div>
-            ))}
-          </div>
-        )}
-        <details>
-          <summary className="text-blue-400 cursor-pointer">История предупреждений</summary>
-          <div className="mt-2 space-y-2">
-            {warnings.history.map((h: any) => (
-              <div key={h.id} className="bg-gray-700 p-2 rounded text-sm">
-                <p>{new Date(h.created_at).toLocaleString("ru")} — Уровень {h.level}</p>
-                <p className="text-gray-400">{h.reason}</p>
-              </div>
-            ))}
-          </div>
-        </details>
-      </div>
-
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Мои записи на мероприятия</h2>
-        {myRegistrations.length === 0 ? (
-          <p className="text-gray-400">Нет активных записей.</p>
-        ) : (
-          <div className="space-y-2">
-            {myRegistrations.map((reg) => (
-              <Link key={reg.id} href={`/tournaments/${reg.event_id}`} className="bg-gray-800 p-3 rounded flex justify-between items-center hover:bg-gray-700">
-                <span>{reg.event_title}</span>
-                <span className={reg.status === "confirmed" ? "text-green-400" : reg.status === "waiting" ? "text-yellow-400" : "text-red-400"}>
-                  {reg.status === "confirmed" ? "✓ В основе" : reg.status === "waiting" ? "⏳ В ожидании" : "✕ Отменена"}
-                </span>
+        <div className="panel p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="section-title">Мои мероприятия</h2><Link href="/tournaments" className="btn-secondary text-sm">Найти турнир</Link></div>
+          {registrations.length === 0 ? <p className="text-slate-400">Активных заявок пока нет.</p> : (
+            <div className="space-y-3">{registrations.map((registration) => (
+              <Link key={registration.id} href={`/tournaments/${registration.event_id}`} className="card-link flex items-center justify-between gap-3 p-4">
+                <span className="font-semibold">{registration.event_title}</span>
+                <span className={registration.status === "confirmed" ? "badge badge-green" : "badge badge-yellow"}>{registration.status === "confirmed" ? "В основе" : "В резерве"}</span>
               </Link>
-            ))}
-          </div>
-        )}
-      </div>
+            ))}</div>
+          )}
+        </div>
+      </section>
 
-      <Link href="/" className="text-blue-400 hover:underline">← На главную</Link>
+      <section className="panel p-5 sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="section-title">Статистика и модерация</h2><div className="flex gap-2"><Link href="/profile/stats" className="btn-secondary text-sm">История</Link><Link href="/tournaments" className="btn-primary text-sm">Внести результат</Link></div></div>
+        <p className="text-sm text-slate-400">Результат вносится со страницы завершившейся сессии — так статистика всегда связана с конкретным мероприятием и составом.</p>
+      </section>
+
+      <section className="panel p-5 sm:p-6">
+        <h2 className="section-title mb-4">Предупреждения <span className="text-slate-500">({warnings.warningCount})</span></h2>
+        {warnings.activeBan && <div className="mb-4 rounded-xl border border-red-500/40 bg-red-950/40 p-4"><p className="font-bold text-red-200">Аккаунт заблокирован</p><p className="mt-1 text-sm text-red-300">{warnings.activeBan.reason}</p></div>}
+        {warnings.activeWarnings.length === 0 ? <p className="text-slate-400">Активных предупреждений нет.</p> : (
+          <div className="mb-4 space-y-2">{warnings.activeWarnings.map((warning) => <div key={warning.id} className="rounded-xl border border-amber-400/20 bg-amber-950/20 p-3"><p className="font-semibold text-amber-100">Уровень {warning.level}</p><p className="text-sm text-slate-400">{warning.reason}</p></div>)}</div>
+        )}
+        <details className="text-sm"><summary className="cursor-pointer text-cyan-300">Показать историю</summary><div className="mt-3 space-y-2">{warnings.history.length === 0 ? <p className="text-slate-500">История пуста.</p> : warnings.history.map((warning) => <div key={warning.id} className="rounded-lg bg-white/[.03] p-3"><p>{new Date(warning.created_at).toLocaleString("ru-RU")} · уровень {warning.level}</p><p className="text-slate-400">{warning.reason}</p></div>)}</div></details>
+      </section>
     </div>
   );
 }

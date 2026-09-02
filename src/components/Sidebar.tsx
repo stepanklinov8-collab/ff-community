@@ -1,92 +1,197 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import {
+  Bell,
+  BookOpen,
+  ChevronRight,
+  Contact,
+  Gamepad2,
+  House,
+  Languages,
+  LogIn,
+  LogOut,
+  Mail,
+  Menu,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trophy,
+  UserRound,
+  UsersRound,
+  X,
+} from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { localeNames, locales } from "@/i18n/messages";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const pathname = usePathname();
-  const supabase = createClient();
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const { locale, setLocale, t } = useLanguage();
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, []);
+    let active = true;
+
+    async function loadUser() {
+      const { data } = await supabase.auth.getUser();
+      if (!active) return;
+      setUser(data.user);
+
+      if (data.user) {
+        const { data: roleRows } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id)
+          .in("role", ["moderator", "superadmin"]);
+        if (active) setIsAdmin(Boolean(roleRows?.length));
+      }
+    }
+
+    loadUser();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (!session?.user) setIsAdmin(false);
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const menuItems = [
-    { href: "/", label: "Главная" },
-    { href: "/teams", label: "Команды и гильдии" },
-    { href: "/tournaments", label: "Турниры" },
-    { href: "/rating", label: "Рейтинг" },
-    { href: "/teams-stats", label: "Статистика команд" },
-    { href: "/bloggers", label: "Блогеры" },
-    { href: "/betting", label: "Ставки" },
-    { href: "/diamonds", label: "Купить Алмазы" },
-    { href: "/knowledge-base", label: "База знаний" },
-    { href: "/messages", label: "Сообщения" },
-    { href: "/notifications", label: "Уведомления" },
-    { href: "/profile", label: "Профиль" },
-    { href: "/contacts", label: "Контакты" },
+    { href: "/", label: t("home"), icon: House },
+    { href: "/teams", label: t("teams"), icon: UsersRound },
+    { href: "/tournaments", label: t("tournaments"), icon: Trophy },
+    { href: "/rating", label: t("rating"), icon: Sparkles },
+    { href: "/teams-stats", label: t("teamStats"), icon: Gamepad2 },
+    { href: "/bloggers", label: t("bloggers"), icon: UserRound },
+    { href: "/betting", label: t("betting"), icon: Trophy },
+    { href: "/knowledge", label: t("knowledge"), icon: BookOpen },
+    { href: "/messages", label: t("messages"), icon: Mail, auth: true },
+    { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
+    { href: "/profile", label: t("profile"), icon: UserRound, auth: true },
+    { href: "/contacts", label: t("contacts"), icon: Contact },
   ];
 
   return (
     <>
-      <button
-        onClick={() => setOpen(!open)}
-        className="fixed top-4 left-4 z-50 bg-blue-500 p-2 rounded text-white"
-      >
-        ☰
-      </button>
+      <header className="site-header">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="icon-button"
+          aria-label="Открыть меню"
+        >
+          <Menu size={22} />
+        </button>
+
+        <Link href="/" className="brand-lockup" aria-label="OMCITE Arena — главная">
+          <span className="brand-mark">
+            <Image src="/brand/omcite-emblem.jpg" alt="" width={42} height={42} priority />
+          </span>
+          <span>
+            <strong>OMCITE</strong>
+            <small>ARENA</small>
+          </span>
+        </Link>
+
+        <div className="header-actions">
+          <Link href="/?search=1" className="icon-button" aria-label={t("search")}>
+            <Search size={20} />
+          </Link>
+          <Link href={user ? "/notifications" : "/auth"} className="icon-button" aria-label={t("notifications")}>
+            <Bell size={20} />
+          </Link>
+          <Link href={user ? "/profile" : "/auth"} className="header-account">
+            <UserRound size={18} />
+            <span>{user ? (user.user_metadata?.nickname ?? t("profile")) : t("signIn")}</span>
+          </Link>
+        </div>
+      </header>
 
       {open && (
-        <div className="fixed inset-0 z-40 flex">
-          <div className="w-64 bg-gray-800 text-white h-full p-6 pt-16 overflow-y-auto">
-            <nav className="flex flex-col gap-2">
-              {menuItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={"p-2 rounded " + (pathname === item.href ? "bg-blue-600" : "hover:bg-gray-700")}
-                >
-                  {item.label}
+        <div className="drawer-layer" role="presentation">
+          <button className="drawer-backdrop" aria-label="Закрыть меню" onClick={() => setOpen(false)} />
+          <aside className="site-drawer" aria-label="Главная навигация">
+            <div className="drawer-head">
+              <Link href="/" className="brand-lockup">
+                <span className="brand-mark brand-mark-large">
+                  <Image src="/brand/omcite-emblem.jpg" alt="OMCITE" width={52} height={52} />
+                </span>
+                <span><strong>OMCITE</strong><small>FREE FIRE COMMUNITY</small></span>
+              </Link>
+              <button className="icon-button" onClick={() => setOpen(false)} aria-label="Закрыть меню">
+                <X size={22} />
+              </button>
+            </div>
+
+            <nav className="drawer-nav">
+              {menuItems.filter((item) => !item.auth || user).map((item) => {
+                const Icon = item.icon;
+                const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={active ? "nav-item active" : "nav-item"}>
+                    <Icon size={19} />
+                    <span>{item.label}</span>
+                    <ChevronRight size={16} className="nav-chevron" />
+                  </Link>
+                );
+              })}
+
+              {isAdmin && (
+                <Link href="/admin" onClick={() => setOpen(false)} className={pathname.startsWith("/admin") ? "nav-item admin active" : "nav-item admin"}>
+                  <ShieldCheck size={19} />
+                  <span>{t("admin")}</span>
+                  <ChevronRight size={16} className="nav-chevron" />
                 </Link>
-              ))}
-              <hr className="my-4 border-gray-600" />
+              )}
+            </nav>
+
+            <div className="drawer-footer">
+              <div className="language-switcher" aria-label="Выбор языка">
+                <Languages size={18} />
+                {locales.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={locale === item ? "active" : ""}
+                    onClick={() => setLocale(item)}
+                  >
+                    {localeNames[item]}
+                  </button>
+                ))}
+              </div>
 
               {user ? (
                 <button
+                  type="button"
+                  className="auth-action danger"
                   onClick={async () => {
                     await supabase.auth.signOut();
-                    setUser(null);
                     setOpen(false);
+                    router.push("/");
+                    router.refresh();
                   }}
-                  className="p-2 rounded bg-red-600 hover:bg-red-700 text-left"
                 >
-                  Выйти
+                  <LogOut size={18} /> {t("signOut")}
                 </button>
               ) : (
-                <Link
-                  href="/auth"
-                  onClick={() => setOpen(false)}
-                  className="p-2 rounded bg-blue-500 hover:bg-blue-600"
-                >
-                  Войти
+                <Link href="/auth" className="auth-action">
+                  <LogIn size={18} /> {t("signIn")}
                 </Link>
               )}
-
-              <Link
-                href="/admin"
-                onClick={() => setOpen(false)}
-                className="p-2 rounded hover:bg-gray-700 text-red-400"
-              >
-                Админ-панель
-              </Link>
-            </nav>
-          </div>
-          <div className="flex-1 bg-black bg-opacity-50" onClick={() => setOpen(false)}></div>
+            </div>
+          </aside>
         </div>
       )}
     </>

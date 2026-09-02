@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -17,13 +17,13 @@ interface TeamResult {
   team_name: string;
   score: number;
   is_winner: boolean;
-  mvp_user_id: string;
+  mvp_user_id: string | null;
   mvp_nickname: string;
 }
 
 export default function EventResultsPage() {
-  const { id } = useParams();
-  const supabase = createClient();
+  const { id } = useParams<{ id: string }>();
+  const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [results, setResults] = useState<TeamResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,46 +38,16 @@ export default function EventResultsPage() {
         .single();
       if (ev) setEvent(ev);
 
-      // Получаем результаты
-      const { data: res } = await supabase
-        .from("event_results")
-        .select("id, team_id, score, is_winner, mvp_user_id")
-        .eq("event_id", id)
-        .order("score", { ascending: false });
-
-      if (res) {
-        const enriched = await Promise.all(
-          res.map(async (r: any) => {
-            const { data: team } = await supabase
-              .from("teams")
-              .select("name")
-              .eq("id", r.team_id)
-              .single();
-
-            let mvpNickname = "";
-            if (r.mvp_user_id) {
-              const { data: profile } = await supabase
-                .from("profiles")
-                .select("nickname")
-                .eq("id", r.mvp_user_id)
-                .single();
-              mvpNickname = profile?.nickname || "—";
-            }
-
-            return {
-              ...r,
-              team_name: team?.name || "—",
-              mvp_nickname: mvpNickname,
-            };
-          })
-        );
-        setResults(enriched);
+      const response = await fetch(`/api/events/${id}/results`);
+      if (response.ok) {
+        const payload = await response.json() as { results?: TeamResult[] };
+        setResults(payload.results ?? []);
       }
 
       setLoading(false);
     };
     init();
-  }, [id]);
+  }, [id, supabase]);
 
   if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
   if (!event) return <div className="min-h-screen p-6"><p>Мероприятие не найдено.</p></div>;

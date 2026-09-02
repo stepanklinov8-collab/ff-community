@@ -1,268 +1,216 @@
 "use client";
 
-import { createClient } from "@/utils/supabase/client";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+
+type AuthMode = "login" | "register" | "reset" | "update";
+
+const modeTitles: Record<AuthMode, string> = {
+  login: "Вход",
+  register: "Регистрация",
+  reset: "Восстановление пароля",
+  update: "Новый пароль",
+};
 
 export default function AuthPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [message, setMessage] = useState("");
-  const [resetSent, setResetSent] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const nickname = formData.get("nickname") as string;
-    const gameId = formData.get("gameId") as string;
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("update");
+        setMessage("Введите новый пароль для аккаунта.");
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [supabase]);
 
-    if (!nickname.trim() || !gameId.trim() || !email.trim() || !password.trim()) {
-      setMessage("Заполните все поля");
+  const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const nickname = String(formData.get("nickname") ?? "").trim();
+    const gameId = String(formData.get("gameId") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const password = String(formData.get("password") ?? "");
+    if (!nickname || !gameId || !email || password.length < 8) {
+      setMessage("Заполните все поля; пароль должен содержать не менее 8 символов.");
       return;
     }
 
-    setMessage("Регистрация...");
+    setBusy(true);
+    setMessage("Создаём аккаунт...");
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { nickname, game_id: gameId },
-      },
+      options: { data: { nickname, game_id: gameId } },
     });
-
-    if (error) {
-      setMessage(`Ошибка: ${error.message}`);
-    } else if (data.user) {
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
-        nickname: nickname,
-      });
-      setMessage("Проверьте почту для подтверждения!");
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
-    if (!email.trim() || !password.trim()) {
-      setMessage("Заполните все поля");
+    if (error || !data.user) {
+      setBusy(false);
+      setMessage(`Ошибка: ${error?.message ?? "не удалось создать аккаунт"}`);
       return;
     }
 
-    setMessage("Вход...");
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: data.user.id,
+      nickname,
+      game_id: gameId,
     });
-
-    if (error) {
-      setMessage("Неверный email или пароль.");
+    setBusy(false);
+    if (profileError) {
+      setMessage(`Аккаунт создан, но профиль не сохранён: ${profileError.message}`);
       return;
     }
-
-    if (data.user) {
-      router.push("/");
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-
-    if (!email.trim()) {
-      setMessage("Введите email для восстановления");
-      return;
-    }
-
-    setMessage("Отправка...");
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth?reset=true`,
-    });
-
-    if (error) {
-      setMessage(`Ошибка: ${error.message}`);
+    if (data.session) {
+      router.push("/profile");
+      router.refresh();
     } else {
-      setResetSent(true);
-      setMessage("Ссылка для сброса пароля отправлена на почту!");
-    }
-  };
-
-  const handleUpdatePassword = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const password = formData.get("password") as string;
-
-    if (!password.trim()) {
-      setMessage("Введите новый пароль");
-      return;
-    }
-
-    const { error } = await supabase.auth.updateUser({ password });
-
-    if (error) {
-      setMessage(`Ошибка: ${error.message}`);
-    } else {
-      setMessage("Пароль обновлён! Теперь вы можете войти.");
+      setMessage("Аккаунт создан. Для входа проверьте настройки подтверждения email в Supabase.");
       setMode("login");
     }
   };
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-      <h1 className="text-3xl font-bold mb-8 text-blue-500">
-        {mode === "login" ? "Вход" : "Регистрация"}
-      </h1>
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const password = String(formData.get("password") ?? "");
+    if (!email || !password) {
+      setMessage("Заполните email и пароль.");
+      return;
+    }
 
-      <div className="w-full max-w-xs">
-        {mode === "register" ? (
-          <form onSubmit={handleRegister}>
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="text"
-              name="nickname"
-              placeholder="Никнейм"
-              autoComplete="username"
-              required
-            />
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="text"
-              name="gameId"
-              placeholder="ID в игре"
-              autoComplete="off"
-              required
-            />
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="email"
-              name="email"
-              placeholder="Email"
-              autoComplete="email"
-              required
-            />
-            <input
-              className="w-full p-3 mb-6 text-black rounded"
-              type="password"
-              name="password"
-              placeholder="Пароль"
-              autoComplete="new-password"
-              required
-            />
-            <button
-              type="submit"
-              className="w-full p-3 mb-2 bg-blue-500 rounded hover:bg-blue-600"
-            >
-              Зарегистрироваться
-            </button>
-          </form>
-        ) : mode === "login" && !resetSent ? (
-          <form onSubmit={handleLogin}>
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="email"
-              name="email"
-              placeholder="Email"
-              autoComplete="email"
-              required
-            />
-            <input
-              className="w-full p-3 mb-2 text-black rounded"
-              type="password"
-              name="password"
-              placeholder="Пароль"
-              autoComplete="current-password"
-              required
-            />
+    setBusy(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (error || !data.user) {
+      setMessage("Неверный email или пароль.");
+      return;
+    }
+    router.push("/");
+    router.refresh();
+  };
+
+  const handleResetPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    if (!email) {
+      setMessage("Введите email для восстановления.");
+      return;
+    }
+
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setBusy(false);
+    if (error) {
+      setMessage(`Ошибка: ${error.message}`);
+      return;
+    }
+    setMessage("Ссылка отправлена. Откройте её в письме, чтобы задать новый пароль.");
+    setMode("login");
+  };
+
+  const handleUpdatePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const password = String(formData.get("password") ?? "");
+    const confirmation = String(formData.get("confirmation") ?? "");
+    if (password.length < 8) {
+      setMessage("Пароль должен содержать не менее 8 символов.");
+      return;
+    }
+    if (password !== confirmation) {
+      setMessage("Пароли не совпадают.");
+      return;
+    }
+
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) {
+      setMessage(`Ошибка: ${error.message}`);
+      return;
+    }
+    setMessage("Пароль обновлён. Вы вошли в аккаунт.");
+    router.push("/profile");
+    router.refresh();
+  };
+
+  return (
+    <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center py-8">
+      <section className="cyber-card grid w-full overflow-hidden lg:grid-cols-[1.05fr_.95fr]">
+        <div className="relative hidden min-h-[610px] overflow-hidden border-r border-sky-900/30 lg:block">
+          <div className="absolute inset-0 bg-[url('/brand/omcite-emblem.jpg')] bg-cover bg-center" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-cyan-950/10" />
+          <div className="absolute inset-x-0 bottom-0 p-9">
+            <span className="section-kicker">FREE FIRE COMMUNITY</span>
+            <h2 className="mt-2 text-4xl font-black">Твоя команда.<br />Твоя арена.</h2>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">Регистрируй состав, участвуй в тренировках и турнирах, сохраняй статистику и историю команды.</p>
+          </div>
+        </div>
+
+        <div className="flex min-h-[560px] flex-col justify-center p-6 md:p-10">
+          <span className="section-kicker">OMCITE ARENA</span>
+          <h1 className="mb-7 mt-2 text-3xl font-black">{modeTitles[mode]}</h1>
+
+          {mode === "register" && (
+            <form onSubmit={handleRegister} className="space-y-4">
+              <input type="text" name="nickname" placeholder="Никнейм" autoComplete="username" maxLength={40} required />
+              <input type="text" name="gameId" placeholder="Игровой ID" inputMode="numeric" maxLength={40} required />
+              <input type="email" name="email" placeholder="Email" autoComplete="email" required />
+              <input type="password" name="password" placeholder="Пароль — минимум 8 символов" autoComplete="new-password" minLength={8} required />
+              <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Создание..." : "Создать аккаунт"}</button>
+              <p className="text-xs leading-5 text-slate-500">Регистрируясь, вы принимаете <Link className="text-cyan-300" href="/terms">условия</Link> и <Link className="text-cyan-300" href="/privacy">политику конфиденциальности</Link>.</p>
+            </form>
+          )}
+
+          {mode === "login" && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input type="email" name="email" placeholder="Email" autoComplete="email" required />
+              <input type="password" name="password" placeholder="Пароль" autoComplete="current-password" required />
+              <button type="button" onClick={() => { setMode("reset"); setMessage(""); }} className="text-sm text-cyan-300 hover:underline">Забыли пароль?</button>
+              <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Вход..." : "Войти"}</button>
+            </form>
+          )}
+
+          {mode === "reset" && (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <p className="text-sm leading-6 text-slate-400">Отправим защищённую ссылку для смены пароля.</p>
+              <input type="email" name="email" placeholder="Email" autoComplete="email" required />
+              <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Отправка..." : "Отправить ссылку"}</button>
+            </form>
+          )}
+
+          {mode === "update" && (
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <input type="password" name="password" placeholder="Новый пароль" autoComplete="new-password" minLength={8} required />
+              <input type="password" name="confirmation" placeholder="Повторите пароль" autoComplete="new-password" minLength={8} required />
+              <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Сохранение..." : "Сохранить пароль"}</button>
+            </form>
+          )}
+
+          {message && <p className="mt-5 rounded-xl border border-sky-900/35 bg-slate-950/50 p-3 text-center text-sm text-slate-200">{message}</p>}
+
+          {mode !== "update" && (
             <button
               type="button"
-              onClick={() => setMode("reset")}
-              className="w-full text-left text-sm text-blue-400 hover:underline mb-4"
+              onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); }}
+              className="mt-5 text-sm text-cyan-300 hover:underline"
             >
-              Забыли пароль?
+              {mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Вернуться ко входу"}
             </button>
-            <button
-              type="submit"
-              className="w-full p-3 mb-2 bg-green-500 rounded hover:bg-green-600"
-            >
-              Войти
-            </button>
-          </form>
-        ) : mode === "reset" && !resetSent ? (
-          <form onSubmit={handleResetPassword}>
-            <p className="text-gray-400 mb-4 text-sm">
-              Введите email, и мы отправим ссылку для сброса пароля.
-            </p>
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="email"
-              name="email"
-              placeholder="Email"
-              autoComplete="email"
-              required
-            />
-            <button
-              type="submit"
-              className="w-full p-3 mb-2 bg-yellow-500 rounded hover:bg-yellow-600"
-            >
-              Отправить ссылку
-            </button>
-          </form>
-        ) : resetSent ? (
-          <form onSubmit={handleUpdatePassword}>
-            <p className="text-gray-400 mb-4 text-sm">
-              Ссылка отправлена. Введите новый пароль.
-            </p>
-            <input
-              className="w-full p-3 mb-4 text-black rounded"
-              type="password"
-              name="password"
-              placeholder="Новый пароль"
-              autoComplete="new-password"
-              required
-            />
-            <button
-              type="submit"
-              className="w-full p-3 mb-2 bg-yellow-500 rounded hover:bg-yellow-600"
-            >
-              Обновить пароль
-            </button>
-          </form>
-        ) : null}
-
-        {message && (
-          <p className="mt-4 p-3 bg-gray-800 rounded text-center">{message}</p>
-        )}
-
-        {mode !== "reset" && !resetSent && (
-          <button
-            onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); }}
-            className="w-full mt-4 text-blue-400 hover:underline text-center"
-          >
-            {mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
-          </button>
-        )}
-
-        {resetSent && (
-          <button
-            onClick={() => { setResetSent(false); setMode("login"); setMessage(""); }}
-            className="w-full mt-4 text-blue-400 hover:underline text-center"
-          >
-            ← Вернуться ко входу
-          </button>
-        )}
-
-        <Link href="/" className="block mt-4 text-gray-400 hover:underline text-center">
-          ← На главную
-        </Link>
-      </div>
+          )}
+          <Link href="/" className="mt-4 text-center text-sm text-slate-500 hover:text-slate-300">← На главную</Link>
+        </div>
+      </section>
     </div>
   );
 }
