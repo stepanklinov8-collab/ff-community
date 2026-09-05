@@ -62,6 +62,13 @@ export async function GET(request: Request) {
   try {
     await requireAdmin(request);
     const supabase = createAdminClient();
+    const { error: publishError } = await supabase
+      .from("events")
+      .update({ is_published: true })
+      .eq("is_published", false)
+      .not("publish_at", "is", null)
+      .lte("publish_at", new Date().toISOString());
+    if (publishError) throw publishError;
     const { data, error } = await supabase.from("events").select("*").order("created_at", { ascending: false });
     if (error) throw error;
     return Response.json({ events: data ?? [] });

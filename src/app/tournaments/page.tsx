@@ -71,7 +71,7 @@ export default function TournamentsPage() {
       const { data, error: eventsError } = await supabase
         .from("events")
         .select("id, title, type, cost, organizer, description, image_url, max_teams, created_at")
-        .eq("is_published", true)
+        .or(`is_published.eq.true,publish_at.lte.${new Date().toISOString()}`)
         .order("created_at", { ascending: false });
       if (eventsError) {
         setError("Не удалось загрузить мероприятия.");
@@ -82,7 +82,7 @@ export default function TournamentsPage() {
       const rows = (data ?? []) as EventRow[];
       const eventIds = rows.map((event) => event.id);
       const { data: sessions, error: sessionsError } = eventIds.length
-        ? await supabase.from("event_sessions").select("id, event_id, start_time, end_time, registration_open_time").in("event_id", eventIds).order("start_time", { ascending: true })
+        ? await supabase.from("event_sessions").select("id, event_id, start_time, end_time, registration_open_time, registration_close_time, max_teams").in("event_id", eventIds).order("start_time", { ascending: true })
         : { data: [] as EventSession[], error: null };
       if (sessionsError) setError("Не удалось загрузить расписание сессий.");
       const sessionRows = (sessions ?? []) as EventSession[];

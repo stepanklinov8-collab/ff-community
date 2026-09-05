@@ -31,7 +31,16 @@ async function getPermissions(request: Request, eventId: string) {
     .eq("user_id", auth.user.id);
   const teamIds = (memberships ?? []).map((row) => row.team_id);
 
-  let confirmedSessionIds = new Set<string>();
+  const { data: personalRegistrations } = await supabase
+    .from("event_registrations")
+    .select("session_id")
+    .eq("event_id", eventId)
+    .eq("participant_user_id", auth.user.id)
+    .eq("status", "confirmed")
+    .not("session_id", "is", null);
+  const confirmedSessionIds = new Set(
+    (personalRegistrations ?? []).map((row) => row.session_id).filter(Boolean) as string[],
+  );
   if (teamIds.length) {
     const { data: registrations } = await supabase
       .from("event_registrations")
@@ -40,9 +49,9 @@ async function getPermissions(request: Request, eventId: string) {
       .eq("status", "confirmed")
       .in("team_id", teamIds)
       .not("session_id", "is", null);
-    confirmedSessionIds = new Set(
-      (registrations ?? []).map((row) => row.session_id).filter(Boolean) as string[],
-    );
+    for (const sessionId of (registrations ?? []).map((row) => row.session_id).filter(Boolean) as string[]) {
+      confirmedSessionIds.add(sessionId);
+    }
   }
 
   return { auth, supabase, isAdmin, isOrganizer, confirmedSessionIds };
@@ -108,25 +117,30 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const { data: registrations } = await permissions.supabase
       .from("event_registrations")
-      .select("team_id")
+      .select("team_id, participant_user_id")
       .eq("session_id", payload.sessionId)
       .eq("status", "confirmed");
-    const teamIds = [...new Set((registrations ?? []).map((row) => row.team_id))];
+    const teamIds = [...new Set((registrations ?? [])
+      .map((row) => row.team_id)
+      .filter((id): id is string => Boolean(id)))];
+    const recipientIds = new Set((registrations ?? [])
+      .map((row) => row.participant_user_id)
+      .filter((id): id is string => Boolean(id)));
     if (teamIds.length) {
       const { data: members } = await permissions.supabase
         .from("team_members")
         .select("user_id")
         .in("team_id", teamIds);
-      const userIds = [...new Set((members ?? []).map((row) => row.user_id))];
-      if (userIds.length) {
-        await permissions.supabase.from("notifications").insert(userIds.map((userId) => ({
-          user_id: userId,
-          type: "room_updated",
-          title: "Данные комнаты готовы",
-          body: "Код и пароль доступны на странице мероприятия",
-          link: `/tournaments/${eventId}`,
-        })));
-      }
+      for (const userId of (members ?? []).map((row) => row.user_id)) recipientIds.add(userId);
+    }
+    if (recipientIds.size) {
+      await permissions.supabase.from("notifications").insert([...recipientIds].map((userId) => ({
+        user_id: userId,
+        type: "room_updated",
+        title: "Данные комнаты готовы",
+        body: "Код и пароль доступны на странице мероприятия",
+        link: `/tournaments/${eventId}`,
+      })));
     }
 
     return Response.json({ success: true });

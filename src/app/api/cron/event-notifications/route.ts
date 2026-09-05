@@ -116,7 +116,9 @@ export async function GET(request: Request) {
       const rosterIds = (registrations ?? []).flatMap((row) =>
         Array.isArray(row.roster_json) ? row.roster_json as string[] : [],
       );
-      const teamIds = [...new Set((registrations ?? []).map((row) => row.team_id))];
+      const teamIds = [...new Set((registrations ?? [])
+        .map((row) => row.team_id)
+        .filter((id): id is string => Boolean(id)))];
       const { data: leaders } = teamIds.length
         ? await supabase.from("team_members").select("user_id").in("team_id", teamIds).in("role_in_team", ["leader", "senior_deputy", "deputy"])
         : { data: [] };

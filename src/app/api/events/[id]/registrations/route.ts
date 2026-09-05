@@ -48,7 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     const normalizedRows = await supabase
       .from("event_registrations")
-      .select("id, session_id, team_id, status, is_winner, created_at, roster, roster_json, team_name_override")
+      .select("id, session_id, team_id, participant_user_id, status, is_winner, created_at, roster, roster_json, team_name_override")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
     const legacyRows = normalizedRows.error
@@ -59,25 +59,47 @@ export async function GET(request: Request, context: RouteContext) {
           .order("created_at", { ascending: true })
       : null;
     if (legacyRows?.error) throw legacyRows.error;
-    const rows = normalizedRows.data ?? (legacyRows?.data ?? []).map((row) => ({ ...row, session_id: null, roster_json: null }));
+    const rows = normalizedRows.data ?? (legacyRows?.data ?? []).map((row) => ({
+      ...row,
+      session_id: null,
+      participant_user_id: null,
+      roster_json: null,
+    }));
 
     const visibleRows = event.show_registrations || isPrivileged
       ? rows ?? []
-      : (rows ?? []).filter((row) => ownTeamIds.has(row.team_id));
+      : (rows ?? []).filter((row) =>
+          (row.team_id && ownTeamIds.has(row.team_id)) || row.participant_user_id === auth?.user.id,
+        );
 
-    const teamIds = [...new Set(visibleRows.map((row) => row.team_id))];
+    const teamIds = [...new Set(visibleRows.map((row) => row.team_id).filter((id): id is string => Boolean(id)))];
+    const participantIds = [...new Set(visibleRows
+      .map((row) => row.participant_user_id)
+      .filter((id): id is string => Boolean(id)))];
     const { data: teams } = teamIds.length
       ? await supabase.from("teams").select("id, name").in("id", teamIds)
       : { data: [] };
+    const { data: participants } = participantIds.length
+      ? await supabase.from("profiles").select("id, nickname").in("id", participantIds)
+      : { data: [] };
     const teamById = new Map((teams ?? []).map((team) => [team.id, team.name]));
+    const participantById = new Map((participants ?? []).map((profile) => [profile.id, profile.nickname]));
 
     const registrations = visibleRows.map((row) => {
-      const maySeeRoster = isPrivileged || ownTeamIds.has(row.team_id) || event.show_registrations;
+      const maySeeRoster = isPrivileged ||
+        (row.team_id && ownTeamIds.has(row.team_id)) ||
+        row.participant_user_id === auth?.user.id ||
+        event.show_registrations;
+      const participantName = row.participant_user_id
+        ? participantById.get(row.participant_user_id) || "Игрок"
+        : null;
       return {
         id: row.id,
         session_id: row.session_id,
         team_id: row.team_id,
-        team_name: row.team_name_override || teamById.get(row.team_id) || "Команда",
+        participant_user_id: row.participant_user_id,
+        team_name: row.team_name_override || participantName || (row.team_id ? teamById.get(row.team_id) : null) || "Участник",
+        registration_kind: row.participant_user_id ? "individual" : "team",
         status: row.status,
         is_winner: row.is_winner,
         created_at: row.created_at,

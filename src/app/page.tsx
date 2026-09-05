@@ -38,7 +38,12 @@ interface EventSessionRow {
   id: string;
   event_id: string;
   start_time: string;
-  events: { title: string; type: string } | null;
+}
+
+interface PublicEventRow {
+  id: string;
+  title: string;
+  type: string;
 }
 
 interface SearchResult {
@@ -70,32 +75,49 @@ export default function Home() {
 
     async function loadHome() {
       const now = new Date().toISOString();
-      const [activityResult, sessionsResult, teamsCount, playersCount, sessionsCount] = await Promise.all([
+      const [activityResult, publicEventsResult, teamsCount, playersCount] = await Promise.all([
         supabase
           .from("activity_log")
           .select("id, activity_type, description, created_at, event_id, team_id")
           .order("created_at", { ascending: false })
           .limit(6),
         supabase
-          .from("event_sessions")
-          .select("id, event_id, start_time, events(title, type)")
-          .gte("start_time", now)
-          .order("start_time", { ascending: true })
-          .limit(4),
+          .from("events")
+          .select("id, title, type")
+          .or(`is_published.eq.true,publish_at.lte.${now}`),
         supabase.from("teams").select("id", { count: "exact", head: true }).eq("verified", true),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("event_sessions").select("id", { count: "exact", head: true }).gte("start_time", now),
       ]);
+
+      const publicEvents = (publicEventsResult.data ?? []) as PublicEventRow[];
+      const publicEventIds = publicEvents.map((event) => event.id);
+      const [sessionsResult, sessionsCount] = publicEventIds.length
+        ? await Promise.all([
+            supabase
+              .from("event_sessions")
+              .select("id, event_id, start_time")
+              .in("event_id", publicEventIds)
+              .gte("start_time", now)
+              .order("start_time", { ascending: true })
+              .limit(4),
+            supabase
+              .from("event_sessions")
+              .select("id", { count: "exact", head: true })
+              .in("event_id", publicEventIds)
+              .gte("start_time", now),
+          ])
+        : [{ data: [] as EventSessionRow[] }, { count: 0 }];
 
       if (!active) return;
       setActivities((activityResult.data ?? []) as ActivityRow[]);
 
-      const rows = (sessionsResult.data ?? []) as unknown as EventSessionRow[];
+      const eventById = new Map(publicEvents.map((event) => [event.id, event]));
+      const rows = (sessionsResult.data ?? []) as EventSessionRow[];
       setUpcomingEvents(rows.map((row) => ({
         eventId: row.event_id,
         sessionId: row.id,
-        title: row.events?.title ?? "Мероприятие OMCITE",
-        type: row.events?.type ?? "training",
+        title: eventById.get(row.event_id)?.title ?? "Мероприятие OMCITE",
+        type: eventById.get(row.event_id)?.type ?? "training",
         startTime: row.start_time,
       })));
       setStats({

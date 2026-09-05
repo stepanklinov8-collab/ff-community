@@ -33,6 +33,7 @@ interface Session {
   start_time: string;
   end_time: string;
   registration_open_time: string;
+  registration_close_time: string | null;
   room_code?: string;
   room_password?: string;
   room_note?: string;
@@ -43,7 +44,9 @@ interface Session {
 interface Registration {
   id: string;
   session_id: string | null;
-  team_id: string;
+  team_id: string | null;
+  participant_user_id: string | null;
+  registration_kind?: "team" | "individual";
   team_name: string;
   team_name_override: string;
   status: string;
@@ -247,6 +250,24 @@ export default function EventPage() {
     }
   };
 
+  const registerPlayer = async () => {
+    if (!currentUser) { setMessage("Войдите, чтобы записаться."); return; }
+    if (!selectedSessionId) { setMessage("Выберите время участия."); return; }
+
+    setMessage("Регистрация...");
+    const { data, error } = await supabase.rpc("register_player_for_session", {
+      p_session_id: selectedSessionId,
+    });
+
+    if (error) {
+      setMessage("Ошибка: " + error.message);
+    } else {
+      const status = data?.[0]?.registration_status ?? "confirmed";
+      setMessage(status === "confirmed" ? "✅ Вы записаны!" : "⏳ Вы в листе ожидания.");
+      refreshRegistrations();
+    }
+  };
+
   const cancelRegistration = async () => {
     if (!alreadyRegistered) return;
     if (!confirm("Отменить регистрацию?")) return;
@@ -255,7 +276,7 @@ export default function EventPage() {
 
     const { error } = await supabase.rpc("cancel_session_registration", {
       p_registration_id: selectedRegistration.id,
-      p_reason: "Отменено руководством команды",
+      p_reason: selectedRegistration.participant_user_id ? "Отменено игроком" : "Отменено руководством команды",
     });
     if (error) {
       setMessage("Ошибка: " + error.message);
@@ -288,7 +309,7 @@ export default function EventPage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        results: confirmed.map((registration) => ({
+        results: confirmed.filter((registration) => registration.team_id).map((registration) => ({
           teamId: registration.team_id,
           score: scores[registration.id] || 0,
           isWinner: registration.team_id === winnerTeamId,
@@ -369,9 +390,12 @@ export default function EventPage() {
   const confirmed = sessionRegistrations.filter(r => r.status === "confirmed");
   const waiting = sessionRegistrations.filter(r => r.status === "waiting");
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
-  const selectedRegistration = myTeam
-    ? sessionRegistrations.find((registration) => registration.team_id === myTeam.id && registration.status !== "cancelled")
-    : undefined;
+  const selectedRegistration = sessionRegistrations.find((registration) =>
+    registration.status !== "cancelled" && (
+      (myTeam && registration.team_id === myTeam.id) ||
+      registration.participant_user_id === currentUser?.id
+    ),
+  );
   const alreadyRegistered = Boolean(selectedRegistration);
   const registrationStatus = selectedRegistration?.status ?? "";
   const lockTime = selectedSession
@@ -379,7 +403,28 @@ export default function EventPage() {
     : null;
   const canEditRoster = !lockTime || new Date() < lockTime;
   const hasStarted = Boolean(selectedSession && new Date() >= new Date(selectedSession.start_time));
-  const canViewRoom = isAdmin || isOrganizer || (myTeam && confirmed.some(r => r.team_id === myTeam.id));
+  const registrationOpensAt = selectedSession?.registration_open_time
+    ? new Date(selectedSession.registration_open_time)
+    : null;
+  const registrationClosesAt = selectedSession
+    ? new Date(selectedSession.registration_close_time || selectedSession.start_time)
+    : null;
+  const registrationIsOpen = Boolean(
+    selectedSession &&
+    (!registrationOpensAt || new Date() >= registrationOpensAt) &&
+    registrationClosesAt &&
+    new Date() < registrationClosesAt,
+  );
+  const registrationHint = !selectedSession
+    ? "Расписание пока не добавлено."
+    : registrationOpensAt && new Date() < registrationOpensAt
+      ? `Регистрация откроется ${registrationOpensAt.toLocaleString("ru")}.`
+      : registrationClosesAt && new Date() >= registrationClosesAt
+        ? "Регистрация закрыта."
+        : "Регистрация открыта.";
+  const canViewRoom = isAdmin || isOrganizer ||
+    (myTeam && confirmed.some(r => r.team_id === myTeam.id)) ||
+    confirmed.some(r => r.participant_user_id === currentUser?.id);
 
   return (
     <div className="min-h-screen p-6">
@@ -534,14 +579,42 @@ export default function EventPage() {
             )}
           </div>
 
-          <button onClick={registerTeam} disabled={!canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
-            {canEditRoster ? "Записаться на выбранное время" : "Состав заблокирован"}
+          <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
+          <button onClick={registerTeam} disabled={!registrationIsOpen || !canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
+            {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? "Записать команду" : "Состав заблокирован"}
           </button>
           {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
-      {alreadyRegistered && canManageTeam && (
+      {currentUser && !alreadyRegistered && (
+        <div className="mt-6 bg-gray-800 p-4 rounded">
+          <h2 className="text-lg font-semibold">Личная заявка</h2>
+          <p className="mt-1 text-sm text-gray-300">Можно участвовать самостоятельно, даже если вы не состоите в команде или гильдии.</p>
+          <div className="my-4">
+            <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
+            <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
+              ))}
+            </select>
+          </div>
+          <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
+          <button onClick={registerPlayer} disabled={!registrationIsOpen} className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50">
+            {registrationIsOpen ? "Записаться лично" : "Регистрация недоступна"}
+          </button>
+          {message && <p className="mt-3 text-sm">{message}</p>}
+        </div>
+      )}
+
+      {!currentUser && (
+        <div className="mt-6 bg-gray-800 p-4 rounded">
+          <p className="text-sm text-gray-300">{registrationHint}</p>
+          <Link href="/auth" className="mt-3 inline-block px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">Войти, чтобы записаться</Link>
+        </div>
+      )}
+
+      {alreadyRegistered && (canManageTeam || selectedRegistration?.participant_user_id === currentUser?.id) && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <label className="text-sm text-gray-300 block mb-2">Выбранное время</label>
           <select className="mb-3" value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
@@ -549,7 +622,10 @@ export default function EventPage() {
               <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
             ))}
           </select>
-          <p className="mb-2">{registrationStatus === "confirmed" ? "✅ Вы в основном составе" : "⏳ Вы в листе ожидания"}</p>
+          <p className="mb-2">
+            {selectedRegistration?.participant_user_id ? "Личная заявка: " : "Заявка команды: "}
+            {registrationStatus === "confirmed" ? "✅ участие подтверждено" : "⏳ лист ожидания"}
+          </p>
           <button onClick={cancelRegistration} className="px-4 py-2 bg-red-500 rounded hover:bg-red-600">Отменить запись</button>
         </div>
       )}
@@ -576,12 +652,14 @@ export default function EventPage() {
                 onChange={(e) => setScores(prev => ({ ...prev, [r.id]: parseInt(e.target.value) || 0 }))}
               />
               <span className="text-blue-400">{r.team_name_override || r.team_name}</span>
-              <button
-                onClick={() => setWinnerTeamId(r.team_id)}
-                className={"px-3 py-1 rounded text-sm " + (winnerTeamId === r.team_id ? "bg-yellow-600" : "bg-gray-600")}
-              >
-                {winnerTeamId === r.team_id ? "🏆 Победитель" : "Отметить"}
-              </button>
+              {r.team_id && (
+                <button
+                  onClick={() => setWinnerTeamId(r.team_id!)}
+                  className={"px-3 py-1 rounded text-sm " + (winnerTeamId === r.team_id ? "bg-yellow-600" : "bg-gray-600")}
+                >
+                  {winnerTeamId === r.team_id ? "🏆 Победитель" : "Отметить"}
+                </button>
+              )}
             </div>
           ))}
           <button onClick={saveResults} className="mt-2 px-4 py-2 bg-green-600 rounded hover:bg-green-700">Сохранить результаты</button>
