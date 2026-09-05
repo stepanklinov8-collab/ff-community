@@ -109,6 +109,7 @@ export default function ClanWarDetailsPage() {
   const [responseMessage, setResponseMessage] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [rosterSelections, setRosterSelections] = useState<Record<string, string[]>>({});
+  const [result, setResult] = useState({ creatorScore: "7", opponentScore: "0", creatorKills: "0", opponentKills: "0" });
 
   const loadDetails = useCallback(async () => {
     const { data } = await supabase.auth.getUser();
@@ -252,7 +253,7 @@ export default function ClanWarDetailsPage() {
 
         <div className="mt-6 flex flex-wrap gap-2">
           {clanWar.challenge_kind === "direct" && clanWar.status === "pending" && permissions.canManageOpponent && <><button type="button" disabled={busy} onClick={() => runAction({ action: "accept_direct" }, "Вызов принят")} className="btn-primary"><Check size={17} /> Принять вызов</button><button type="button" disabled={busy} onClick={() => runAction({ action: "decline_direct" }, "Вызов отклонён")} className="btn-secondary text-red-200"><X size={17} /> Отклонить</button></>}
-          {permissions.canComplete && <button type="button" disabled={busy} onClick={() => runAction({ action: "complete" }, "КВ перенесено в историю")} className="btn-primary"><ShieldCheck size={17} /> Отметить завершённым</button>}
+          {permissions.canComplete && <div className="w-full rounded-xl border border-emerald-600/25 bg-emerald-950/10 p-4"><p className="mb-3 font-semibold">Итог КВ · до 7 выигранных раундов</p><div className="grid gap-2 sm:grid-cols-4"><label className="text-xs text-slate-400">Раунды {clanWar.creator_team.name}<input type="number" min={0} max={7} value={result.creatorScore} onChange={(event) => setResult((current) => ({ ...current, creatorScore: event.target.value }))} /></label><label className="text-xs text-slate-400">Раунды {clanWar.opponent_team?.name}<input type="number" min={0} max={7} value={result.opponentScore} onChange={(event) => setResult((current) => ({ ...current, opponentScore: event.target.value }))} /></label><label className="text-xs text-slate-400">Убийства {clanWar.creator_team.name}<input type="number" min={0} value={result.creatorKills} onChange={(event) => setResult((current) => ({ ...current, creatorKills: event.target.value }))} /></label><label className="text-xs text-slate-400">Убийства {clanWar.opponent_team?.name}<input type="number" min={0} value={result.opponentKills} onChange={(event) => setResult((current) => ({ ...current, opponentKills: event.target.value }))} /></label></div><button type="button" disabled={busy} onClick={() => runAction({ action: "complete", creatorScore: Number(result.creatorScore), opponentScore: Number(result.opponentScore), creatorKills: Number(result.creatorKills), opponentKills: Number(result.opponentKills) }, "КВ завершено, результат сохранён")} className="btn-primary mt-3"><ShieldCheck size={17} /> Подтвердить результат</button></div>}
           {permissions.canCancel && <button type="button" disabled={busy} onClick={() => { const reason = window.prompt("Причина отмены (необязательно)") ?? undefined; if (reason !== undefined) void runAction({ action: "cancel", reason }, "КВ отменено"); }} className="btn-secondary text-red-200">Отменить КВ</button>}
         </div>
       </section>

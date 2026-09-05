@@ -15,7 +15,16 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reject_response"), responseId: z.string().uuid() }),
   z.object({ action: z.literal("withdraw_response"), responseId: z.string().uuid() }),
   z.object({ action: z.literal("cancel"), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("complete") }),
+  z.object({
+    action: z.literal("complete"),
+    creatorScore: z.number().int().min(0).max(7),
+    opponentScore: z.number().int().min(0).max(7),
+    creatorKills: z.number().int().min(0).max(1000),
+    opponentKills: z.number().int().min(0).max(1000),
+  }).refine((value) =>
+    (value.creatorScore === 7 && value.opponentScore <= 6) ||
+    (value.opponentScore === 7 && value.creatorScore <= 6),
+  { message: "КВ играется до семи выигранных раундов" }),
   z.object({
     action: z.literal("save_roster"),
     teamId: z.string().uuid(),
@@ -273,8 +282,57 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
       if (payload.action === "complete") {
         if (clanWar.status !== "agreed") throw new ClanWarRequestError("Завершить можно только согласованное КВ", 409);
+        if (!clanWar.opponent_team_id) throw new ClanWarRequestError("Соперник не выбран", 409);
+        const teamIds = [clanWar.creator_team_id, clanWar.opponent_team_id];
+        const [{ data: teams }, { data: rosters }] = await Promise.all([
+          supabase.from("teams").select("id,name,type").in("id", teamIds),
+          supabase.from("clan_war_rosters").select("team_id,player_ids").eq("clan_war_id", clanWarId),
+        ]);
+        const teamById = new Map((teams ?? []).map((team) => [team.id, team]));
+        const playerIds = [...new Set((rosters ?? []).flatMap((roster) => roster.player_ids as string[]))];
+        const { data: profiles } = playerIds.length ? await supabase.from("profiles").select("id,nickname").in("id", playerIds) : { data: [] };
+        const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
+        const snapshots = new Map((rosters ?? []).map((roster) => [roster.team_id, (roster.player_ids as string[]).map((playerId) => ({ id: playerId, nickname: profileById.get(playerId) ?? "Игрок" }))]));
+        const creator = teamById.get(clanWar.creator_team_id);
+        const opponent = teamById.get(clanWar.opponent_team_id);
+        if (!creator || !opponent) throw new ClanWarRequestError("Не удалось загрузить участников", 409);
+        const { error: resultError } = await supabase.from("round_match_results").insert({
+          clan_war_id: clanWarId,
+          team_a_id: creator.id,
+          team_b_id: opponent.id,
+          team_a_name_snapshot: creator.name,
+          team_b_name_snapshot: opponent.name,
+          team_a_score: payload.creatorScore,
+          team_b_score: payload.opponentScore,
+          team_a_kills: payload.creatorKills,
+          team_b_kills: payload.opponentKills,
+          status: "confirmed",
+          confirmed_by: user.id,
+          confirmed_at: new Date().toISOString(),
+        });
+        if (resultError) throw resultError;
+        const occurredAt = new Date().toISOString();
+        const { error: historyError } = await supabase.from("organization_participation_history").insert([
+          { organization_id: creator.id, organization_name: creator.name, organization_type: creator.type, mode: "kv", clan_war_id: clanWarId, event_title: clanWar.title, occurred_at: occurredAt, roster_snapshot: snapshots.get(creator.id) ?? [], kills: payload.creatorKills, score: `${payload.creatorScore}:${payload.opponentScore}`, recorded_by: user.id },
+          { organization_id: opponent.id, organization_name: opponent.name, organization_type: opponent.type, mode: "kv", clan_war_id: clanWarId, event_title: clanWar.title, occurred_at: occurredAt, roster_snapshot: snapshots.get(opponent.id) ?? [], kills: payload.opponentKills, score: `${payload.opponentScore}:${payload.creatorScore}`, recorded_by: user.id },
+        ]);
+        if (historyError) throw historyError;
         const { error } = await supabase.from("clan_wars").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", clanWarId).eq("status", "agreed");
         if (error) throw error;
+        const { data: markets } = await supabase.from("betting_markets").select("id,subject_team_id,market_type,selection_value,line").eq("clan_war_id", clanWarId).in("status", ["open", "locked"]);
+        for (const market of markets ?? []) {
+          const creatorSubject = market.subject_team_id === creator.id;
+          const ownScore = creatorSubject ? payload.creatorScore : payload.opponentScore;
+          const rivalScore = creatorSubject ? payload.opponentScore : payload.creatorScore;
+          const kills = creatorSubject ? payload.creatorKills : payload.opponentKills;
+          const won = market.market_type === "win" ? ownScore === 7
+            : market.market_type === "loss" ? ownScore < rivalScore
+            : market.market_type === "kills_over" ? kills > Number(market.line)
+            : market.market_type === "kills_under" ? kills < Number(market.line)
+            : market.market_type === "exact_score" ? market.selection_value === `${ownScore}:${rivalScore}`
+            : false;
+          await supabase.rpc("settle_betting_market", { p_market_id: market.id, p_outcome: won ? "won" : "lost", p_actor: user.id });
+        }
       } else {
         if (!["open", "pending", "agreed"].includes(clanWar.status)) throw new ClanWarRequestError("Это КВ уже завершено", 409);
         const { error } = await supabase.from("clan_wars").update({

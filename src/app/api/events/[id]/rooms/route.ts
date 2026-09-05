@@ -16,7 +16,7 @@ interface RouteContext {
 async function getPermissions(request: Request, eventId: string) {
   const auth = await requireUser(request);
   const supabase = createAdminClient();
-  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("superadmin");
+  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("admin") || auth.roles.includes("superadmin");
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("organizer_user_id")

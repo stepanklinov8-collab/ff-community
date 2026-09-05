@@ -37,7 +37,7 @@ export async function GET(request: Request, context: RouteContext) {
     const isPrivileged = Boolean(
       auth && (
         auth.roles.includes("moderator") ||
-        auth.roles.includes("superadmin") ||
+        auth.roles.includes("admin") || auth.roles.includes("superadmin") ||
         event.organizer_user_id === auth.user.id
       ),
     );

@@ -52,8 +52,9 @@ export default function Sidebar() {
           .from("user_roles")
           .select("role")
           .eq("user_id", data.user.id)
-          .in("role", ["moderator", "superadmin"]);
+          .in("role", ["moderator", "admin", "superadmin"]);
         if (active) setIsAdmin(Boolean(roleRows?.length));
+        if (!roleRows && active) setIsAdmin(false);
       }
     }
 
@@ -61,6 +62,7 @@ export default function Sidebar() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (!session?.user) setIsAdmin(false);
+      if (session?.user) void loadUser();
     });
 
     return () => {

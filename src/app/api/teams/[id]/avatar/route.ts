@@ -21,7 +21,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!team) return Response.json({ error: "Команда или гильдия не найдена" }, { status: 404 });
 
     const canManage = auth.roles.includes("moderator")
-      || auth.roles.includes("superadmin")
+      || auth.roles.includes("admin") || auth.roles.includes("superadmin")
       || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
     if (!canManage) throw new ApiAuthError("Недостаточно прав для изменения эмблемы", 403);
 

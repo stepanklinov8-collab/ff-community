@@ -10,6 +10,7 @@ const sessionSchema = z.object({
   registrationCloseTime: z.string().datetime().nullable(),
   maxTeams: z.number().int().min(0).max(1000),
   reminderMinutes: z.array(z.number().int().min(1).max(10080)).max(10),
+  games: z.array(z.enum(["bermuda", "nexterra", "solara", "purgatory", "kalahari"])).max(100),
 });
 
 const eventSchema = z.object({
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
     }).select("id").single();
     if (eventError || !event) throw eventError ?? new Error("Не удалось создать мероприятие");
 
-    const { error: sessionsError } = await supabase.from("event_sessions").insert(payload.sessions.map((session) => ({
+    const { data: createdSessions, error: sessionsError } = await supabase.from("event_sessions").insert(payload.sessions.map((session) => ({
       event_id: event.id,
       start_time: session.startTime,
       end_time: session.endTime,
@@ -132,10 +133,23 @@ export async function POST(request: Request) {
       registration_close_time: session.registrationCloseTime,
       max_teams: session.maxTeams || payload.maxTeams,
       reminder_minutes: session.reminderMinutes,
-    })));
+    }))).select("id");
     if (sessionsError) {
       await supabase.from("events").delete().eq("id", event.id);
       throw sessionsError;
+    }
+    const games = payload.sessions.flatMap((session, sessionIndex) => session.games.map((mapName, gameIndex) => ({
+      event_id: event.id,
+      session_id: createdSessions?.[sessionIndex]?.id,
+      game_number: gameIndex + 1,
+      map_name: mapName,
+    }))).filter((game) => Boolean(game.session_id));
+    if (games.length) {
+      const { error: gamesError } = await supabase.from("event_games").insert(games);
+      if (gamesError) {
+        await supabase.from("events").delete().eq("id", event.id);
+        throw gamesError;
+      }
     }
     return Response.json({ success: true, eventId: event.id }, { status: 201 });
   } catch (error) {

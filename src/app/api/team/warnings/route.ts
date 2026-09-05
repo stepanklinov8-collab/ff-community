@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   const supabaseAdmin = createAdminClient();
-  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("superadmin");
+  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("admin") || auth.roles.includes("superadmin");
   if (!isAdmin) {
     const { data: membership } = await supabaseAdmin
       .from("team_members")

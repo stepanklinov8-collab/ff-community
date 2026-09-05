@@ -31,6 +31,8 @@ export default function TeamsStatsPage() {
         .from("teams")
         .select("*")
         .eq("verified", true);
+      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
+      const mainEventIds = (mainEvents ?? []).map((event) => event.id);
 
       if (!teamsData) {
         setLoading(false);
@@ -55,7 +57,8 @@ export default function TeamsStatsPage() {
               .from("player_stats")
               .select("kills, matches_played")
               .eq("user_id", userId)
-              .eq("status", "approved");
+              .eq("status", "approved")
+              .in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]);
 
             if (stats) {
               totalKills += stats.reduce((sum, s) => sum + (s.kills || 0), 0);

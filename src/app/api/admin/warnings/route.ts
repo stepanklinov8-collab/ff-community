@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { assertCanManageUserTarget, authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
 
 const warningSchema = z.object({
   targetType: z.enum(["player", "team"]),
@@ -39,8 +39,9 @@ async function notifyTarget(
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireAdmin(request);
+    const auth = await requireModerator(request);
     const payload = warningSchema.parse(await request.json());
+    if (payload.targetType === "player") await assertCanManageUserTarget(auth, payload.targetId);
     const supabase = createAdminClient();
 
     if (payload.isBan) {
@@ -120,8 +121,9 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireAdmin(request);
+    const auth = await requireModerator(request);
     const payload = unbanSchema.parse(await request.json());
+    if (payload.targetType === "player") await assertCanManageUserTarget(auth, payload.targetId);
     const supabase = createAdminClient();
     const { error } = await supabase
       .from("bans")

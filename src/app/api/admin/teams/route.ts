@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
+import { authErrorResponse, requireAdmin, requireModerator, requireSuperadmin } from "@/utils/supabase/server-auth";
 
 const verificationSchema = z.object({
   teamId: z.string().uuid(),
@@ -9,7 +9,7 @@ const verificationSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin(request);
+    await requireModerator(request);
     const supabase = createAdminClient();
     const { data: teams, error } = await supabase.from("teams").select("*").order("created_at", { ascending: false });
     if (error) throw error;

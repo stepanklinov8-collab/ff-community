@@ -3,7 +3,7 @@ import "server-only";
 import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-export const APP_ROLES = ["moderator", "superadmin"] as const;
+export const APP_ROLES = ["moderator", "admin", "superadmin"] as const;
 export type AppRole = (typeof APP_ROLES)[number];
 
 export class ApiAuthError extends Error {
@@ -64,6 +64,14 @@ export async function requireUser(request: Request): Promise<AuthContext> {
 
 export async function requireAdmin(request: Request) {
   const context = await requireUser(request);
+  if (!context.roles.some((role) => role === "admin" || role === "superadmin")) {
+    throw new ApiAuthError("Недостаточно прав", 403);
+  }
+  return context;
+}
+
+export async function requireModerator(request: Request) {
+  const context = await requireUser(request);
   if (!context.roles.some((role) => APP_ROLES.includes(role))) {
     throw new ApiAuthError("Недостаточно прав", 403);
   }
@@ -76,6 +84,31 @@ export async function requireSuperadmin(request: Request) {
     throw new ApiAuthError("Требуются права суперадминистратора", 403);
   }
   return context;
+}
+
+export async function assertNotOwnerTarget(userId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (error) throw error;
+  if (data.user?.email?.toLowerCase() === "stepanklinov8@gmail.com") {
+    throw new ApiAuthError("Аккаунт владельца защищён", 403);
+  }
+}
+
+export async function assertCanManageUserTarget(actor: AuthContext, userId: string) {
+  await assertNotOwnerTarget(userId);
+  if (actor.roles.includes("superadmin")) return;
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "superadmin"])
+    .limit(1);
+  if (error) throw error;
+  if (data?.length) {
+    throw new ApiAuthError("Администратор не может изменять другого администратора", 403);
+  }
 }
 
 export function authErrorResponse(error: unknown) {

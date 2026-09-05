@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
 
 const moderationSchema = z.object({
   id: z.string().uuid(),
@@ -12,7 +12,7 @@ const moderationSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin(request);
+    await requireModerator(request);
     const supabase = createAdminClient();
     const eventId = new URL(request.url).searchParams.get("eventId");
     let query = supabase.from("player_stats").select("*").order("created_at", { ascending: false });
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { user } = await requireAdmin(request);
+    const { user } = await requireModerator(request);
     const payload = moderationSchema.parse(await request.json());
     const supabase = createAdminClient();
     const { data: before, error: beforeError } = await supabase.from("player_stats").select("*").eq("id", payload.id).single();

@@ -12,7 +12,16 @@ interface SessionForm {
   registrationCloseTime: string;
   maxTeams: string;
   reminderMinutes: string;
+  games: string[];
 }
+
+const maps = [
+  ["bermuda", "Бермуды"],
+  ["nexterra", "Некстера"],
+  ["solara", "Солара"],
+  ["purgatory", "Чистилище"],
+  ["kalahari", "Калахари"],
+] as const;
 
 const emptySession = (): SessionForm => ({
   startTime: "",
@@ -21,6 +30,7 @@ const emptySession = (): SessionForm => ({
   registrationCloseTime: "",
   maxTeams: "",
   reminderMinutes: "60",
+  games: ["bermuda"],
 });
 
 function toIso(value: string) {
@@ -52,6 +62,12 @@ export default function CreateEventPage() {
     setSessions((current) => current.map((session, sessionIndex) =>
       sessionIndex === index ? { ...session, [field]: value } : session,
     ));
+  };
+
+  const updateGameMap = (sessionIndex: number, gameIndex: number, mapName: string) => {
+    setSessions((current) => current.map((session, index) => index === sessionIndex
+      ? { ...session, games: session.games.map((game, itemIndex) => itemIndex === gameIndex ? mapName : game) }
+      : session));
   };
 
   const handleCreate = async () => {
@@ -87,6 +103,7 @@ export default function CreateEventPage() {
           .split(",")
           .map((value) => Number(value.trim()))
           .filter((value) => Number.isInteger(value) && value > 0),
+        games: type === "training" || type === "tournament" ? session.games : [],
       })),
     };
     const formData = new FormData();
@@ -117,7 +134,7 @@ export default function CreateEventPage() {
           <label className="text-sm text-slate-300">Тип
             <select className="mt-2" value={type} onChange={(event) => setType(event.target.value)}>
               <option value="training">Тренировка</option><option value="bo">БО</option>
-              <option value="tournament">Турнир</option><option value="kv">КВ</option><option value="solo">Соло</option>
+              <option value="tournament">Турнир</option><option value="solo">Соло</option>
             </select>
           </label>
           <label className="text-sm text-slate-300">Организатор<input className="mt-2" value={organizer} onChange={(event) => setOrganizer(event.target.value)} /></label>
@@ -168,6 +185,26 @@ export default function CreateEventPage() {
                 <label className="text-xs text-slate-400">Лимит команд<input className="mt-1" type="number" min={0} value={session.maxTeams} onChange={(event) => updateSession(index, "maxTeams", event.target.value)} placeholder={maxTeams} /></label>
                 <label className="text-xs text-slate-400">Напоминания, минут через запятую<input className="mt-1" value={session.reminderMinutes} onChange={(event) => updateSession(index, "reminderMinutes", event.target.value)} placeholder="60, 15" /></label>
               </div>
+              {(type === "training" || type === "tournament") && (
+                <div className="mt-4 border-t border-sky-900/30 pt-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">Игры и карты</p>
+                    <button type="button" className="secondary-button text-xs" onClick={() => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, games: [...item.games, "bermuda"] } : item))}>+ Игра</button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {session.games.map((mapName, gameIndex) => (
+                      <label key={gameIndex} className="text-xs text-slate-400">Игра {gameIndex + 1}
+                        <span className="mt-1 flex gap-2">
+                          <select value={mapName} onChange={(event) => updateGameMap(index, gameIndex, event.target.value)}>
+                            {maps.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                          {session.games.length > 1 && <button type="button" className="rounded px-2 text-red-300" onClick={() => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, games: item.games.filter((_, removeIndex) => removeIndex !== gameIndex) } : item))}>×</button>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </fieldset>
           ))}
         </div>

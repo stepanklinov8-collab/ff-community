@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -36,7 +36,7 @@ function parseNonNegativeInteger(value: string) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireAdmin(request);
+    const auth = await requireModerator(request);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {

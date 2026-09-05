@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
+  assertCanManageUserTarget,
   authErrorResponse,
   requireAdmin,
   requireSuperadmin,
@@ -8,18 +9,17 @@ import {
 
 const roleSchema = z.object({
   userId: z.string().uuid(),
-  role: z.enum(["blogger", "moderator", "superadmin"]),
+  role: z.enum(["blogger", "moderator", "admin"]),
   action: z.enum(["add", "remove"]),
 });
 
 export async function POST(request: Request) {
   try {
     const payload = roleSchema.parse(await request.json());
-    if (payload.role === "superadmin" || payload.role === "moderator") {
-      await requireSuperadmin(request);
-    } else {
-      await requireAdmin(request);
-    }
+    const actor = payload.role === "admin"
+      ? await requireSuperadmin(request)
+      : await requireAdmin(request);
+    await assertCanManageUserTarget(actor, payload.userId);
 
     const supabase = createAdminClient();
     let result;
@@ -41,6 +41,15 @@ export async function POST(request: Request) {
     }
 
     if (result.error) throw result.error;
+    if (payload.role !== "blogger") {
+      const { error: auditError } = await supabase.from("role_change_logs").insert({
+        target_user_id: payload.userId,
+        changed_by: actor.user.id,
+        role: payload.role,
+        action: payload.action,
+      });
+      if (auditError) throw auditError;
+    }
     return Response.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
 
 const rollbackSchema = z.object({
   importId: z.string().uuid(),
@@ -9,7 +9,7 @@ const rollbackSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireAdmin(request);
+    const auth = await requireModerator(request);
     const payload = rollbackSchema.parse(await request.json());
     const supabase = createAdminClient();
 

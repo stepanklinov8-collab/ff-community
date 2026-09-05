@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { storagePathFromPublicUrl } from "@/lib/uploads/avatar";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
+import { assertCanManageUserTarget, assertNotOwnerTarget, authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
 
 const updateUserSchema = z.object({
   userId: z.string().uuid(),
@@ -30,9 +30,24 @@ export async function GET(request: Request) {
     });
 
     if (error) throw error;
+    const activeUsers = data.users.filter((user) => !user.deleted_at);
+    const ids = activeUsers.map((user) => user.id);
+    const [{ data: roleRows }, { data: profileRows }] = await Promise.all([
+      ids.length ? supabase.from("user_roles").select("user_id, role").in("user_id", ids) : Promise.resolve({ data: [] }),
+      ids.length ? supabase.from("profiles").select("id, profile_level, reputation_score, main_rating").in("id", ids) : Promise.resolve({ data: [] }),
+    ]);
+    const rolesByUser = new Map<string, string[]>();
+    for (const row of roleRows ?? []) rolesByUser.set(row.user_id, [...(rolesByUser.get(row.user_id) ?? []), row.role]);
+    const profileByUser = new Map((profileRows ?? []).map((row) => [row.id, row]));
     return Response.json({
-      users: data.users.filter((user) => !user.deleted_at),
+      users: activeUsers.map((user) => ({
+        ...user,
+        roles: rolesByUser.get(user.id) ?? [],
+        profile: profileByUser.get(user.id) ?? null,
+        isOwner: user.email?.toLowerCase() === "stepanklinov8@gmail.com",
+      })),
       canDeleteUsers: auth.roles.includes("superadmin"),
+      canManageAdmins: auth.roles.includes("superadmin"),
     });
   } catch (error) {
     return authErrorResponse(error);
@@ -43,6 +58,7 @@ export async function DELETE(request: Request) {
   try {
     const auth = await requireSuperadmin(request);
     const payload = deleteUserSchema.parse(await request.json());
+    await assertNotOwnerTarget(payload.userId);
     if (payload.userId === auth.user.id) {
       throw new UserDeletionError("Нельзя удалить собственный аккаунт", 409);
     }
@@ -114,8 +130,9 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireAdmin(request);
+    const auth = await requireAdmin(request);
     const payload = updateUserSchema.parse(await request.json());
+    await assertCanManageUserTarget(auth, payload.userId);
     const supabase = createAdminClient();
 
     const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(

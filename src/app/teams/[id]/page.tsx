@@ -18,6 +18,21 @@ interface Team {
   verified: boolean;
   created_at: string;
   avatar_url: string;
+  main_rating: number;
+  reputation_score: number;
+}
+
+interface HistoryItem {
+  id: string;
+  mode: "tournament" | "training" | "bo" | "kv";
+  event_title: string;
+  occurred_at: string;
+  place: number | null;
+  kills: number | null;
+  points: number | null;
+  score: string | null;
+  result_status: string;
+  roster_snapshot: { nickname?: string }[];
 }
 
 interface Member {
@@ -66,6 +81,7 @@ export default function TeamPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PlayerSearchResult[]>([]);
@@ -144,6 +160,10 @@ export default function TeamPage() {
       const teamData = await fetchTeam();
       const loadedMembers = await fetchMembers();
       await fetchJoinRequests();
+      const { data: historyRows } = await supabase.from("organization_participation_history")
+        .select("id,mode,event_title,occurred_at,place,kills,points,score,result_status,roster_snapshot")
+        .eq("organization_id", id).order("occurred_at", { ascending: false }).limit(100);
+      setHistory((historyRows ?? []) as HistoryItem[]);
 
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
@@ -387,6 +407,7 @@ export default function TeamPage() {
               </div>
             </div>
             <p className="text-gray-300 mb-4">{team.description || "Нет описания"}</p>
+            <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {Number(team.main_rating ?? 1).toFixed(0)}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
             {team.social_link && <a href={team.social_link} target="_blank" className="text-blue-400 block mb-4">Сообщество →</a>}
             {isLeader && (
               <div className="flex gap-2 flex-wrap">
@@ -460,6 +481,16 @@ export default function TeamPage() {
           })}
         </div>
       </div>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-xl font-semibold">История выступлений</h2>
+        {history.length === 0 ? <p className="text-gray-400">Подтверждённых выступлений пока нет.</p> : <div className="space-y-2">{history.map((item) => <article key={item.id} className="rounded bg-gray-800 p-4">
+          <div className="flex flex-wrap justify-between gap-2"><strong>{item.event_title}</strong><span className="text-xs uppercase text-cyan-300">{item.mode}</span></div>
+          <p className="mt-1 text-sm text-gray-400">{new Date(item.occurred_at).toLocaleString("ru-RU")} · {item.result_status}</p>
+          <p className="mt-2 text-sm">{item.place ? `Место: ${item.place} · ` : ""}{item.kills != null ? `Убийства: ${item.kills} · ` : ""}{item.score ? `Счёт: ${item.score}` : ""}</p>
+          {item.roster_snapshot?.length > 0 && <p className="mt-2 text-xs text-gray-500">Состав: {item.roster_snapshot.map((player) => player.nickname || "Игрок").join(", ")}</p>}
+        </article>)}</div>}
+      </section>
 
       {/* Предупреждения команды (видны только лидеру) */}
       {isLeader && teamWarnings.warningCount > 0 && (

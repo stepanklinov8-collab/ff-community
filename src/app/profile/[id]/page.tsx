@@ -11,6 +11,10 @@ interface PublicProfile {
   nickname: string;
   game_id: string;
   avatar_url: string;
+  profile_level: number;
+  reputation_score: number;
+  reputation_events_count: number;
+  main_rating: number;
 }
 
 interface PlayerTeam {
@@ -44,14 +48,22 @@ interface MembershipTeam {
   name: string;
 }
 
+interface ReputationEvent { id: string; title: string; type: string }
+
 export default function PublicProfilePage() {
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
+  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0 });
   const [team, setTeam] = useState<PlayerTeam | null>(null);
   const [badges, setBadges] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [canReviewProfile, setCanReviewProfile] = useState(false);
+  const [reputationEvents, setReputationEvents] = useState<ReputationEvent[]>([]);
+  const [reviewEventId, setReviewEventId] = useState("");
+  const [reviewSentiment, setReviewSentiment] = useState<1 | -1>(1);
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewMessage, setReviewMessage] = useState("");
 
   // Для админа
   const [isAdmin, setIsAdmin] = useState(false);
@@ -66,7 +78,7 @@ export default function PublicProfilePage() {
     const init = async () => {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("nickname, game_id, avatar_url")
+        .select("nickname, game_id, avatar_url, profile_level, reputation_score, reputation_events_count, main_rating")
         .eq("id", id)
         .single();
 
@@ -74,20 +86,25 @@ export default function PublicProfilePage() {
         nickname: profiles?.nickname || "—",
         game_id: profiles?.game_id || "—",
         avatar_url: profiles?.avatar_url || "",
+        profile_level: profiles?.profile_level ?? 1,
+        reputation_score: Number(profiles?.reputation_score ?? 50),
+        reputation_events_count: profiles?.reputation_events_count ?? 0,
+        main_rating: Number(profiles?.main_rating ?? 1),
       });
 
       // Статистика
+      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
       const { data: statsData } = await supabase
         .from("player_stats")
         .select("kills, matches_played")
         .eq("user_id", id)
-        .eq("status", "approved");
+        .eq("status", "approved")
+        .in("event_id", (mainEvents ?? []).map((event) => event.id).length ? (mainEvents ?? []).map((event) => event.id) : ["00000000-0000-0000-0000-000000000000"]);
 
       const kills = statsData?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
       const matches = statsData?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
       const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
-      const cost = 0;
-      setStats({ kills, matches, ratio, cost });
+      setStats({ kills, matches, ratio });
 
       // Команда игрока
       const { data: memberships } = await supabase
@@ -118,7 +135,7 @@ export default function PublicProfilePage() {
 
       // Админ
       const { data: roleData } = await supabase.from("user_roles").select("role").eq("user_id", id).single();
-      if (roleData) newBadges.push(roleData.role === "superadmin" ? "Админ" : "Модератор");
+      if (roleData) newBadges.push(roleData.role === "superadmin" ? "Владелец" : roleData.role === "admin" ? "Администратор" : "Модератор");
 
       // Блогер
       const { data: blogger } = await supabase.from("bloggers").select("id").eq("user_id", id).single();
@@ -129,6 +146,12 @@ export default function PublicProfilePage() {
       // Проверяем, является ли текущий пользователь админом, и если да, загружаем преды
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser) {
+        if (currentUser.id !== id) {
+          setCanReviewProfile(true);
+          const reputationResponse = await authFetch(`/api/reputation?targetUserId=${id}`);
+          const reputationPayload = await reputationResponse.json() as { eligibleEvents?: ReputationEvent[] };
+          if (reputationResponse.ok) setReputationEvents(reputationPayload.eligibleEvents ?? []);
+        }
         const { data: currentRoleData } = await supabase
           .from("user_roles")
           .select("role")
@@ -152,6 +175,7 @@ export default function PublicProfilePage() {
     if (badge.startsWith("Старший зам")) return "bg-orange-600";
     if (badge.startsWith("Зам")) return "bg-orange-700";
     if (badge.startsWith("Админ")) return "bg-red-600";
+    if (badge.startsWith("Владелец")) return "bg-amber-500 text-black";
     if (badge.startsWith("Модератор")) return "bg-red-700";
     if (badge.startsWith("Блогер")) return "bg-purple-600";
     if (badge.startsWith("Игрок команды")) return "bg-blue-600";
@@ -173,6 +197,21 @@ export default function PublicProfilePage() {
     } else {
       alert("Ошибка: " + (data.error || "неизвестная ошибка"));
     }
+  };
+
+  const submitReputationReview = async () => {
+    if (!reviewEventId) return setReviewMessage("Выберите мероприятие");
+    const response = await authFetch("/api/reputation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId: reviewEventId, targetUserId: id, sentiment: reviewSentiment, reason: reviewReason || undefined }),
+    });
+    const payload = await response.json() as { error?: string };
+    if (!response.ok) return setReviewMessage(payload.error ?? "Не удалось отправить отзыв");
+    setReputationEvents((current) => current.filter((event) => event.id !== reviewEventId));
+    setReviewEventId("");
+    setReviewReason("");
+    setReviewMessage("Отзыв отправлен на модерацию");
   };
 
   if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
@@ -207,6 +246,15 @@ export default function PublicProfilePage() {
         {/* Статистика */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           <div className="bg-gray-700 p-3 rounded text-center">
+            <p className="text-gray-400 text-sm">Уровень</p><p className="text-xl font-bold">{profile.profile_level}</p>
+          </div>
+          <div className="bg-gray-700 p-3 rounded text-center">
+            <p className="text-gray-400 text-sm">Рейтинг</p><p className="text-xl font-bold">{profile.main_rating.toFixed(0)}</p>
+          </div>
+          <div className="bg-gray-700 p-3 rounded text-center">
+            <p className="text-gray-400 text-sm">Репутация</p><p className="text-xl font-bold">{profile.reputation_events_count < 3 ? "Новый" : profile.reputation_score.toFixed(0)}</p>
+          </div>
+          <div className="bg-gray-700 p-3 rounded text-center">
             <p className="text-gray-400 text-sm">Киллы</p>
             <p className="text-xl font-bold">{stats.kills}</p>
           </div>
@@ -218,11 +266,6 @@ export default function PublicProfilePage() {
             <p className="text-gray-400 text-sm">У/С</p>
             <p className="text-xl font-bold">{stats.ratio}</p>
           </div>
-          <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Стоимость</p>
-            <p className="text-xl font-bold text-yellow-400">{stats.cost} ₽</p>
-            <p className="text-xs text-gray-400">Рейтинг: ???</p>
-          </div>
         </div>
 
         {team && (
@@ -233,6 +276,30 @@ export default function PublicProfilePage() {
           </div>
         )}
       </div>
+
+      {canReviewProfile && (
+        <section className="mt-6 rounded bg-gray-800 p-4">
+          <h2 className="text-xl font-semibold">Отзыв о репутации</h2>
+          {reputationEvents.length ? <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-sm text-gray-400">Общее завершённое мероприятие
+              <select className="mt-1 w-full rounded p-2 text-black" value={reviewEventId} onChange={(event) => setReviewEventId(event.target.value)}>
+                <option value="">Выберите</option>
+                {reputationEvents.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+              </select>
+            </label>
+            <label className="text-sm text-gray-400">Оценка
+              <select className="mt-1 w-full rounded p-2 text-black" value={reviewSentiment} onChange={(event) => setReviewSentiment(Number(event.target.value) as 1 | -1)}>
+                <option value={1}>Положительная</option><option value={-1}>Отрицательная</option>
+              </select>
+            </label>
+            <label className="text-sm text-gray-400 md:col-span-2">Комментарий {reviewSentiment === -1 && "(обязателен)"}
+              <textarea className="mt-1 w-full rounded p-2 text-black" maxLength={500} value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} />
+            </label>
+            <button className="rounded bg-blue-600 px-4 py-2 md:col-span-2" type="button" onClick={() => void submitReputationReview()}>Отправить на модерацию</button>
+          </div> : <p className="mt-2 text-sm text-gray-400">Нет завершённых общих мероприятий, доступных для нового отзыва.</p>}
+          {reviewMessage && <p className="mt-2 text-sm text-cyan-300">{reviewMessage}</p>}
+        </section>
+      )}
 
       {/* Блок для админа: предупреждения и бан */}
       {isAdmin && (

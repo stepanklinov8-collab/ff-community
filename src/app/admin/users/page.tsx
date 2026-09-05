@@ -10,11 +10,15 @@ interface User {
   nickname: string;
   game_id: string;
   created_at: string;
+  roles: string[];
+  isOwner: boolean;
+  profile: { profile_level: number; reputation_score: number; main_rating: number } | null;
 }
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [canDeleteUsers, setCanDeleteUsers] = useState(false);
+  const [canManageAdmins, setCanManageAdmins] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -39,7 +43,7 @@ export default function AdminUsersPage() {
 
   const [banReason, setBanReason] = useState("");
 
-  const availableRoles = ["blogger", "moderator", "superadmin"];
+  const availableRoles = ["blogger", "moderator", "admin"];
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -52,9 +56,13 @@ export default function AdminUsersPage() {
           nickname: u.user_metadata?.nickname || "—",
           game_id: u.user_metadata?.game_id || "—",
           created_at: u.created_at,
+          roles: u.roles ?? [],
+          isOwner: Boolean(u.isOwner),
+          profile: u.profile ?? null,
         })));
       }
       setCanDeleteUsers(Boolean(data.canDeleteUsers));
+      setCanManageAdmins(Boolean(data.canManageAdmins));
     } catch (err) {
       console.error("Ошибка загрузки пользователей:", err);
       setMessage("Ошибка загрузки пользователей");
@@ -240,9 +248,14 @@ export default function AdminUsersPage() {
                         onChange={(e) => setEditNickname(e.target.value)}
                       />
                     ) : (
-                      <Link href={`/profile/${user.id}`} className="text-blue-400 hover:underline">
-                        {user.nickname}
-                      </Link>
+                      <>
+                        <Link href={`/profile/${user.id}`} className="text-blue-400 hover:underline">
+                          {user.nickname}
+                        </Link>
+                        {user.isOwner && <span className="ml-2 rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-black">Владелец</span>}
+                        {!user.isOwner && user.roles.includes("admin") && <span className="ml-2 rounded bg-purple-700 px-2 py-0.5 text-xs">Администратор</span>}
+                        <div className="mt-1 text-xs text-slate-500">Ур. {user.profile?.profile_level ?? 1} · Репутация {Number(user.profile?.reputation_score ?? 50).toFixed(0)} · Рейтинг {Number(user.profile?.main_rating ?? 1).toFixed(0)}</div>
+                      </>
                     )}
                   </td>
                   <td className="p-3 text-gray-400">{user.email}</td>
@@ -275,12 +288,12 @@ export default function AdminUsersPage() {
                       </div>
                     ) : (
                       <div className="flex gap-1 flex-wrap">
-                        <button onClick={() => startEdit(user)} className="px-2 py-1 bg-blue-500 rounded text-xs">Ред.</button>
+                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => startEdit(user)} className="px-2 py-1 bg-blue-500 rounded text-xs">Ред.</button>}
                         <button onClick={() => openModal(user, "message")} className="px-2 py-1 bg-green-500 rounded text-xs">Написать</button>
-                        <button onClick={() => openModal(user, "warning")} className="px-2 py-1 bg-yellow-600 rounded text-xs">Пред</button>
-                        <button onClick={() => openModal(user, "ban")} className="px-2 py-1 bg-red-600 rounded text-xs">Бан</button>
-                        <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Плашки</button>
-                        {canDeleteUsers && <button onClick={() => openModal(user, "delete")} className="rounded bg-red-950 px-2 py-1 text-xs text-red-200 ring-1 ring-red-700">Удалить</button>}
+                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "warning")} className="px-2 py-1 bg-yellow-600 rounded text-xs">Пред</button>}
+                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "ban")} className="px-2 py-1 bg-red-600 rounded text-xs">Бан</button>}
+                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Плашки</button>}
+                        {canDeleteUsers && !user.isOwner && <button onClick={() => openModal(user, "delete")} className="rounded bg-red-950 px-2 py-1 text-xs text-red-200 ring-1 ring-red-700">Удалить</button>}
                       </div>
                     )}
                   </td>
@@ -349,9 +362,9 @@ export default function AdminUsersPage() {
               <>
                 <h2 className="text-xl font-bold mb-4">Плашки для {selectedUser.nickname}</h2>
                 <div className="space-y-2">
-                  {availableRoles.map(role => (
+                  {availableRoles.filter((role) => role !== "admin" || canManageAdmins).map(role => (
                     <div key={role} className="flex justify-between items-center">
-                      <span>{role === "blogger" ? "Блогер" : role === "moderator" ? "Модератор" : "Админ"}</span>
+                      <span>{role === "blogger" ? "Блогер" : role === "moderator" ? "Модератор" : "Администратор"}</span>
                       <div className="flex gap-1">
                         <button onClick={() => toggleRole(selectedUser.id, role, "add")} className="px-2 py-1 bg-green-600 rounded text-xs">+</button>
                         <button onClick={() => toggleRole(selectedUser.id, role, "remove")} className="px-2 py-1 bg-red-600 rounded text-xs">−</button>
@@ -403,4 +416,7 @@ interface AuthUserPayload {
   email?: string;
   user_metadata?: { nickname?: string; game_id?: string };
   created_at: string;
+  roles?: string[];
+  isOwner?: boolean;
+  profile?: { profile_level: number; reputation_score: number; main_rating: number } | null;
 }

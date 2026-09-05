@@ -14,11 +14,11 @@ export async function GET(request: Request) {
   try {
     const { user } = await requireUser(request);
     const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const [{ data, error }, { data: wallet }] = await Promise.all([supabase
       .from("profiles")
-      .select("id, nickname, avatar_url, game_id, bio, phone, locale, updated_at")
+      .select("id, nickname, avatar_url, game_id, bio, phone, locale, profile_level, reputation_score, reputation_events_count, main_rating, updated_at")
       .eq("id", user.id)
-      .maybeSingle();
+      .maybeSingle(), supabase.from("site_wallets").select("balance").eq("user_id", user.id).maybeSingle()]);
     if (error) throw error;
     return Response.json({
       profile: {
@@ -29,6 +29,11 @@ export async function GET(request: Request) {
         bio: data?.bio || "",
         phone: data?.phone || "",
         locale: data?.locale || "ru",
+        level: data?.profile_level ?? 1,
+        reputation: Number(data?.reputation_score ?? 50),
+        reputationEvents: data?.reputation_events_count ?? 0,
+        rating: Number(data?.main_rating ?? 1),
+        balance: wallet?.balance ?? 0,
       },
     });
   } catch (error) {

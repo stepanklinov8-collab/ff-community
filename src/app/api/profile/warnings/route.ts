@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const auth = await requireUser(request);
   const { searchParams } = new URL(request.url);
   const requestedUserId = searchParams.get("userId");
-  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("superadmin");
+  const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("admin") || auth.roles.includes("superadmin");
   const targetUserId = requestedUserId && isAdmin ? requestedUserId : auth.user.id;
   const supabaseAdmin = createAdminClient();
 

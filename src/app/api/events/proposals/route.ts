@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     })));
     if (sessionsError) throw sessionsError;
 
-    const { data: admins } = await supabase.from("user_roles").select("user_id").in("role", ["moderator", "superadmin"]);
+    const { data: admins } = await supabase.from("user_roles").select("user_id").in("role", ["moderator", "admin", "superadmin"]);
     if (admins?.length) {
       await supabase.from("notifications").insert(admins.map((admin) => ({
         user_id: admin.user_id,

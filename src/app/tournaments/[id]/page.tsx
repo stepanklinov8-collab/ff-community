@@ -56,6 +56,9 @@ interface Registration {
   roster: string[];
 }
 
+interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
+const gameMapLabels: Record<string, string> = { bermuda: "Бермуды", nexterra: "Некстера", solara: "Солара", purgatory: "Чистилище", kalahari: "Калахари" };
+
 interface TeamMember {
   user_id: string;
   role_in_team: string;
@@ -73,6 +76,7 @@ export default function EventPage() {
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [games, setGames] = useState<EventGame[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string; type: "team" | "guild" } | null>(null);
   const [canManageTeam, setCanManageTeam] = useState(false);
@@ -128,6 +132,8 @@ export default function EventPage() {
         setSessions(sess);
         setSelectedSessionId((current) => current || sess[0]?.id || "");
       }
+      const { data: gameRows } = await supabase.from("event_games").select("id,session_id,game_number,map_name").eq("event_id", id).order("game_number");
+      setGames((gameRows ?? []) as EventGame[]);
 
       const { data: profiles } = await supabase.from("profiles").select("id, nickname");
       if (profiles) setAllPlayers(profiles);
@@ -486,6 +492,9 @@ export default function EventPage() {
                 Модерация статистики
               </Link>
             )}
+            <Link href={`/admin/events/${id}/competition-results`} className="rounded bg-emerald-700 px-3 py-1 text-sm">
+              Игры и итоговые результаты
+            </Link>
           </div>
         )}
       </div>
@@ -500,6 +509,7 @@ export default function EventPage() {
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
               {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru")}</p>}
+              {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {gameMapLabels[game.map_name] ?? game.map_name}</span>)}</div>}
 
               {showResponsible && (isAdmin || isOrganizer) && (
                 <div className="mt-2 flex gap-2">

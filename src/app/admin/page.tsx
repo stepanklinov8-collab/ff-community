@@ -300,6 +300,21 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Виртуальные ставки</h2>
+        <Link href="/admin/betting" className="inline-block rounded bg-amber-600 px-4 py-2 hover:bg-amber-700">Рынки и коэффициенты</Link>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Репутация</h2>
+        <Link href="/admin/reputation" className="inline-block rounded bg-emerald-700 px-4 py-2 hover:bg-emerald-800">Проверить отзывы</Link>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Рейтинг</h2>
+        <Link href="/admin/rating-settings" className="inline-block rounded bg-cyan-700 px-4 py-2 hover:bg-cyan-800">Категории мероприятий</Link>
+      </div>
+
+      <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Контакты</h2>
         <Link href="/admin/contacts" className="px-4 py-2 bg-teal-600 rounded hover:bg-teal-700 inline-block">Управление контактами</Link>
       </div>

@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .from("user_roles")
     .select("role")
     .eq("user_id", user.id)
-    .in("role", ["moderator", "superadmin"]);
+    .in("role", ["moderator", "admin", "superadmin"]);
 
   if (!roles?.length) redirect("/");
   return children;

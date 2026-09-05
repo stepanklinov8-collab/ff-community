@@ -13,22 +13,30 @@ interface Player {
   kills: number;
   matches: number;
   ratio: number;
-  cost: number;
+  rating: number;
 }
+
+interface OrganizationRating { id: string; name: string; type: "team" | "guild"; main_rating: number; avatar_url: string }
 
 export default function RatingPage() {
   const supabase = useMemo(() => createClient(), []);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [filter, setFilter] = useState<string>("ratio");
+  const [filter, setFilter] = useState<string>("rating");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [organizations, setOrganizations] = useState<OrganizationRating[]>([]);
 
   useEffect(() => {
     const fetchPlayers = async () => {
       // Получаем всех пользователей из profiles
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, nickname, game_id, avatar_url");
+        .select("id, nickname, game_id, avatar_url, main_rating");
+      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
+      const mainEventIds = (mainEvents ?? []).map((event) => event.id);
+      const { data: organizationRows } = await supabase.from("teams")
+        .select("id,name,type,main_rating,avatar_url").eq("verified", true).order("main_rating", { ascending: false });
+      setOrganizations((organizationRows ?? []).map((row) => ({ ...row, main_rating: Number(row.main_rating ?? 1) })) as OrganizationRating[]);
 
       if (!profiles) {
         setLoading(false);
@@ -42,13 +50,12 @@ export default function RatingPage() {
             .from("player_stats")
             .select("kills, matches_played")
             .eq("user_id", p.id)
-            .eq("status", "approved");
+            .eq("status", "approved")
+            .in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]);
 
           const kills = stats?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
           const matches = stats?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
           const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
-          const cost = 0;
-
           return {
             id: p.id,
             nickname: p.nickname || "—",
@@ -57,7 +64,7 @@ export default function RatingPage() {
             kills,
             matches,
             ratio,
-            cost,
+            rating: Number(p.main_rating ?? 1),
           };
         })
       );
@@ -71,8 +78,8 @@ export default function RatingPage() {
   const filteredPlayers = players
     .filter(p => p.nickname.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
+      if (filter === "rating") return b.rating - a.rating;
       if (filter === "ratio") return b.ratio - a.ratio;
-      if (filter === "cost") return b.cost - a.cost;
       if (filter === "kills") return b.kills - a.kills;
       if (filter === "matches") return b.matches - a.matches;
       return 0;
@@ -92,16 +99,16 @@ export default function RatingPage() {
         />
         <div className="flex gap-2">
           <button
+            onClick={() => setFilter("rating")}
+            className={"px-3 py-1 rounded text-sm " + (filter === "rating" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
+          >
+            Рейтинг
+          </button>
+          <button
             onClick={() => setFilter("ratio")}
             className={"px-3 py-1 rounded text-sm " + (filter === "ratio" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
             У/С
-          </button>
-          <button
-            onClick={() => setFilter("cost")}
-            className={"px-3 py-1 rounded text-sm " + (filter === "cost" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
-          >
-            Стоимость
           </button>
           <button
             onClick={() => setFilter("kills")}
@@ -145,12 +152,18 @@ export default function RatingPage() {
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-300">У/С: {p.ratio}</p>
-                <p className="text-xs text-yellow-400">Стоимость: {p.cost} ₽ · Рейтинг: ???</p>
+                <p className="text-xs text-yellow-400">Рейтинг: {p.rating.toFixed(0)}</p>
               </div>
             </Link>
           ))}
         </div>
       )}
+
+      <section className="mt-10">
+        <h2 className="mb-4 text-2xl font-bold">Рейтинг команд и гильдий</h2>
+        <p className="mb-4 text-sm text-slate-400">60% — четыре лучших игрока, 30% — результаты, 10% — достижения.</p>
+        <div className="grid gap-3 md:grid-cols-2">{organizations.map((organization, index) => <Link key={organization.id} href={`/teams/${organization.id}`} className="cyber-card flex items-center gap-3 p-4"><span className="w-8 text-lg font-black text-slate-500">#{index + 1}</span><div className="flex-1"><strong className="text-cyan-300">{organization.name}</strong><p className="text-xs text-slate-500">{organization.type === "guild" ? "Гильдия" : "Команда"}</p></div><span className="text-2xl font-black">{organization.main_rating.toFixed(0)}</span></Link>)}</div>
+      </section>
     </div>
   );
 }

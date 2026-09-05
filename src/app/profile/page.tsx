@@ -93,6 +93,7 @@ export default function ProfilePage() {
   const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", locale: "ru" });
   const [badges, setBadges] = useState<string[]>([]);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0 });
+  const [profileMeta, setProfileMeta] = useState({ level: 1, reputation: 50, reputationEvents: 0, rating: 1, balance: 0 });
   const [warnings, setWarnings] = useState<WarningsPayload>({
     activeWarnings: [], warningCount: 0, history: [], activeBan: null,
   });
@@ -115,10 +116,12 @@ export default function ProfilePage() {
         locale: currentUser.user_metadata?.locale === "kk" || currentUser.user_metadata?.locale === "ky" ? currentUser.user_metadata.locale : "ru",
       }));
 
+      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
+      const mainEventIds = (mainEvents ?? []).map((event) => event.id);
       const [profileResult, roleResult, statsResult, membershipsResult, bloggerResult] = await Promise.all([
         supabase.from("profiles").select("avatar_url").eq("id", currentUser.id).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", currentUser.id).maybeSingle(),
-        supabase.from("player_stats").select("kills, matches_played").eq("user_id", currentUser.id).eq("status", "approved"),
+        supabase.from("player_stats").select("kills, matches_played").eq("user_id", currentUser.id).eq("status", "approved").in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]),
         supabase.from("team_members").select("role_in_team, teams(id, name, type, verified)").eq("user_id", currentUser.id),
         supabase.from("bloggers").select("id").eq("user_id", currentUser.id).maybeSingle(),
       ]);
@@ -136,15 +139,16 @@ export default function ProfilePage() {
       setTeams(currentTeams);
 
       const nextBadges = currentTeams.map((team) => `${roleLabel(team.role, team.type)} ${team.name}`);
-      if (roleResult.data?.role) nextBadges.push(roleResult.data.role === "superadmin" ? "Суперадмин" : "Модератор");
+      if (roleResult.data?.role) nextBadges.push(roleResult.data.role === "superadmin" ? "Владелец" : roleResult.data.role === "admin" ? "Администратор" : "Модератор");
       if (bloggerResult.data) nextBadges.push("Блогер");
       setBadges(nextBadges);
 
       try {
         const profileResponse = await authFetch("/api/profile");
         if (profileResponse.ok) {
-          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string } };
+          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number; balance: number } };
           setProfileForm(profilePayload.profile);
+          setProfileMeta({ level: profilePayload.profile.level, reputation: profilePayload.profile.reputation, reputationEvents: profilePayload.profile.reputationEvents, rating: profilePayload.profile.rating, balance: profilePayload.profile.balance });
           if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
         }
       } catch {
@@ -287,7 +291,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio], ["Стоимость", "???"]].map(([label, value]) => (
+        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>

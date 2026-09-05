@@ -1,9 +1,9 @@
 import ExcelJS from "exceljs";
-import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin(request);
+    await requireModerator(request);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "OMCITE Arena";
     const sheet = workbook.addWorksheet("Результаты");
