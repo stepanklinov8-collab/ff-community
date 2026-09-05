@@ -4,7 +4,7 @@ import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
 const proposalSchema = z.object({
   title: z.string().trim().min(2).max(160),
-  type: z.enum(["training", "bo", "tournament", "kv", "solo"]),
+  type: z.enum(["training", "bo", "tournament", "solo"]),
   cost: z.number().int().min(0).max(10_000_000),
   organizer: z.string().trim().min(2).max(160),
   description: z.string().trim().max(10_000),

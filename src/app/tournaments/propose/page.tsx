@@ -100,8 +100,11 @@ export default function ProposeEventPage() {
           <option value="training">Тренировка</option>
           <option value="bo">БО</option>
           <option value="tournament">Турнир</option>
-          <option value="kv">КВ</option>
         </select>
+
+        <p className="rounded-lg border border-cyan-800/40 bg-cyan-950/25 p-3 text-sm text-cyan-100">
+          КВ больше не требуют модерации. <Link href="/clan-wars/create" className="font-semibold underline">Создать КВ сразу →</Link>
+        </p>
 
         <input
           className="w-full p-2 text-black rounded"
