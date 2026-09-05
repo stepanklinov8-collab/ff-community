@@ -26,6 +26,7 @@ interface Event {
   min_players: number;
   comments_enabled?: boolean;
   payment_url?: string | null;
+  allow_individual_registration?: boolean;
 }
 
 interface Session {
@@ -73,7 +74,7 @@ export default function EventPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
+  const [myTeam, setMyTeam] = useState<{ id: string; name: string; type: "team" | "guild" } | null>(null);
   const [canManageTeam, setCanManageTeam] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [message, setMessage] = useState("");
@@ -170,7 +171,7 @@ export default function EventPage() {
               .select("id, type, verified")
               .eq("id", candidate.team_id)
               .maybeSingle();
-            if (candidateTeam?.type === "team" && candidateTeam.verified) {
+            if ((candidateTeam?.type === "team" || candidateTeam?.type === "guild") && candidateTeam.verified) {
               member = candidate;
               break;
             }
@@ -182,7 +183,7 @@ export default function EventPage() {
           setCanManageTeam(["leader", "senior_deputy", "deputy"].includes(member.role_in_team));
           const { data: team } = await supabase
             .from("teams")
-            .select("id, name")
+            .select("id, name, type")
             .eq("id", member.team_id)
             .eq("verified", true)
             .single();
@@ -223,8 +224,8 @@ export default function EventPage() {
   }, [id, loadRegistrations, supabase]);
 
   const registerTeam = async () => {
-    if (!myTeam) { setMessage("У вас нет верифицированной команды."); return; }
-    if (!currentUser) { setMessage("Войдите, чтобы записать команду."); return; }
+    if (!myTeam) { setMessage("У вас нет верифицированной команды или гильдии."); return; }
+    if (!currentUser) { setMessage("Войдите, чтобы записать команду или гильдию."); return; }
     if (!selectedSessionId) { setMessage("Выберите время участия."); return; }
 
     // Проверка минимального количества игроков, заданного для мероприятия
@@ -422,6 +423,9 @@ export default function EventPage() {
       : registrationClosesAt && new Date() >= registrationClosesAt
         ? "Регистрация закрыта."
         : "Регистрация открыта.";
+  const allowsIndividualRegistration = event.type === "solo" || Boolean(event.allow_individual_registration);
+  const allowsCollectiveRegistration = event.type !== "solo";
+  const collectiveLabel = myTeam?.type === "guild" ? "Гильдия" : "Команда";
   const canViewRoom = isAdmin || isOrganizer ||
     (myTeam && confirmed.some(r => r.team_id === myTeam.id)) ||
     confirmed.some(r => r.participant_user_id === currentUser?.id);
@@ -452,6 +456,12 @@ export default function EventPage() {
           {event.max_teams > 0 && <div><span className="text-gray-400">Лимит команд:</span> {event.max_teams}</div>}
           <div><span className="text-gray-400">Мин. игроков:</span> {event.min_players || 4}</div>
           <div><span className="text-gray-400">Блокировка состава:</span> за {event.roster_lock_minutes || 10} мин. до начала</div>
+          <div>
+            <span className="text-gray-400">Формат регистрации:</span>{" "}
+            {allowsIndividualRegistration
+              ? allowsCollectiveRegistration ? "команда/гильдия или личная заявка" : "личная заявка"
+              : "только команда или гильдия"}
+          </div>
         </div>
 
         <Link href={`/tournaments/${id}/results`} className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">
@@ -541,9 +551,9 @@ export default function EventPage() {
       </div>
 
       {/* Запись */}
-      {myTeam && canManageTeam && !alreadyRegistered && (
+      {allowsCollectiveRegistration && myTeam && canManageTeam && !alreadyRegistered && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
-          <p className="mb-3">Команда: <Link href={`/teams/${myTeam.id}`} className="text-blue-400">{myTeam.name}</Link></p>
+          <p className="mb-3">{collectiveLabel}: <Link href={`/teams/${myTeam.id}`} className="text-blue-400">{myTeam.name}</Link></p>
 
           <div className="mb-4">
             <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
@@ -581,13 +591,13 @@ export default function EventPage() {
 
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
           <button onClick={registerTeam} disabled={!registrationIsOpen || !canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
-            {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? "Записать команду" : "Состав заблокирован"}
+            {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}` : "Состав заблокирован"}
           </button>
           {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
-      {currentUser && !alreadyRegistered && (
+      {currentUser && allowsIndividualRegistration && !alreadyRegistered && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h2 className="text-lg font-semibold">Личная заявка</h2>
           <p className="mt-1 text-sm text-gray-300">Можно участвовать самостоятельно, даже если вы не состоите в команде или гильдии.</p>
@@ -607,10 +617,25 @@ export default function EventPage() {
         </div>
       )}
 
+      {currentUser && allowsCollectiveRegistration && !allowsIndividualRegistration && !alreadyRegistered && (!myTeam || !canManageTeam) && (
+        <div className="mt-6 bg-gray-800 p-4 rounded">
+          <h2 className="text-lg font-semibold">Командная регистрация</h2>
+          <p className="mt-1 text-sm text-gray-300">
+            На это мероприятие заявку подаёт руководитель верифицированной команды или гильдии.
+          </p>
+          <Link href="/teams" className="mt-3 inline-block text-blue-400 hover:underline">Перейти к командам и гильдиям</Link>
+        </div>
+      )}
+
       {!currentUser && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <p className="text-sm text-gray-300">{registrationHint}</p>
-          <Link href="/auth" className="mt-3 inline-block px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">Войти, чтобы записаться</Link>
+          <p className="mt-2 text-sm text-gray-300">
+            {allowsIndividualRegistration
+              ? "Доступна личная заявка без команды или гильдии."
+              : "Для участия потребуется верифицированная команда или гильдия."}
+          </p>
+          <Link href="/auth" className="mt-3 inline-block px-4 py-2 bg-blue-500 rounded hover:bg-blue-600">Войти для участия</Link>
         </div>
       )}
 

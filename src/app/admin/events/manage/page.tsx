@@ -17,6 +17,7 @@ interface Event {
   max_teams: number;
   roster_lock_minutes: number;
   is_published: boolean;
+  allow_individual_registration: boolean;
   created_at: string;
 }
 
@@ -61,6 +62,7 @@ export default function ManageEventsPage() {
   const [editMaxTeams, setEditMaxTeams] = useState("0");
   const [editRosterLock, setEditRosterLock] = useState("10");
   const [editPublished, setEditPublished] = useState(false);
+  const [editAllowIndividualRegistration, setEditAllowIndividualRegistration] = useState(false);
 
   // Просмотр состава заявки
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
@@ -112,6 +114,7 @@ export default function ManageEventsPage() {
     setEditMaxTeams(String(selectedEvent.max_teams || 0));
     setEditRosterLock(String(selectedEvent.roster_lock_minutes || 10));
     setEditPublished(selectedEvent.is_published);
+    setEditAllowIndividualRegistration(selectedEvent.type === "solo" || selectedEvent.allow_individual_registration);
   };
 
   const saveEdit = async () => {
@@ -130,6 +133,7 @@ export default function ManageEventsPage() {
         maxTeams: parseInt(editMaxTeams) || 0,
         rosterLockMinutes: parseInt(editRosterLock) || 10,
         isPublished: editPublished,
+        allowIndividualRegistration: editType === "solo" || editAllowIndividualRegistration,
       }),
     });
 
@@ -267,6 +271,15 @@ export default function ManageEventsPage() {
                   <input type="checkbox" checked={editPublished} onChange={(e) => setEditPublished(e.target.checked)} />
                   Опубликовано
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editType === "solo" || editAllowIndividualRegistration}
+                    disabled={editType === "solo"}
+                    onChange={(e) => setEditAllowIndividualRegistration(e.target.checked)}
+                  />
+                  Разрешить личные заявки без команды или гильдии
+                </label>
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className="px-4 py-2 bg-green-600 rounded">Сохранить</button>
                   <button onClick={() => setEditId(null)} className="px-4 py-2 bg-gray-600 rounded">Отмена</button>
@@ -298,6 +311,12 @@ export default function ManageEventsPage() {
                   <div><span className="text-gray-400">Организатор:</span> {selectedEvent.organizer || "—"}</div>
                   <div><span className="text-gray-400">Лимит команд:</span> {selectedEvent.max_teams || 0}</div>
                   <div><span className="text-gray-400">Блокировка состава:</span> {selectedEvent.roster_lock_minutes || 10} мин</div>
+                  <div>
+                    <span className="text-gray-400">Регистрация:</span>{" "}
+                    {selectedEvent.type === "solo" || selectedEvent.allow_individual_registration
+                      ? "личная заявка разрешена"
+                      : "только команда или гильдия"}
+                  </div>
                 </div>
 
                 {selectedEvent.stream_url && (

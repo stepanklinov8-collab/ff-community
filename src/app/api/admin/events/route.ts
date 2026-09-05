@@ -26,6 +26,7 @@ const eventSchema = z.object({
   rosterLockMinutes: z.number().int().min(0).max(10080),
   publishAt: z.string().datetime().nullable(),
   commentsEnabled: z.boolean(),
+  allowIndividualRegistration: z.boolean(),
   sessions: z.array(sessionSchema).min(1).max(100),
 });
 
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
       publish_at: publishAt?.toISOString() ?? null,
       is_published: !publishAt || publishAt <= new Date(),
       comments_enabled: payload.commentsEnabled,
+      allow_individual_registration: payload.type === "solo" || payload.allowIndividualRegistration,
       created_by: user.id,
     }).select("id").single();
     if (eventError || !event) throw eventError ?? new Error("Не удалось создать мероприятие");
@@ -179,6 +181,11 @@ export async function PATCH(request: Request) {
     if (payload.rosterLockMinutes !== undefined) updates.roster_lock_minutes = payload.rosterLockMinutes;
     if (payload.publishAt !== undefined) updates.publish_at = payload.publishAt;
     if (payload.commentsEnabled !== undefined) updates.comments_enabled = payload.commentsEnabled;
+    if (payload.allowIndividualRegistration !== undefined) {
+      updates.allow_individual_registration = payload.type === "solo" || payload.allowIndividualRegistration;
+    } else if (payload.type === "solo") {
+      updates.allow_individual_registration = true;
+    }
     if (payload.isPublished !== undefined) updates.is_published = payload.isPublished;
     const { error } = await supabase.from("events").update(updates).eq("id", payload.id);
     if (error) throw error;

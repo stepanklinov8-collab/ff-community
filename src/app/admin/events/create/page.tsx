@@ -42,6 +42,7 @@ export default function CreateEventPage() {
   const [rosterLock, setRosterLock] = useState("10");
   const [publishAt, setPublishAt] = useState("");
   const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [allowIndividualRegistration, setAllowIndividualRegistration] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [sessions, setSessions] = useState<SessionForm[]>([emptySession()]);
   const [busy, setBusy] = useState(false);
@@ -75,6 +76,7 @@ export default function CreateEventPage() {
       rosterLockMinutes: Number(rosterLock) || 0,
       publishAt: toIso(publishAt),
       commentsEnabled,
+      allowIndividualRegistration: type === "solo" || allowIndividualRegistration,
       sessions: sessions.map((session) => ({
         startTime: toIso(session.startTime),
         endTime: toIso(session.endTime),
@@ -134,6 +136,18 @@ export default function CreateEventPage() {
           <label className="text-sm text-slate-300">Обложка<input className="mt-2" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={commentsEnabled} onChange={(event) => setCommentsEnabled(event.target.checked)} /> Разрешить комментарии</label>
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={type === "solo" || allowIndividualRegistration}
+            disabled={type === "solo"}
+            onChange={(event) => setAllowIndividualRegistration(event.target.checked)}
+          />
+          Разрешить личные заявки без команды или гильдии
+        </label>
+        <p className="text-xs text-slate-500">
+          По умолчанию заявку подаёт руководитель команды или гильдии. Для сольных мероприятий личная регистрация включена всегда.
+        </p>
 
         <div className="flex items-center justify-between gap-3">
           <div><span className="section-kicker">РАСПИСАНИЕ</span><h2 className="mt-1 text-xl font-bold">Сессии</h2></div>
