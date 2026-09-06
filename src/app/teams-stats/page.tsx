@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface TeamStats {
   id: string;
@@ -20,6 +21,7 @@ interface TeamStats {
 
 export default function TeamsStatsPage() {
   const supabase = useMemo(() => createClient(), []);
+  const { t: translate } = useLanguage();
   const [teams, setTeams] = useState<TeamStats[]>([]);
   const [filter, setFilter] = useState<string>("cost");
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,11 +29,10 @@ export default function TeamsStatsPage() {
 
   useEffect(() => {
     const fetchTeams = async () => {
-      const { data: teamsData } = await supabase
-        .from("teams")
-        .select("*")
-        .eq("verified", true);
-      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
+      const [{ data: teamsData }, { data: mainEvents }] = await Promise.all([
+        supabase.from("teams").select("id,name,type,avatar_url").eq("verified", true),
+        supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]),
+      ]);
       const mainEventIds = (mainEvents ?? []).map((event) => event.id);
 
       if (!teamsData) {
@@ -39,58 +40,46 @@ export default function TeamsStatsPage() {
         return;
       }
 
-      const enriched = await Promise.all(
-        teamsData.map(async (team) => {
-          // Получаем участников команды
-          const { data: members } = await supabase
-            .from("team_members")
-            .select("user_id")
-            .eq("team_id", team.id);
+      const teamIds = teamsData.map((team) => team.id);
+      const { data: members } = teamIds.length
+        ? await supabase.from("team_members").select("team_id,user_id").in("team_id", teamIds)
+        : { data: [] as { team_id: string; user_id: string }[] };
+      const memberIds = [...new Set((members ?? []).map((member) => member.user_id))];
+      const [{ data: stats }, { data: results }] = await Promise.all([
+        memberIds.length ? supabase.from("player_stats").select("user_id,kills,matches_played").in("user_id", memberIds).eq("status", "approved").in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]) : Promise.resolve({ data: [] }),
+        teamIds.length ? supabase.from("event_team_results").select("team_id,is_winner").in("team_id", teamIds).eq("is_winner", true) : Promise.resolve({ data: [] }),
+      ]);
+      const statsByUser = new Map<string, { kills: number; matches: number }>();
+      for (const row of stats ?? []) {
+        const current = statsByUser.get(row.user_id) ?? { kills: 0, matches: 0 };
+        statsByUser.set(row.user_id, { kills: current.kills + (row.kills || 0), matches: current.matches + (row.matches_played || 0) });
+      }
+      const membersByTeam = new Map<string, string[]>();
+      for (const member of members ?? []) membersByTeam.set(member.team_id, [...(membersByTeam.get(member.team_id) ?? []), member.user_id]);
+      const trophiesByTeam = new Map<string, number>();
+      for (const result of results ?? []) trophiesByTeam.set(result.team_id, (trophiesByTeam.get(result.team_id) ?? 0) + 1);
 
-          const memberIds = members?.map(m => m.user_id) || [];
-          let totalKills = 0;
-          let totalMatches = 0;
-
-          // Суммируем статистику всех участников
-          for (const userId of memberIds) {
-            const { data: stats } = await supabase
-              .from("player_stats")
-              .select("kills, matches_played")
-              .eq("user_id", userId)
-              .eq("status", "approved")
-              .in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]);
-
-            if (stats) {
-              totalKills += stats.reduce((sum, s) => sum + (s.kills || 0), 0);
-              totalMatches += stats.reduce((sum, s) => sum + (s.matches_played || 0), 0);
-            }
-          }
+      const enriched = teamsData.map((team) => {
+          const teamMemberIds = membersByTeam.get(team.id) ?? [];
+          const totalKills = teamMemberIds.reduce((sum, userId) => sum + (statsByUser.get(userId)?.kills ?? 0), 0);
+          const totalMatches = teamMemberIds.reduce((sum, userId) => sum + (statsByUser.get(userId)?.matches ?? 0), 0);
 
           const ratio = totalMatches > 0 ? +(totalKills / totalMatches).toFixed(2) : 0;
           const cost = Math.round(totalKills * 10 + totalMatches * 5);
-
-          // Победы (трофеи)
-          const { data: results } = await supabase
-            .from("event_results")
-            .select("is_winner")
-            .eq("team_id", team.id)
-            .eq("is_winner", true);
-          const trophies = results?.length || 0;
 
           return {
             id: team.id,
             name: team.name,
             type: team.type,
             avatar_url: team.avatar_url || "",
-            members_count: memberIds.length,
+            members_count: teamMemberIds.length,
             total_kills: totalKills,
             total_matches: totalMatches,
             ratio,
             cost,
-            trophies,
+            trophies: trophiesByTeam.get(team.id) ?? 0,
           };
-        })
-      );
+        });
 
       setTeams(enriched);
       setLoading(false);
@@ -110,12 +99,12 @@ export default function TeamsStatsPage() {
 
   return (
     <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">Статистика команд и гильдий</h1>
+      <h1 className="text-3xl font-bold mb-6 text-blue-500">{translate("teamStats.title")}</h1>
 
       <div className="flex gap-4 mb-6 flex-wrap">
         <input
           className="p-2 text-black rounded w-full max-w-xs"
-          placeholder="Поиск команды..."
+          placeholder={translate("teamStats.search")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -124,33 +113,33 @@ export default function TeamsStatsPage() {
             onClick={() => setFilter("cost")}
             className={"px-3 py-1 rounded text-sm " + (filter === "cost" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Стоимость
+            {translate("teamStats.cost")}
           </button>
           <button
             onClick={() => setFilter("ratio")}
             className={"px-3 py-1 rounded text-sm " + (filter === "ratio" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            У/С
+            {translate("rating.ratio")}
           </button>
           <button
             onClick={() => setFilter("trophies")}
             className={"px-3 py-1 rounded text-sm " + (filter === "trophies" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Трофеи
+            {translate("teamStats.trophies")}
           </button>
           <button
             onClick={() => setFilter("members")}
             className={"px-3 py-1 rounded text-sm " + (filter === "members" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Состав
+            {translate("teams.roster")}
           </button>
         </div>
       </div>
 
       {loading ? (
-        <p>Загрузка...</p>
+        <p>{translate("common.loading")}</p>
       ) : filteredTeams.length === 0 ? (
-        <p className="text-gray-400">Команды не найдены.</p>
+        <p className="text-gray-400">{translate("teamStats.notFound")}</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredTeams.map(t => (
@@ -162,7 +151,7 @@ export default function TeamsStatsPage() {
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                   {t.avatar_url ? (
-                    <Image src={t.avatar_url} alt={`Эмблема ${t.name}`} width={48} height={48} unoptimized className="w-full h-full object-cover" />
+                    <Image src={t.avatar_url} alt={translate("common.emblemOf", { name: t.name })} width={48} height={48} unoptimized className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
                       {t.name?.[0]?.toUpperCase() || "?"}
@@ -172,16 +161,16 @@ export default function TeamsStatsPage() {
                 <div>
                   <p className="font-semibold text-blue-400">{t.name}</p>
                   <span className="text-xs uppercase bg-gray-700 px-2 py-0.5 rounded">
-                    {t.type === "guild" ? "Гильдия" : "Команда"}
+                    {t.type === "guild" ? translate("common.guild") : translate("common.team")}
                   </span>
                 </div>
               </div>
               <div className="space-y-1 text-sm">
-                <p className="text-gray-300">У/С: {t.ratio}</p>
-                <p className="text-gray-300">Киллы: {t.total_kills} | Матчи: {t.total_matches}</p>
-                <p className="text-gray-300">Состав: {t.members_count} чел.</p>
-                <p className="text-yellow-400">Стоимость: {t.cost} ₽</p>
-                <p className="text-green-400">🏆 Трофеи: {t.trophies}</p>
+                <p className="text-gray-300">{translate("rating.ratio")}: {t.ratio}</p>
+                <p className="text-gray-300">{translate("teamStats.killsMatches", { kills: t.total_kills, matches: t.total_matches })}</p>
+                <p className="text-gray-300">{translate("teamStats.roster", { count: t.members_count })}</p>
+                <p className="text-yellow-400">{translate("teamStats.cost")}: {t.cost} ₽</p>
+                <p className="text-green-400">🏆 {translate("teamStats.trophies")}: {t.trophies}</p>
               </div>
             </Link>
           ))}

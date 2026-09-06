@@ -5,6 +5,7 @@ import { Clock3, MessageSquareText, ShieldCheck, Swords, UsersRound } from "luci
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface Organization {
   id: string;
@@ -30,14 +31,6 @@ interface ClanWar {
 
 type Filter = "active" | "open" | "agreed" | "history" | "all";
 
-const statusLabels: Record<ClanWar["status"], string> = {
-  open: "Ищет соперника",
-  pending: "Ожидает ответа",
-  agreed: "Согласовано",
-  completed: "Завершено",
-  cancelled: "Отменено",
-};
-
 const statusClasses: Record<ClanWar["status"], string> = {
   open: "badge badge-green",
   pending: "badge badge-yellow",
@@ -48,6 +41,7 @@ const statusClasses: Record<ClanWar["status"], string> = {
 
 export default function ClanWarsPage() {
   const supabase = useMemo(() => createClient(), []);
+  const { t, formatDate } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [clanWars, setClanWars] = useState<ClanWar[]>([]);
   const [filter, setFilter] = useState<Filter>("active");
@@ -59,12 +53,17 @@ export default function ClanWarsPage() {
     void fetch("/api/clan-wars")
       .then(async (response) => {
         const payload = await response.json() as { clanWars?: ClanWar[]; error?: string };
-        if (!response.ok) throw new Error(payload.error || "Не удалось загрузить КВ");
+        if (!response.ok) throw new Error(payload.error || t("clanWars.loadError"));
         setClanWars(payload.clanWars ?? []);
       })
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить КВ"))
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : t("clanWars.loadError")))
       .finally(() => setLoading(false));
-  }, [supabase]);
+  }, [supabase, t]);
+
+  const statusLabels: Record<ClanWar["status"], string> = {
+    open: t("clanWars.status.open"), pending: t("clanWars.status.pending"), agreed: t("clanWars.status.agreed"),
+    completed: t("clanWars.status.completed"), cancelled: t("clanWars.status.cancelled"),
+  };
 
   const filtered = clanWars.filter((clanWar) => {
     if (filter === "active") return ["open", "pending", "agreed"].includes(clanWar.status);
@@ -80,21 +79,21 @@ export default function ClanWarsPage() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,.15),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(0,174,255,.18),transparent_38%)]" />
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <p className="eyebrow">Соперничество OMCITE</p>
-            <h1 className="mt-2 text-3xl font-black sm:text-5xl">Клановые войны</h1>
-            <p className="mt-3 max-w-2xl text-slate-400">Создавайте открытые вызовы или приглашайте конкретную команду или гильдию. Договаривайтесь об условиях и фиксируйте состав 4×4 или 6×6.</p>
+            <p className="eyebrow">{t("clanWars.eyebrow")}</p>
+            <h1 className="mt-2 text-3xl font-black sm:text-5xl">{t("clanWars")}</h1>
+            <p className="mt-3 max-w-2xl text-slate-400">{t("clanWars.description")}</p>
           </div>
-          {user ? <Link href="/clan-wars/create" className="btn-primary"><Swords size={18} /> Создать КВ</Link> : <Link href="/auth" className="btn-secondary">Войти, чтобы создать КВ</Link>}
+          {user ? <Link href="/clan-wars/create" className="btn-primary"><Swords size={18} /> {t("clanWars.create")}</Link> : <Link href="/auth" className="btn-secondary">{t("clanWars.signInCreate")}</Link>}
         </div>
       </section>
 
       <section className="panel mb-6 flex flex-wrap gap-2 p-4">
         {([
-          ["active", "Активные"],
-          ["open", "Ищут соперника"],
-          ["agreed", "Согласованные"],
-          ["history", "История"],
-          ["all", "Все"],
+          ["active", t("clanWars.active")],
+          ["open", t("clanWars.openFilter")],
+          ["agreed", t("clanWars.agreedFilter")],
+          ["history", t("clanWars.history")],
+          ["all", t("clanWars.all")],
         ] as const).map(([value, label]) => (
           <button key={value} type="button" onClick={() => setFilter(value)} className={filter === value ? "btn-primary text-sm" : "btn-secondary text-sm"}>{label}</button>
         ))}
@@ -105,7 +104,7 @@ export default function ClanWarsPage() {
       ) : error ? (
         <div className="panel border-red-500/30 p-6 text-red-200">{error}</div>
       ) : filtered.length === 0 ? (
-        <div className="panel p-10 text-center"><Swords className="mx-auto mb-4 h-11 w-11 text-slate-600" /><h2 className="text-xl font-bold">КВ пока нет</h2><p className="mt-2 text-slate-400">Создайте первый вызов или выберите другой раздел истории.</p></div>
+        <div className="panel p-10 text-center"><Swords className="mx-auto mb-4 h-11 w-11 text-slate-600" /><h2 className="text-xl font-bold">{t("clanWars.empty")}</h2><p className="mt-2 text-slate-400">{t("clanWars.emptyText")}</p></div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           {filtered.map((clanWar) => (
@@ -117,13 +116,13 @@ export default function ClanWarsPage() {
               <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-white/10 bg-slate-950/35 p-4">
                 <OrganizationName organization={clanWar.creator_team} />
                 <Swords className="text-red-300" size={22} />
-                {clanWar.opponent_team ? <OrganizationName organization={clanWar.opponent_team} align="right" /> : <div className="text-right"><strong className="block text-emerald-300">Соперник не выбран</strong><span className="text-xs text-slate-500">Открытый вызов</span></div>}
+                {clanWar.opponent_team ? <OrganizationName organization={clanWar.opponent_team} align="right" /> : <div className="text-right"><strong className="block text-emerald-300">{t("clanWars.noOpponent")}</strong><span className="text-xs text-slate-500">{t("clanWars.openChallenge")}</span></div>}
               </div>
               {clanWar.description && <p className="mt-4 line-clamp-2 text-sm text-slate-400">{clanWar.description}</p>}
               <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-white/10 pt-4 text-xs text-slate-400">
-                <span className="flex items-center gap-2"><Clock3 size={15} className="text-cyan-300" />{clanWar.scheduled_at ? new Date(clanWar.scheduled_at).toLocaleString("ru-RU") : "Время согласовывается"}</span>
-                <span className="flex items-center gap-2"><MessageSquareText size={15} className="text-cyan-300" />Откликов: {clanWar.responses_count}</span>
-                <span className="flex items-center gap-2"><UsersRound size={15} className="text-cyan-300" />Составов: {clanWar.rosters_count}/2</span>
+                <span className="flex items-center gap-2"><Clock3 size={15} className="text-cyan-300" />{clanWar.scheduled_at ? formatDate(clanWar.scheduled_at, { dateStyle: "short", timeStyle: "short" }) : t("clanWars.timePending")}</span>
+                <span className="flex items-center gap-2"><MessageSquareText size={15} className="text-cyan-300" />{t("clanWars.responses", { count: clanWar.responses_count })}</span>
+                <span className="flex items-center gap-2"><UsersRound size={15} className="text-cyan-300" />{t("clanWars.rosters", { count: clanWar.rosters_count })}</span>
               </div>
             </Link>
           ))}
@@ -134,12 +133,13 @@ export default function ClanWarsPage() {
 }
 
 function OrganizationName({ organization, align = "left" }: { organization: Organization; align?: "left" | "right" }) {
+  const { t } = useLanguage();
   return (
     <div className={align === "right" ? "min-w-0 text-right" : "min-w-0"}>
       <strong className="flex items-center gap-1 truncate text-white" style={{ justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
         {organization.name}<ShieldCheck size={14} className="shrink-0 text-cyan-300" />
       </strong>
-      <span className="text-xs text-slate-500">{organization.type === "guild" ? "Гильдия" : "Команда"}</span>
+      <span className="text-xs text-slate-500">{organization.type === "guild" ? t("common.guild") : t("common.team")}</span>
     </div>
   );
 }

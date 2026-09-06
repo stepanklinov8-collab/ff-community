@@ -48,20 +48,14 @@ export default function BloggersPage() {
         .eq("status", "approved");
 
       if (data) {
-        const enriched = await Promise.all(
-          (data as BloggerRow[]).map(async (b) => {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("nickname, avatar_url")
-              .eq("id", b.user_id)
-              .single();
-            return {
-              ...b,
-              nickname: profile?.nickname || "—",
-              avatar_url: profile?.avatar_url || "",
-            };
-          })
-        );
+        const rows = data as BloggerRow[];
+        const { data: profiles } = await supabase.from("profiles").select("id,nickname,avatar_url").in("id", rows.map((row) => row.user_id));
+        const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+        const enriched = rows.map((blogger) => ({
+          ...blogger,
+          nickname: profileById.get(blogger.user_id)?.nickname || "—",
+          avatar_url: profileById.get(blogger.user_id)?.avatar_url || "",
+        }));
         setBloggers(enriched);
       }
 

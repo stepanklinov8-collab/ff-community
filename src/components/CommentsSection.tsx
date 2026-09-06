@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Flag, MessageCircle, Pencil, Send, Trash2, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import TranslatedText from "@/components/TranslatedText";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface CommentRow {
   id: string;
@@ -17,6 +19,7 @@ interface CommentRow {
 
 export default function CommentsSection({ eventId }: { eventId: string }) {
   const supabase = useMemo(() => createClient(), []);
+  const { t, formatDate } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [body, setBody] = useState("");
@@ -39,10 +42,10 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
     const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
     setComments((rows ?? []).map((row) => ({
       ...row,
-      nickname: profilesById.get(row.author_id)?.nickname ?? "Игрок OMCITE",
+      nickname: profilesById.get(row.author_id)?.nickname ?? t("comments.player"),
       avatar_url: profilesById.get(row.author_id)?.avatar_url ?? null,
     })));
-  }, [eventId, supabase]);
+  }, [eventId, supabase, t]);
 
   useEffect(() => {
     let active = true;
@@ -52,7 +55,7 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
   }, [loadComments, supabase]);
 
   async function submitComment() {
-    if (!user) { setMessage("Войдите, чтобы оставить комментарий"); return; }
+    if (!user) { setMessage(t("comments.signInToComment")); return; }
     const cleanBody = body.trim();
     if (!cleanBody) return;
     setBusy(true);
@@ -82,10 +85,10 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
   }
 
   async function removeComment(commentId: string) {
-    if (!window.confirm("Удалить комментарий?")) return;
+    if (!window.confirm(t("comments.deleteConfirm"))) return;
     const { error } = await supabase.from("comments").update({
       is_deleted: true,
-      body: "Комментарий удалён",
+      body: t("comments.deleted"),
       updated_at: new Date().toISOString(),
     }).eq("id", commentId);
     if (error) { setMessage(error.message); return; }
@@ -93,22 +96,22 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
   }
 
   async function reportComment(commentId: string) {
-    if (!user) { setMessage("Войдите, чтобы отправить жалобу"); return; }
-    const reason = window.prompt("Кратко укажите причину жалобы");
+    if (!user) { setMessage(t("comments.signInToReport")); return; }
+    const reason = window.prompt(t("comments.reportReason"));
     if (!reason?.trim()) return;
     const { error } = await supabase.from("comment_reports").insert({
       comment_id: commentId,
       reported_by: user.id,
       reason: reason.trim(),
     });
-    setMessage(error ? error.message : "Жалоба отправлена модератору");
+    setMessage(error ? error.message : t("comments.reported"));
   }
 
   return (
     <section className="cyber-card mt-6 p-5 md:p-7">
       <div className="flex items-center gap-3 mb-5">
         <MessageCircle className="text-cyan-300" />
-        <div><span className="section-kicker">ОБСУЖДЕНИЕ</span><h2 className="text-xl font-bold">Комментарии · {comments.length}</h2></div>
+        <div><span className="section-kicker">{t("comments.eyebrow")}</span><h2 className="text-xl font-bold">{t("comments.title", { count: comments.length })}</h2></div>
       </div>
 
       <div className="flex gap-2 items-end mb-6">
@@ -117,33 +120,33 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
           maxLength={2000}
           value={body}
           onChange={(event) => setBody(event.target.value)}
-          placeholder={user ? "Напишите комментарий..." : "Войдите, чтобы участвовать в обсуждении"}
+          placeholder={user ? t("comments.placeholder") : t("comments.signInPlaceholder")}
           disabled={!user || busy}
         />
-        <button type="button" onClick={submitComment} disabled={!user || busy || !body.trim()} className="icon-button shrink-0 disabled:opacity-40" aria-label="Отправить">
+        <button type="button" onClick={submitComment} disabled={!user || busy || !body.trim()} className="icon-button shrink-0 disabled:opacity-40" aria-label={t("comments.send")}>
           <Send size={18} />
         </button>
       </div>
 
       {message && <p className="text-sm text-cyan-200 mb-4">{message}</p>}
       <div className="space-y-3">
-        {comments.length === 0 && <p className="text-slate-500 text-sm py-5 text-center">Начните обсуждение мероприятия.</p>}
+        {comments.length === 0 && <p className="text-slate-500 text-sm py-5 text-center">{t("comments.empty")}</p>}
         {comments.map((comment) => (
           <article key={comment.id} className="rounded-xl border border-sky-900/20 bg-slate-950/35 p-4">
             <header className="flex items-center justify-between gap-3 mb-2">
               <div className="flex items-center gap-2">
                 <span className="grid size-8 place-items-center rounded-lg bg-cyan-950 text-cyan-200 font-bold">{comment.nickname[0]?.toUpperCase()}</span>
-                <div><strong className="text-sm">{comment.nickname}</strong><p className="text-xs text-slate-500">{new Date(comment.created_at).toLocaleString("ru")}{comment.is_edited ? " · изменён" : ""}</p></div>
+                <div><strong className="text-sm">{comment.nickname}</strong><p className="text-xs text-slate-500">{formatDate(comment.created_at, { dateStyle: "short", timeStyle: "short" })}{comment.is_edited ? ` · ${t("comments.edited")}` : ""}</p></div>
               </div>
               <div className="flex items-center gap-1">
                 {user?.id === comment.author_id && (
                   <>
-                    <button type="button" onClick={() => { setEditingId(comment.id); setEditingBody(comment.body); }} className="p-2 text-slate-500 hover:text-cyan-300" aria-label="Редактировать"><Pencil size={15} /></button>
-                    <button type="button" onClick={() => removeComment(comment.id)} className="p-2 text-slate-500 hover:text-red-300" aria-label="Удалить"><Trash2 size={15} /></button>
+                    <button type="button" onClick={() => { setEditingId(comment.id); setEditingBody(comment.body); }} className="p-2 text-slate-500 hover:text-cyan-300" aria-label={t("comments.edit")}><Pencil size={15} /></button>
+                    <button type="button" onClick={() => removeComment(comment.id)} className="p-2 text-slate-500 hover:text-red-300" aria-label={t("comments.delete")}><Trash2 size={15} /></button>
                   </>
                 )}
                 {user?.id !== comment.author_id && (
-                  <button type="button" onClick={() => reportComment(comment.id)} className="p-2 text-slate-500 hover:text-amber-300" aria-label="Пожаловаться"><Flag size={15} /></button>
+                  <button type="button" onClick={() => reportComment(comment.id)} className="p-2 text-slate-500 hover:text-amber-300" aria-label={t("comments.report")}><Flag size={15} /></button>
                 )}
               </div>
             </header>
@@ -153,7 +156,7 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
                 <button type="button" onClick={() => saveEdit(comment.id)} className="icon-button"><Send size={16} /></button>
                 <button type="button" onClick={() => setEditingId(null)} className="icon-button"><X size={16} /></button>
               </div>
-            ) : <p className="text-sm text-slate-200 whitespace-pre-wrap leading-6">{comment.body}</p>}
+            ) : <TranslatedText sourceType="comment" sourceId={comment.id} sourceField="body" original={comment.body} textClassName="text-sm text-slate-200 whitespace-pre-wrap leading-6" />}
           </article>
         ))}
       </div>

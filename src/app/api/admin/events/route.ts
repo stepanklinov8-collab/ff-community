@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
+import { AvatarUploadError, readImageUpload } from "@/lib/uploads/avatar";
 
 const sessionSchema = z.object({
   startTime: z.string().datetime(),
@@ -87,18 +88,15 @@ export async function POST(request: Request) {
     const payload = eventSchema.parse(JSON.parse(String(formData.get("payload") ?? "{}")));
     validateSessionTimes(payload.sessions);
     const image = formData.get("image");
-    if (image && (!(image instanceof File) || image.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(image.type))) {
-      return Response.json({ error: "Обложка: JPEG/PNG/WebP, не более 5 МБ" }, { status: 400 });
-    }
 
     const supabase = createAdminClient();
     let imageUrl = "";
     if (image instanceof File && image.size > 0) {
-      const extension = image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg";
-      uploadedPath = `${user.id}/${randomUUID()}.${extension}`;
+      const validatedImage = await readImageUpload(image, { maxBytes: 10 * 1024 * 1024, label: "Обложка" });
+      uploadedPath = `${user.id}/${randomUUID()}.${validatedImage.extension}`;
       const { error: uploadError } = await supabase.storage
         .from("event-images")
-        .upload(uploadedPath, await image.arrayBuffer(), { contentType: image.type, upsert: false });
+        .upload(uploadedPath, validatedImage.bytes, { contentType: validatedImage.mimeType, upsert: false });
       if (uploadError) throw uploadError;
       imageUrl = supabase.storage.from("event-images").getPublicUrl(uploadedPath).data.publicUrl;
     }
@@ -157,6 +155,7 @@ export async function POST(request: Request) {
       await createAdminClient().storage.from("event-images").remove([uploadedPath]);
     }
     if (error instanceof z.ZodError) return Response.json({ error: "Проверьте поля мероприятия" }, { status: 400 });
+    if (error instanceof AvatarUploadError) return Response.json({ error: error.message }, { status: 400 });
     if (error instanceof SyntaxError) return Response.json({ error: "Некорректные данные" }, { status: 400 });
     if (error instanceof Error && ["Регистрация", "Конец", "Открытие"].some((prefix) => error.message.startsWith(prefix))) {
       return Response.json({ error: error.message }, { status: 400 });

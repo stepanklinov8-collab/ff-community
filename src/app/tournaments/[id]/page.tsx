@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { authFetch } from "@/utils/api/auth-fetch";
+import TranslatedText from "@/components/TranslatedText";
 import CommentsSection from "@/components/CommentsSection";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -160,6 +161,7 @@ export default function EventPage() {
 
       const { data: profiles } = await supabase.from("profiles").select("id, nickname");
       if (profiles) setAllPlayers(profiles);
+      const nicknameById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
 
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
@@ -184,8 +186,7 @@ export default function EventPage() {
           .single();
         if (roleData) setIsAdmin(true);
 
-        const { data: ev2 } = await supabase.from("events").select("organizer_user_id").eq("id", id).single();
-        if (ev2?.organizer_user_id === user.id) setIsOrganizer(true);
+        if (ev?.organizer_user_id === user.id) setIsOrganizer(true);
 
         const { data: memberships } = await supabase
           .from("team_members")
@@ -193,29 +194,18 @@ export default function EventPage() {
           .eq("user_id", user.id);
 
         if (memberships?.length) {
-          let member: (typeof memberships)[number] | null = null;
-          for (const candidate of memberships) {
-            const { data: candidateTeam } = await supabase
-              .from("teams")
-              .select("id, type, verified")
-              .eq("id", candidate.team_id)
-              .maybeSingle();
-            if ((candidateTeam?.type === "team" || candidateTeam?.type === "guild") && candidateTeam.verified) {
-              member = candidate;
-              break;
-            }
-          }
+          const { data: membershipTeams } = await supabase.from("teams")
+            .select("id,name,type,verified").in("id", memberships.map((membership) => membership.team_id));
+          const eligibleTeamIds = new Set((membershipTeams ?? [])
+            .filter((team) => (team.type === "team" || team.type === "guild") && team.verified)
+            .map((team) => team.id));
+          const member = memberships.find((candidate) => eligibleTeamIds.has(candidate.team_id)) ?? null;
           if (!member) {
             setLoading(false);
             return;
           }
           setCanManageTeam(["leader", "senior_deputy", "deputy"].includes(member.role_in_team));
-          const { data: team } = await supabase
-            .from("teams")
-            .select("id, name, type")
-            .eq("id", member.team_id)
-            .eq("verified", true)
-            .single();
+          const team = (membershipTeams ?? []).find((candidate) => candidate.id === member.team_id) ?? null;
 
           if (team) {
             setMyTeam(team);
@@ -224,16 +214,10 @@ export default function EventPage() {
               .select("user_id, role_in_team, position")
               .eq("team_id", team.id);
             if (members) {
-              const enrichedMembers = await Promise.all(
-                members.map(async (m) => {
-                  const { data: profile } = await supabase
-                    .from("profiles")
-                    .select("nickname")
-                    .eq("id", m.user_id)
-                    .single();
-                  return { ...m, nickname: profile?.nickname || "—" };
-                })
-              );
+              const enrichedMembers = members.map((membership) => ({
+                ...membership,
+                nickname: nicknameById.get(membership.user_id) || "—",
+              }));
               setMyMembers(enrichedMembers);
               setSelectedRoster(
                 enrichedMembers
@@ -498,7 +482,9 @@ export default function EventPage() {
           <Image src={event.image_url} alt={event.title} width={900} height={500} unoptimized className="w-full max-w-md rounded-lg mt-4 object-cover" />
         )}
 
-        <p className="text-gray-300 mt-4">{event.description || "Нет описания"}</p>
+        {event.description
+          ? <TranslatedText sourceType="event" sourceId={event.id} sourceField="description" original={event.description} className="mt-4" textClassName="text-gray-300 whitespace-pre-wrap" />
+          : <p className="text-gray-300 mt-4">Нет описания</p>}
 
         {event.stream_url && (
           <a href={event.stream_url} target="_blank" className="inline-block mt-3 px-4 py-2 bg-red-600 rounded hover:bg-red-700">

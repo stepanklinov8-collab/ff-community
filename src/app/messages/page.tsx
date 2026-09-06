@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import { useLanguage } from "@/components/LanguageProvider";
+import TranslatedText from "@/components/TranslatedText";
 
 interface Message {
   id: string;
@@ -14,6 +16,7 @@ interface Message {
 
 export default function MessagesPage() {
   const supabase = useMemo(() => createClient(), []);
+  const { t, formatDate } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Message | null>(null);
@@ -43,14 +46,14 @@ export default function MessagesPage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
+  if (loading) return <div className="min-h-screen p-6"><p>{t("common.loading")}</p></div>;
 
   return (
     <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">Сообщения</h1>
+      <h1 className="text-3xl font-bold mb-6 text-blue-500">{t("messages")}</h1>
 
       {messages.length === 0 ? (
-        <p className="text-gray-400">Нет сообщений.</p>
+        <p className="text-gray-400">{t("messages.empty")}</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -61,24 +64,24 @@ export default function MessagesPage() {
                 className={"w-full text-left p-3 rounded " + (msg.is_read ? "bg-gray-800" : "bg-gray-700 ring-1 ring-blue-500")}
               >
                 <p className="font-semibold">{msg.subject}</p>
-                <p className="text-sm text-gray-400">{new Date(msg.created_at).toLocaleString("ru")}</p>
+                <p className="text-sm text-gray-400">{formatDate(msg.created_at, { dateStyle: "short", timeStyle: "short" })}</p>
               </button>
             ))}
           </div>
           <div className="bg-gray-800 p-4 rounded">
             {selected ? (
               <>
-                <h2 className="text-xl font-semibold mb-2">{selected.subject}</h2>
-                <p className="text-gray-300 whitespace-pre-wrap">{selected.body}</p>
+                <TranslatedText sourceType="message" sourceId={selected.id} sourceField="subject" original={selected.subject} textClassName="text-xl font-semibold mb-2" />
+                <TranslatedText sourceType="message" sourceId={selected.id} sourceField="body" original={selected.body} textClassName="text-gray-300 whitespace-pre-wrap" />
               </>
             ) : (
-              <p className="text-gray-400">Выберите сообщение слева.</p>
+              <p className="text-gray-400">{t("messages.choose")}</p>
             )}
           </div>
         </div>
       )}
 
-      <Link href="/" className="block mt-6 text-blue-400 hover:underline">← На главную</Link>
+      <Link href="/" className="block mt-6 text-blue-400 hover:underline">{t("messages.back")}</Link>
     </div>
   );
 }

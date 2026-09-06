@@ -6,6 +6,7 @@ import { Check, Clock3, MessageCircle, Send, ShieldCheck, Swords, UsersRound, X 
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
+import TranslatedText from "@/components/TranslatedText";
 import { createClient } from "@/utils/supabase/client";
 
 interface Organization {
@@ -245,8 +246,8 @@ export default function ClanWarDetailsPage() {
           <div className="rounded-xl border border-white/10 bg-white/[.025] p-4"><p className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500"><Clock3 size={15} /> Время</p><p className="mt-2 font-semibold">{clanWar.scheduled_at ? new Date(clanWar.scheduled_at).toLocaleString("ru-RU") : "Согласовывается в комментариях"}</p></div>
           <div className="rounded-xl border border-white/10 bg-white/[.025] p-4"><p className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500"><UsersRound size={15} /> Состав</p><p className="mt-2 font-semibold">По {clanWar.format} игроков с каждой стороны</p></div>
         </div>
-        {clanWar.description && <div className="mt-6"><h2 className="font-bold">Описание</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{clanWar.description}</p></div>}
-        {clanWar.rules && <div className="mt-6"><h2 className="font-bold">Правила</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{clanWar.rules}</p></div>}
+        {clanWar.description && <div className="mt-6"><h2 className="font-bold">Описание</h2><TranslatedText sourceType="clan_war" sourceId={clanWar.id} sourceField="description" original={clanWar.description} className="mt-2" textClassName="whitespace-pre-wrap text-sm leading-6 text-slate-300" /></div>}
+        {clanWar.rules && <div className="mt-6"><h2 className="font-bold">Правила</h2><TranslatedText sourceType="clan_war" sourceId={clanWar.id} sourceField="rules" original={clanWar.rules} className="mt-2" textClassName="whitespace-pre-wrap text-sm leading-6 text-slate-300" /></div>}
         {clanWar.status === "cancelled" && <p className="mt-6 rounded-xl border border-red-500/30 bg-red-950/25 p-4 text-red-200">Причина отмены: {clanWar.cancellation_reason || "не указана"}</p>}
 
         {message && <p className="mt-5 rounded-xl border border-cyan-800/40 bg-cyan-950/25 p-3 text-sm text-cyan-100">{message}</p>}

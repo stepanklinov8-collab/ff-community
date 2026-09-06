@@ -17,7 +17,7 @@ interface Registration {
   roster: string[];
 }
 
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const maxFileSize = 5 * 1024 * 1024;
 
 export default function AddEventStatsPage() {
@@ -80,7 +80,7 @@ export default function AddEventStatsPage() {
     }
     const invalidType = files.find((file) => !allowedTypes.has(file.type));
     if (invalidType) {
-      setMessage("Допустимы только JPEG, PNG и WebP.");
+      setMessage("Допустимы только JPEG, PNG, WebP и GIF.");
       return;
     }
     const oversized = files.find((file) => file.size > maxFileSize);
@@ -157,7 +157,7 @@ export default function AddEventStatsPage() {
           <input
             className="mt-2"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             multiple
             onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}
           />

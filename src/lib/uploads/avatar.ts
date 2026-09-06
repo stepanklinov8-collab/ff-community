@@ -4,6 +4,7 @@ const FORMATS = {
   jpeg: { mimeType: "image/jpeg", extension: "jpg" },
   png: { mimeType: "image/png", extension: "png" },
   webp: { mimeType: "image/webp", extension: "webp" },
+  gif: { mimeType: "image/gif", extension: "gif" },
 } as const;
 
 export class AvatarUploadError extends Error {}
@@ -23,24 +24,46 @@ function isWebp(bytes: Uint8Array) {
     && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
 }
 
-export async function readAvatarUpload(value: FormDataEntryValue | null) {
+function isGif(bytes: Uint8Array) {
+  if (bytes.length < 6) return false;
+  const signature = String.fromCharCode(...bytes.slice(0, 6));
+  return signature === "GIF87a" || signature === "GIF89a";
+}
+
+export async function readImageUpload(
+  value: FormDataEntryValue | null,
+  options: { maxBytes: number; label?: string },
+) {
+  const label = options.label ?? "Изображение";
   if (!(value instanceof File) || value.size === 0) {
-    throw new AvatarUploadError("Выберите изображение для загрузки");
+    throw new AvatarUploadError(`Выберите ${label.toLocaleLowerCase("ru-RU")} для загрузки`);
   }
-  if (value.size > MAX_AVATAR_BYTES) {
-    throw new AvatarUploadError("Изображение должно быть не больше 5 МБ");
+  if (value.size > options.maxBytes) {
+    throw new AvatarUploadError(`${label} должно быть не больше ${Math.floor(options.maxBytes / 1024 / 1024)} МБ`);
   }
 
   const bytes = new Uint8Array(await value.arrayBuffer());
-  const format = isJpeg(bytes) ? FORMATS.jpeg : isPng(bytes) ? FORMATS.png : isWebp(bytes) ? FORMATS.webp : null;
+  const format = isJpeg(bytes)
+    ? FORMATS.jpeg
+    : isPng(bytes)
+      ? FORMATS.png
+      : isWebp(bytes)
+        ? FORMATS.webp
+        : isGif(bytes)
+          ? FORMATS.gif
+          : null;
   if (!format) {
-    throw new AvatarUploadError("Разрешены только настоящие JPEG, PNG и WebP изображения");
+    throw new AvatarUploadError("Разрешены только настоящие JPEG, PNG, WebP и GIF изображения");
   }
   if (value.type && value.type !== format.mimeType && !(format.mimeType === "image/jpeg" && value.type === "image/jpg")) {
     throw new AvatarUploadError("Расширение и содержимое изображения не совпадают");
   }
 
   return { bytes, ...format };
+}
+
+export async function readAvatarUpload(value: FormDataEntryValue | null) {
+  return readImageUpload(value, { maxBytes: MAX_AVATAR_BYTES });
 }
 
 export function storagePathFromPublicUrl(publicUrl: string | null | undefined, bucket: string) {

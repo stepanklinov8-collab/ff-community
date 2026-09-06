@@ -16,11 +16,15 @@ import {
   UsersRound,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { useLanguage } from "@/components/LanguageProvider";
+import type { MessageKey } from "@/i18n/messages";
 
 interface ActivityRow {
   id: string;
   activity_type: string | null;
   description: string | null;
+  message_key: string | null;
+  message_params: Record<string, string> | null;
   created_at: string;
   event_id: string | null;
   team_id: string | null;
@@ -52,17 +56,9 @@ interface SearchResult {
   type: "team" | "guild";
 }
 
-const typeLabels: Record<string, string> = {
-  training: "Тренировка",
-  bo: "БО",
-  kb: "КБ",
-  tournament: "Турнир",
-  kv: "КВ",
-  solo: "Соло",
-};
-
 export default function Home() {
   const supabase = useMemo(() => createClient(), []);
+  const { t, formatDate } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -78,7 +74,7 @@ export default function Home() {
       const [activityResult, publicEventsResult, teamsCount, playersCount] = await Promise.all([
         supabase
           .from("activity_log")
-          .select("id, activity_type, description, created_at, event_id, team_id")
+          .select("id, activity_type, description, message_key, message_params, created_at, event_id, team_id")
           .order("created_at", { ascending: false })
           .limit(6),
         supabase
@@ -116,7 +112,7 @@ export default function Home() {
       setUpcomingEvents(rows.map((row) => ({
         eventId: row.event_id,
         sessionId: row.id,
-        title: eventById.get(row.event_id)?.title ?? "Мероприятие OMCITE",
+        title: eventById.get(row.event_id)?.title ?? "OMCITE",
         type: eventById.get(row.event_id)?.type ?? "training",
         startTime: row.start_time,
       })));
@@ -150,6 +146,28 @@ export default function Home() {
     setShowResults(true);
   }
 
+  const typeLabels: Record<string, string> = {
+    training: t("event.training"),
+    bo: "БО",
+    kb: "КБ",
+    tournament: t("event.tournament"),
+    kv: "КВ",
+    solo: t("event.solo"),
+  };
+
+  const activityText = (activity: ActivityRow) => {
+    if (activity.message_key && activity.message_key in ({
+      "activity.teamCreated.team": true,
+      "activity.teamCreated.guild": true,
+      "activity.teamRegistered": true,
+      "activity.playerRegistered": true,
+      "activity.rosterUpdated": true,
+    })) {
+      return t(activity.message_key as MessageKey, activity.message_params ?? undefined);
+    }
+    return activity.description ?? t("home.newCommunityEvent");
+  };
+
   return (
     <div className="home-page">
       <section className="home-hero cyber-card">
@@ -163,32 +181,30 @@ export default function Home() {
         />
         <div className="hero-shade" />
         <div className="hero-content">
-          <span className="hero-eyebrow"><Sparkles size={14} /> OMCITE FREE FIRE COMMUNITY</span>
-          <h1>Твоя команда.<br /><span>Твоя арена.</span></h1>
-          <p>
-            Турниры, тренировки, рейтинги и история игроков — в одной платформе для сообщества OMCITE.
-          </p>
+          <span className="hero-eyebrow"><Sparkles size={14} /> {t("home.heroEyebrow")}</span>
+          <h1>{t("home.heroTitle")}<br /><span>{t("home.heroAccent")}</span></h1>
+          <p>{t("home.heroText")}</p>
           <div className="hero-actions">
             <Link href="/tournaments" className="primary-button">
-              Найти турнир <ArrowRight size={18} />
+              {t("home.findTournament")} <ArrowRight size={18} />
             </Link>
             <Link href="/teams" className="secondary-button">
-              Команды и гильдии
+              {t("teams")}
             </Link>
           </div>
         </div>
-        <div className="hero-stats" aria-label="Статистика сообщества">
-          <div><strong>{stats.players}</strong><span>игроков</span></div>
-          <div><strong>{stats.teams}</strong><span>команд</span></div>
-          <div><strong>{stats.sessions}</strong><span>ближайших игр</span></div>
+        <div className="hero-stats" aria-label={t("home.communityStats")}>
+          <div><strong>{stats.players}</strong><span>{t("home.players")}</span></div>
+          <div><strong>{stats.teams}</strong><span>{t("home.teamsCount")}</span></div>
+          <div><strong>{stats.sessions}</strong><span>{t("home.upcomingGames")}</span></div>
         </div>
       </section>
 
       <section className="global-search">
         <Search size={20} />
         <input
-          aria-label="Поиск команд и гильдий"
-          placeholder="Найти команду или гильдию..."
+          aria-label={t("home.searchLabel")}
+          placeholder={t("home.searchPlaceholder")}
           value={searchQuery}
           onChange={(event) => handleSearch(event.target.value)}
           onFocus={() => searchResults.length > 0 && setShowResults(true)}
@@ -199,10 +215,10 @@ export default function Home() {
             {searchResults.length ? searchResults.map((result) => (
               <Link key={result.id} href={`/teams/${result.id}`}>
                 <UsersRound size={18} />
-                <span>{result.name}<small>{result.type === "guild" ? "Гильдия" : "Команда"}</small></span>
+                <span>{result.name}<small>{result.type === "guild" ? t("common.guild") : t("common.team")}</small></span>
                 <ChevronRight size={17} />
               </Link>
-            )) : <p>Ничего не найдено</p>}
+            )) : <p>{t("common.noResults")}</p>}
           </div>
         )}
       </section>
@@ -211,25 +227,25 @@ export default function Home() {
         <section className="schedule-panel cyber-card">
           <div className="section-heading-row">
             <div>
-              <span className="section-kicker">КАЛЕНДАРЬ</span>
-              <h2 className="section-title">Ближайшие мероприятия</h2>
+              <span className="section-kicker">{t("home.calendar")}</span>
+              <h2 className="section-title">{t("home.upcomingEvents")}</h2>
             </div>
-            <Link href="/tournaments" className="text-link">Все мероприятия <ArrowRight size={16} /></Link>
+            <Link href="/tournaments" className="text-link">{t("home.allEvents")} <ArrowRight size={16} /></Link>
           </div>
 
           <div className="event-list">
             {upcomingEvents.length === 0 ? (
-              <div className="empty-state"><CalendarDays /><p>Расписание обновляется. Загляните немного позже.</p></div>
+              <div className="empty-state"><CalendarDays /><p>{t("home.scheduleEmpty")}</p></div>
             ) : upcomingEvents.map((event) => (
               <Link key={event.sessionId} href={`/tournaments/${event.eventId}`} className="event-row">
                 <div className="event-date">
-                  <strong>{new Date(event.startTime).toLocaleDateString("ru", { day: "2-digit" })}</strong>
-                  <span>{new Date(event.startTime).toLocaleDateString("ru", { month: "short" })}</span>
+                  <strong>{formatDate(event.startTime, { day: "2-digit" })}</strong>
+                  <span>{formatDate(event.startTime, { month: "short" })}</span>
                 </div>
                 <div className="event-main">
                   <span className={`event-type type-${event.type}`}>{typeLabels[event.type] ?? event.type}</span>
                   <h3>{event.title}</h3>
-                  <p>{new Date(event.startTime).toLocaleString("ru", { hour: "2-digit", minute: "2-digit", weekday: "short" })}</p>
+                  <p>{formatDate(event.startTime, { hour: "2-digit", minute: "2-digit", weekday: "short" })}</p>
                 </div>
                 <ChevronRight className="event-arrow" />
               </Link>
@@ -238,36 +254,36 @@ export default function Home() {
         </section>
 
         <aside className="quick-panel cyber-card">
-          <span className="section-kicker">НАЧАТЬ ИГРУ</span>
-          <h2 className="section-title">Собери свою команду</h2>
-          <p>Создайте команду или гильдию, пройдите верификацию и участвуйте в мероприятиях OMCITE.</p>
+          <span className="section-kicker">{t("home.startGame")}</span>
+          <h2 className="section-title">{t("home.buildTeam")}</h2>
+          <p>{t("home.buildTeamText")}</p>
           <div className="quick-steps">
-            <div><span>01</span><UsersRound /><p>Создайте состав</p></div>
-            <div><span>02</span><ShieldCheck /><p>Пройдите проверку</p></div>
-            <div><span>03</span><Trophy /><p>Запишитесь на турнир</p></div>
+            <div><span>01</span><UsersRound /><p>{t("home.createRoster")}</p></div>
+            <div><span>02</span><ShieldCheck /><p>{t("home.passVerification")}</p></div>
+            <div><span>03</span><Trophy /><p>{t("home.joinTournament")}</p></div>
           </div>
-          <Link href="/teams/create" className="primary-button">Создать команду <ArrowRight size={18} /></Link>
+          <Link href="/teams/create" className="primary-button">{t("home.createTeam")} <ArrowRight size={18} /></Link>
         </aside>
       </div>
 
       <section className="features-strip">
         <Link href="/rating" className="feature-card cyber-card">
-          <Sparkles /><span><strong>Рейтинг игроков</strong><small>Статистика лучших участников</small></span><ArrowRight />
+          <Sparkles /><span><strong>{t("rating")}</strong><small>{t("home.playerRatingText")}</small></span><ArrowRight />
         </Link>
         <Link href="/teams-stats" className="feature-card cyber-card">
-          <Gamepad2 /><span><strong>Рейтинг команд</strong><small>Трофеи, матчи и составы</small></span><ArrowRight />
+          <Gamepad2 /><span><strong>{t("teamStats")}</strong><small>{t("home.teamRatingText")}</small></span><ArrowRight />
         </Link>
         <Link href="/tournaments/propose" className="feature-card cyber-card">
-          <Swords /><span><strong>Предложить турнир</strong><small>Создайте событие для сообщества</small></span><ArrowRight />
+          <Swords /><span><strong>{t("home.proposeTournament")}</strong><small>{t("home.proposeTournamentText")}</small></span><ArrowRight />
         </Link>
       </section>
 
       <section className="activity-section cyber-card">
         <div className="section-heading-row">
-          <div><span className="section-kicker">СООБЩЕСТВО</span><h2 className="section-title">Последние события</h2></div>
+          <div><span className="section-kicker">{t("home.community")}</span><h2 className="section-title">{t("home.latestEvents")}</h2></div>
         </div>
         <div className="activity-list">
-          {activities.length === 0 ? <p className="muted-copy">Лента активности пока пуста.</p> : activities.map((activity) => {
+          {activities.length === 0 ? <p className="muted-copy">{t("home.activityEmpty")}</p> : activities.map((activity) => {
             const href = activity.event_id
               ? `/tournaments/${activity.event_id}`
               : activity.team_id
@@ -276,8 +292,8 @@ export default function Home() {
             const content = (
               <>
                 <span className="activity-dot" />
-                <p>{activity.description ?? "Новое событие в сообществе"}</p>
-                <time>{new Date(activity.created_at).toLocaleString("ru")}</time>
+                <p>{activityText(activity)}</p>
+                <time>{formatDate(activity.created_at, { dateStyle: "short", timeStyle: "medium" })}</time>
               </>
             );
             return href

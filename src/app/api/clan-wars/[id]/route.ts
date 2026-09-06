@@ -320,7 +320,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         const { error } = await supabase.from("clan_wars").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", clanWarId).eq("status", "agreed");
         if (error) throw error;
         const { data: markets } = await supabase.from("betting_markets").select("id,subject_team_id,market_type,selection_value,line").eq("clan_war_id", clanWarId).in("status", ["open", "locked"]);
-        for (const market of markets ?? []) {
+          for (const market of markets ?? []) {
           const creatorSubject = market.subject_team_id === creator.id;
           const ownScore = creatorSubject ? payload.creatorScore : payload.opponentScore;
           const rivalScore = creatorSubject ? payload.opponentScore : payload.creatorScore;
@@ -331,7 +331,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             : market.market_type === "kills_under" ? kills < Number(market.line)
             : market.market_type === "exact_score" ? market.selection_value === `${ownScore}:${rivalScore}`
             : false;
-          await supabase.rpc("settle_betting_market", { p_market_id: market.id, p_outcome: won ? "won" : "lost", p_actor: user.id });
+            const { error: settleError } = await supabase.rpc("settle_betting_market", { p_market_id: market.id, p_outcome: won ? "won" : "lost", p_actor: user.id });
+            if (settleError) throw settleError;
         }
       } else {
         if (!["open", "pending", "agreed"].includes(clanWar.status)) throw new ClanWarRequestError("Это КВ уже завершено", 409);
@@ -340,9 +341,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           cancelled_at: new Date().toISOString(),
           cancelled_by: user.id,
           cancellation_reason: payload.reason || "КВ отменено участником",
-        }).eq("id", clanWarId).in("status", ["open", "pending", "agreed"]);
-        if (error) throw error;
-      }
+          }).eq("id", clanWarId).in("status", ["open", "pending", "agreed"]);
+          if (error) throw error;
+          const { data: markets, error: marketsError } = await supabase.from("betting_markets")
+            .select("id").eq("clan_war_id", clanWarId).in("status", ["open", "locked"]);
+          if (marketsError) throw marketsError;
+          for (const market of markets ?? []) {
+            const { error: settleError } = await supabase.rpc("settle_betting_market", {
+              p_market_id: market.id,
+              p_outcome: "void",
+              p_actor: user.id,
+            });
+            if (settleError) throw settleError;
+          }
+        }
 
       const recipientTeamIds = [...new Set([clanWar.creator_team_id, clanWar.opponent_team_id].filter(Boolean))] as string[];
       await Promise.all(recipientTeamIds.map((teamId) => notifyOrganizationManagers(supabase, teamId, {

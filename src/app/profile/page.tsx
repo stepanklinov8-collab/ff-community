@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { createClient } from "@/utils/supabase/client";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface Team {
   id: string;
@@ -60,7 +61,7 @@ interface EditableProfile {
   locale: "ru" | "kk" | "ky";
 }
 
-const allowedAvatarTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedAvatarTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 function normalizeTeam(value: MembershipRow["teams"]) {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -80,6 +81,7 @@ function roleLabel(role: string, type: Team["type"]) {
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
+  const { setLocale } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -148,6 +150,7 @@ export default function ProfilePage() {
         if (profileResponse.ok) {
           const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number; balance: number } };
           setProfileForm(profilePayload.profile);
+          setLocale(profilePayload.profile.locale);
           setProfileMeta({ level: profilePayload.profile.level, reputation: profilePayload.profile.reputation, reputationEvents: profilePayload.profile.reputationEvents, rating: profilePayload.profile.rating, balance: profilePayload.profile.balance });
           if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
         }
@@ -180,7 +183,7 @@ export default function ProfilePage() {
       setLoading(false);
     };
     void init();
-  }, [supabase]);
+  }, [setLocale, supabase]);
 
   const saveProfile = async () => {
     setSavingProfile(true);
@@ -197,6 +200,7 @@ export default function ProfilePage() {
         ...current,
         user_metadata: { ...current.user_metadata, nickname: profileForm.nickname, game_id: profileForm.gameId, locale: profileForm.locale },
       } : current);
+      setLocale(profileForm.locale);
       setEditingProfile(false);
       setMessage("Профиль сохранён.");
     } catch (saveError) {
@@ -209,7 +213,7 @@ export default function ProfilePage() {
   const uploadAvatar = async () => {
     if (!avatarFile || !user) return;
     if (!allowedAvatarTypes.has(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
-      setMessage("Аватар должен быть JPEG, PNG или WebP размером до 5 МБ.");
+      setMessage("Аватар должен быть JPEG, PNG, WebP или GIF размером до 5 МБ.");
       return;
     }
 
@@ -268,7 +272,7 @@ export default function ProfilePage() {
             <button type="button" onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
             <label className="btn-secondary cursor-pointer text-sm">
               Выбрать аватар
-              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
             </label>
             <p className="max-w-xs text-right text-xs text-slate-500">JPEG, PNG или WebP, до 5 МБ</p>
             {avatarFile && <button type="button" onClick={uploadAvatar} disabled={uploading} className="btn-secondary text-sm">{uploading ? "Загрузка…" : "Обновить аватар"}</button>}

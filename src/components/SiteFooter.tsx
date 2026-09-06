@@ -1,17 +1,21 @@
+"use client";
+
 import Link from "next/link";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export default function SiteFooter() {
+  const { t } = useLanguage();
   return (
     <footer className="site-footer">
       <div>
         <strong>OMCITE ARENA</strong>
-        <p>Турниры и сообщество Free Fire</p>
+        <p>{t("footer.tagline")}</p>
       </div>
-      <nav aria-label="Юридическая информация">
-        <Link href="/rules">Правила</Link>
-        <Link href="/privacy">Конфиденциальность</Link>
-        <Link href="/terms">Условия использования</Link>
-        <Link href="/contacts">Контакты</Link>
+      <nav aria-label={t("common.legal")}>
+        <Link href="/rules">{t("footer.rules")}</Link>
+        <Link href="/privacy">{t("footer.privacy")}</Link>
+        <Link href="/terms">{t("footer.terms")}</Link>
+        <Link href="/contacts">{t("contacts")}</Link>
       </nav>
     </footer>
   );

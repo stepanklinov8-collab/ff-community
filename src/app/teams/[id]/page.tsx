@@ -130,9 +130,14 @@ export default function TeamPage() {
       .select("id, user_id, role_in_team, position")
       .eq("team_id", id);
     if (data) {
-      const enriched = await Promise.all(data.map(async (m) => {
-        const { data: profile } = await supabase.from("profiles").select("nickname").eq("id", m.user_id).single();
-        return { ...m, nickname: profile?.nickname || "—", position: m.position || "main" };
+      const { data: profiles } = data.length
+        ? await supabase.from("profiles").select("id,nickname").in("id", data.map((member) => member.user_id))
+        : { data: [] as { id: string; nickname: string | null }[] };
+      const nicknameById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
+      const enriched = data.map((member) => ({
+        ...member,
+        nickname: nicknameById.get(member.user_id) || "—",
+        position: member.position || "main",
       }));
       setMembers(enriched);
       return enriched;
@@ -146,10 +151,11 @@ export default function TeamPage() {
       .eq("team_id", id)
       .eq("status", "pending");
     if (data) {
-      const enriched = await Promise.all(data.map(async (r) => {
-        const { data: profile } = await supabase.from("profiles").select("nickname").eq("id", r.user_id).single();
-        return { ...r, nickname: profile?.nickname || "—" };
-      }));
+      const { data: profiles } = data.length
+        ? await supabase.from("profiles").select("id,nickname").in("id", data.map((request) => request.user_id))
+        : { data: [] as { id: string; nickname: string | null }[] };
+      const nicknameById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
+      const enriched = data.map((request) => ({ ...request, nickname: nicknameById.get(request.user_id) || "—" }));
       setJoinRequests(enriched);
     }
   }, [id, supabase]);
@@ -256,8 +262,8 @@ export default function TeamPage() {
 
   const uploadAvatar = async () => {
     if (!avatarFile || !team) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
-      setInviteMessage("Эмблема должна быть JPEG, PNG или WebP размером до 5 МБ.");
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
+      setInviteMessage("Эмблема должна быть JPEG, PNG, WebP или GIF размером до 5 МБ.");
       return;
     }
     setUploadingAvatar(true);
@@ -398,7 +404,7 @@ export default function TeamPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <label className="cursor-pointer rounded bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600">
                       Выбрать эмблему
-                      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+                      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
                     </label>
                     {avatarFile && <button onClick={uploadAvatar} disabled={uploadingAvatar} className="rounded bg-blue-500 px-3 py-1 text-sm disabled:opacity-50">{uploadingAvatar ? "Загрузка…" : "Сохранить"}</button>}
                     <span className="text-xs text-slate-400">до 5 МБ</span>

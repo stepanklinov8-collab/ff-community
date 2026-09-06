@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 import Image from "next/image";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface Player {
   id: string;
@@ -20,6 +21,7 @@ interface OrganizationRating { id: string; name: string; type: "team" | "guild";
 
 export default function RatingPage() {
   const supabase = useMemo(() => createClient(), []);
+  const { t } = useLanguage();
   const [players, setPlayers] = useState<Player[]>([]);
   const [filter, setFilter] = useState<string>("rating");
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,14 +30,12 @@ export default function RatingPage() {
 
   useEffect(() => {
     const fetchPlayers = async () => {
-      // Получаем всех пользователей из profiles
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, nickname, game_id, avatar_url, main_rating");
-      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
+      const [{ data: profiles }, { data: mainEvents }, { data: organizationRows }] = await Promise.all([
+        supabase.from("profiles").select("id, nickname, game_id, avatar_url, main_rating"),
+        supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]),
+        supabase.from("teams").select("id,name,type,main_rating,avatar_url").eq("verified", true).order("main_rating", { ascending: false }),
+      ]);
       const mainEventIds = (mainEvents ?? []).map((event) => event.id);
-      const { data: organizationRows } = await supabase.from("teams")
-        .select("id,name,type,main_rating,avatar_url").eq("verified", true).order("main_rating", { ascending: false });
       setOrganizations((organizationRows ?? []).map((row) => ({ ...row, main_rating: Number(row.main_rating ?? 1) })) as OrganizationRating[]);
 
       if (!profiles) {
@@ -43,18 +43,20 @@ export default function RatingPage() {
         return;
       }
 
-      // Для каждого пользователя получаем подтверждённую статистику
-      const enriched = await Promise.all(
-        profiles.map(async (p) => {
-          const { data: stats } = await supabase
-            .from("player_stats")
-            .select("kills, matches_played")
-            .eq("user_id", p.id)
-            .eq("status", "approved")
-            .in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]);
-
-          const kills = stats?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
-          const matches = stats?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
+      const { data: stats } = await supabase.from("player_stats")
+        .select("user_id,kills,matches_played")
+        .in("user_id", profiles.map((profile) => profile.id))
+        .eq("status", "approved")
+        .in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]);
+      const totals = new Map<string, { kills: number; matches: number }>();
+      for (const row of stats ?? []) {
+        const current = totals.get(row.user_id) ?? { kills: 0, matches: 0 };
+        totals.set(row.user_id, { kills: current.kills + (row.kills || 0), matches: current.matches + (row.matches_played || 0) });
+      }
+      const enriched = profiles.map((p) => {
+          const total = totals.get(p.id) ?? { kills: 0, matches: 0 };
+          const kills = total.kills;
+          const matches = total.matches;
           const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
           return {
             id: p.id,
@@ -66,8 +68,7 @@ export default function RatingPage() {
             ratio,
             rating: Number(p.main_rating ?? 1),
           };
-        })
-      );
+        });
 
       setPlayers(enriched);
       setLoading(false);
@@ -87,13 +88,13 @@ export default function RatingPage() {
 
   return (
     <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">Рейтинг игроков</h1>
+      <h1 className="text-3xl font-bold mb-6 text-blue-500">{t("rating.playersTitle")}</h1>
 
       {/* Поиск и фильтры */}
       <div className="flex gap-4 mb-6 flex-wrap">
         <input
           className="p-2 text-black rounded w-full max-w-xs"
-          placeholder="Поиск игрока..."
+          placeholder={t("rating.searchPlayer")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -102,33 +103,33 @@ export default function RatingPage() {
             onClick={() => setFilter("rating")}
             className={"px-3 py-1 rounded text-sm " + (filter === "rating" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Рейтинг
+            {t("teams.rating")}
           </button>
           <button
             onClick={() => setFilter("ratio")}
             className={"px-3 py-1 rounded text-sm " + (filter === "ratio" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            У/С
+            {t("rating.ratio")}
           </button>
           <button
             onClick={() => setFilter("kills")}
             className={"px-3 py-1 rounded text-sm " + (filter === "kills" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Киллы
+            {t("rating.kills")}
           </button>
           <button
             onClick={() => setFilter("matches")}
             className={"px-3 py-1 rounded text-sm " + (filter === "matches" ? "bg-blue-500" : "bg-gray-700 hover:bg-gray-600")}
           >
-            Матчи
+            {t("rating.matches")}
           </button>
         </div>
       </div>
 
       {loading ? (
-        <p>Загрузка...</p>
+        <p>{t("common.loading")}</p>
       ) : filteredPlayers.length === 0 ? (
-        <p className="text-gray-400">Игроки не найдены.</p>
+        <p className="text-gray-400">{t("rating.notFound")}</p>
       ) : (
         <div className="space-y-2">
           {filteredPlayers.map((p) => (
@@ -139,7 +140,7 @@ export default function RatingPage() {
             >
               <div className="w-10 h-10 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                 {p.avatar_url ? (
-                  <Image src={p.avatar_url} alt={`Аватар ${p.nickname}`} width={40} height={40} unoptimized className="w-full h-full object-cover" />
+                  <Image src={p.avatar_url} alt={t("common.avatarOf", { name: p.nickname })} width={40} height={40} unoptimized className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
                     {p.nickname?.[0]?.toUpperCase() || "?"}
@@ -151,8 +152,8 @@ export default function RatingPage() {
                 <p className="text-xs text-gray-400">ID: {p.game_id}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-300">У/С: {p.ratio}</p>
-                <p className="text-xs text-yellow-400">Рейтинг: {p.rating.toFixed(0)}</p>
+                <p className="text-sm text-gray-300">{t("rating.ratio")}: {p.ratio}</p>
+                <p className="text-xs text-yellow-400">{t("rating.value", { value: p.rating.toFixed(0) })}</p>
               </div>
             </Link>
           ))}
@@ -160,9 +161,9 @@ export default function RatingPage() {
       )}
 
       <section className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold">Рейтинг команд и гильдий</h2>
-        <p className="mb-4 text-sm text-slate-400">60% — четыре лучших игрока, 30% — результаты, 10% — достижения.</p>
-        <div className="grid gap-3 md:grid-cols-2">{organizations.map((organization, index) => <Link key={organization.id} href={`/teams/${organization.id}`} className="cyber-card flex items-center gap-3 p-4"><span className="w-8 text-lg font-black text-slate-500">#{index + 1}</span><div className="flex-1"><strong className="text-cyan-300">{organization.name}</strong><p className="text-xs text-slate-500">{organization.type === "guild" ? "Гильдия" : "Команда"}</p></div><span className="text-2xl font-black">{organization.main_rating.toFixed(0)}</span></Link>)}</div>
+        <h2 className="mb-4 text-2xl font-bold">{t("rating.organizations")}</h2>
+        <p className="mb-4 text-sm text-slate-400">{t("rating.formula")}</p>
+        <div className="grid gap-3 md:grid-cols-2">{organizations.map((organization, index) => <Link key={organization.id} href={`/teams/${organization.id}`} className="cyber-card flex items-center gap-3 p-4"><span className="w-8 text-lg font-black text-slate-500">#{index + 1}</span><div className="flex-1"><strong className="text-cyan-300">{organization.name}</strong><p className="text-xs text-slate-500">{organization.type === "guild" ? t("common.guild") : t("common.team")}</p></div><span className="text-2xl font-black">{organization.main_rating.toFixed(0)}</span></Link>)}</div>
       </section>
     </div>
   );

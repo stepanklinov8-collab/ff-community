@@ -73,8 +73,8 @@ export default function CreateEventPage() {
   const handleCreate = async () => {
     if (!title.trim()) { setMessage("Введите название."); return; }
     if (sessions.some((session) => !session.startTime)) { setMessage("Укажите начало каждой сессии."); return; }
-    if (imageFile && (imageFile.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(imageFile.type))) {
-      setMessage("Обложка: JPEG/PNG/WebP, не более 5 МБ.");
+    if (imageFile && (imageFile.size > 10 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(imageFile.type))) {
+      setMessage("Обложка: JPEG/PNG/WebP/GIF, не более 10 МБ.");
       return;
     }
 
@@ -150,7 +150,7 @@ export default function CreateEventPage() {
           <label className="text-sm text-slate-300">Ссылка на трансляцию<input className="mt-2" type="url" value={streamUrl} onChange={(event) => setStreamUrl(event.target.value)} placeholder="https://..." /></label>
           <label className="text-sm text-slate-300">Ссылка для оплаты<input className="mt-2" type="url" value={paymentUrl} onChange={(event) => setPaymentUrl(event.target.value)} placeholder="https://..." /></label>
           <label className="text-sm text-slate-300">Дата публикации<input className="mt-2" type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label>
-          <label className="text-sm text-slate-300">Обложка<input className="mt-2" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
+          <label className="text-sm text-slate-300">Обложка<input className="mt-2" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={commentsEnabled} onChange={(event) => setCommentsEnabled(event.target.checked)} /> Разрешить комментарии</label>
         <label className="flex items-center gap-2 text-sm text-slate-300">

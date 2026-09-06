@@ -2,15 +2,10 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
+import { AvatarUploadError, readImageUpload } from "@/lib/uploads/avatar";
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const EXTENSIONS: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
 
 const fieldsSchema = z.object({
   eventId: z.string().uuid(),
@@ -46,14 +41,9 @@ export async function POST(request: Request) {
     if (files.length < 1 || files.length > MAX_FILES) {
       return Response.json({ error: "Прикрепите от 1 до 5 скриншотов" }, { status: 400 });
     }
-    for (const file of files) {
-      if (!ALLOWED_TYPES.has(file.type)) {
-        return Response.json({ error: "Допустимы только JPEG, PNG и WebP" }, { status: 400 });
-      }
-      if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
-        return Response.json({ error: "Размер каждого файла должен быть не больше 5 МБ" }, { status: 400 });
-      }
-    }
+    const validatedFiles = await Promise.all(files.map((file) =>
+      readImageUpload(file, { maxBytes: MAX_FILE_SIZE, label: "Скриншот" })
+    ));
 
     const supabase = createAdminClient();
     const { data: registrations, error: registrationsError } = await supabase
@@ -92,11 +82,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "Статистика для этой сессии уже отправлена" }, { status: 409 });
     }
 
-    for (const file of files) {
-      const path = `${user.id}/${fields.eventId}/${fields.sessionId}/${randomUUID()}.${EXTENSIONS[file.type]}`;
+    for (const file of validatedFiles) {
+      const path = `${user.id}/${fields.eventId}/${fields.sessionId}/${randomUUID()}.${file.extension}`;
       const { error: uploadError } = await supabase.storage
         .from("stats-screenshots")
-        .upload(path, await file.arrayBuffer(), { contentType: file.type, upsert: false });
+        .upload(path, file.bytes, { contentType: file.mimeType, upsert: false });
       if (uploadError) throw uploadError;
       uploadedPaths.push(path);
     }
@@ -127,6 +117,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Проверьте выбранную сессию, киллы и матчи" }, { status: 400 });
+    }
+    if (error instanceof AvatarUploadError) {
+      return Response.json({ error: error.message }, { status: 400 });
     }
     return authErrorResponse(error);
   }

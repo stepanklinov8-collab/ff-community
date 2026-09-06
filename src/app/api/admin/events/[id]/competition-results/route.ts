@@ -98,7 +98,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         supabase.from("event_games").select("id").eq("session_id", payload.sessionId),
       ]);
       if (!session || !games?.length) return Response.json({ error: "В сессии нет игр" }, { status: 400 });
-      const { data: results } = await supabase.from("event_game_results").select("team_id,kills,points")
+      const { data: results } = await supabase.from("event_game_results").select("game_id,team_id,place,kills,points")
         .in("game_id", games.map((game) => game.id)).eq("status", "confirmed");
       const totals = new Map<string, { kills: number; points: number }>();
       for (const row of results ?? []) {
@@ -124,6 +124,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const { error } = await supabase.from("organization_participation_history").insert(historyRows);
       if (error) throw error;
       await supabase.from("event_games").update({ status: "completed", updated_at: new Date().toISOString() }).eq("session_id", payload.sessionId);
+
+      const { data: markets, error: marketsError } = await supabase.from("betting_markets")
+        .select("id,game_id,subject_team_id,market_type,selection_value,line")
+        .in("game_id", games.map((game) => game.id)).in("status", ["open", "locked"]);
+      if (marketsError) throw marketsError;
+      for (const market of markets ?? []) {
+        const result = (results ?? []).find((row) => row.game_id === market.game_id && row.team_id === market.subject_team_id);
+        const won = Boolean(result) && (
+          (market.market_type === "exact_place" && String(result!.place) === market.selection_value)
+          || (market.market_type === "kills_over" && result!.kills > Number(market.line))
+          || (market.market_type === "kills_under" && result!.kills < Number(market.line))
+        );
+        const { error: settleError } = await supabase.rpc("settle_betting_market", {
+          p_market_id: market.id,
+          p_outcome: result ? won ? "won" : "lost" : "void",
+          p_actor: auth.user.id,
+        });
+        if (settleError) throw settleError;
+      }
       return Response.json({ success: true });
     }
 

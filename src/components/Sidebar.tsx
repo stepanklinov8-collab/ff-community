@@ -48,6 +48,10 @@ export default function Sidebar() {
       setUser(data.user);
 
       if (data.user) {
+        const profileLocale = data.user.user_metadata?.locale;
+        if (!window.localStorage.getItem("omcite-locale") && locales.includes(profileLocale)) {
+          setLocale(profileLocale);
+        }
         const { data: roleRows } = await supabase
           .from("user_roles")
           .select("role")
@@ -69,7 +73,7 @@ export default function Sidebar() {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [setLocale, supabase]);
 
   const menuItems = [
     { href: "/", label: t("home"), icon: House },
@@ -94,12 +98,12 @@ export default function Sidebar() {
           type="button"
           onClick={() => setOpen(true)}
           className="icon-button"
-          aria-label="Открыть меню"
+          aria-label={t("common.openMenu")}
         >
           <Menu size={22} />
         </button>
 
-        <Link href="/" className="brand-lockup" aria-label="OMCITE Arena — главная">
+        <Link href="/" className="brand-lockup" aria-label={`OMCITE Arena — ${t("home")}`}>
           <span className="brand-mark">
             <Image src="/brand/omcite-emblem.jpg" alt="" width={42} height={42} priority />
           </span>
@@ -125,8 +129,8 @@ export default function Sidebar() {
 
       {open && (
         <div className="drawer-layer" role="presentation">
-          <button className="drawer-backdrop" aria-label="Закрыть меню" onClick={() => setOpen(false)} />
-          <aside className="site-drawer" aria-label="Главная навигация">
+          <button className="drawer-backdrop" aria-label={t("common.closeMenu")} onClick={() => setOpen(false)} />
+          <aside className="site-drawer" aria-label={t("common.mainNavigation")}>
             <div className="drawer-head">
               <Link href="/" className="brand-lockup">
                 <span className="brand-mark brand-mark-large">
@@ -134,7 +138,7 @@ export default function Sidebar() {
                 </span>
                 <span><strong>OMCITE</strong><small>FREE FIRE COMMUNITY</small></span>
               </Link>
-              <button className="icon-button" onClick={() => setOpen(false)} aria-label="Закрыть меню">
+              <button className="icon-button" onClick={() => setOpen(false)} aria-label={t("common.closeMenu")}>
                 <X size={22} />
               </button>
             </div>
@@ -162,7 +166,7 @@ export default function Sidebar() {
             </nav>
 
             <div className="drawer-footer">
-              <div className="language-switcher" aria-label="Выбор языка">
+              <div className="language-switcher" aria-label={t("common.language")}>
                 <Languages size={18} />
                 {locales.map((item) => (
                   <button
