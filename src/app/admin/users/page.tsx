@@ -11,6 +11,7 @@ interface User {
   game_id: string;
   created_at: string;
   roles: string[];
+  badges: string[];
   isOwner: boolean;
   profile: { profile_level: number; reputation_score: number; main_rating: number } | null;
 }
@@ -30,6 +31,7 @@ export default function AdminUsersPage() {
   const [modalType, setModalType] = useState<"message" | "warning" | "ban" | "roles" | "delete" | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [roleAction, setRoleAction] = useState<string | null>(null);
 
   const [msgSubject, setMsgSubject] = useState("");
   const [msgBody, setMsgBody] = useState("");
@@ -57,6 +59,7 @@ export default function AdminUsersPage() {
           game_id: u.user_metadata?.game_id || "—",
           created_at: u.created_at,
           roles: u.roles ?? [],
+          badges: u.badges ?? [],
           isOwner: Boolean(u.isOwner),
           profile: u.profile ?? null,
         })));
@@ -208,16 +211,27 @@ export default function AdminUsersPage() {
   };
 
   const toggleRole = async (userId: string, role: string, action: "add" | "remove") => {
-    const res = await authFetch("/api/admin/roles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, role, action }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setMessage("Плашка обновлена");
-    } else {
-      setMessage("Ошибка: " + (data.error || "неизвестная ошибка"));
+    const actionKey = `${userId}:${role}`;
+    setRoleAction(actionKey);
+    try {
+      const res = await authFetch("/api/admin/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role, action }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string; roles?: string[]; badges?: string[] };
+      if (!res.ok || !data.success) throw new Error(data.error || "неизвестная ошибка");
+      const updateUser = (user: User) => user.id === userId
+        ? { ...user, roles: data.roles ?? user.roles, badges: data.badges ?? user.badges }
+        : user;
+      setUsers((current) => current.map(updateUser));
+      setSelectedUser((current) => current ? updateUser(current) : null);
+      const label = role === "blogger" ? "Плашка «Блогер»" : role === "admin" ? "Роль администратора" : "Роль модератора";
+      setMessage(`${label} ${action === "add" ? "назначена" : "снята"}.`);
+    } catch (roleError) {
+      setMessage(`Ошибка: ${roleError instanceof Error ? roleError.message : "неизвестная ошибка"}`);
+    } finally {
+      setRoleAction(null);
     }
   };
 
@@ -254,6 +268,7 @@ export default function AdminUsersPage() {
                         </Link>
                         {user.isOwner && <span className="ml-2 rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-black">Владелец</span>}
                         {!user.isOwner && user.roles.includes("admin") && <span className="ml-2 rounded bg-purple-700 px-2 py-0.5 text-xs">Администратор</span>}
+                        {user.badges.includes("blogger") && <span className="ml-2 rounded bg-pink-700 px-2 py-0.5 text-xs">Блогер</span>}
                         <div className="mt-1 text-xs text-slate-500">Ур. {user.profile?.profile_level ?? 1} · Репутация {Number(user.profile?.reputation_score ?? 50).toFixed(0)} · Рейтинг {Number(user.profile?.main_rating ?? 1).toFixed(0)}</div>
                       </>
                     )}
@@ -292,7 +307,7 @@ export default function AdminUsersPage() {
                         <button onClick={() => openModal(user, "message")} className="px-2 py-1 bg-green-500 rounded text-xs">Написать</button>
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "warning")} className="px-2 py-1 bg-yellow-600 rounded text-xs">Пред</button>}
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "ban")} className="px-2 py-1 bg-red-600 rounded text-xs">Бан</button>}
-                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Плашки</button>}
+                        {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Роли и плашки</button>}
                         {canDeleteUsers && !user.isOwner && <button onClick={() => openModal(user, "delete")} className="rounded bg-red-950 px-2 py-1 text-xs text-red-200 ring-1 ring-red-700">Удалить</button>}
                       </div>
                     )}
@@ -360,17 +375,26 @@ export default function AdminUsersPage() {
 
             {modalType === "roles" && (
               <>
-                <h2 className="text-xl font-bold mb-4">Плашки для {selectedUser.nickname}</h2>
+                <h2 className="text-xl font-bold mb-4">Роли и плашки для {selectedUser.nickname}</h2>
                 <div className="space-y-2">
-                  {availableRoles.filter((role) => role !== "admin" || canManageAdmins).map(role => (
-                    <div key={role} className="flex justify-between items-center">
-                      <span>{role === "blogger" ? "Блогер" : role === "moderator" ? "Модератор" : "Администратор"}</span>
-                      <div className="flex gap-1">
-                        <button onClick={() => toggleRole(selectedUser.id, role, "add")} className="px-2 py-1 bg-green-600 rounded text-xs">+</button>
-                        <button onClick={() => toggleRole(selectedUser.id, role, "remove")} className="px-2 py-1 bg-red-600 rounded text-xs">−</button>
-                      </div>
+                  {availableRoles.filter((role) => role !== "admin" || canManageAdmins).map(role => {
+                    const active = role === "blogger" ? selectedUser.badges.includes(role) : selectedUser.roles.includes(role);
+                    const busy = roleAction === `${selectedUser.id}:${role}`;
+                    return (
+                    <div key={role} className="flex justify-between items-center gap-3">
+                      <span>
+                        {role === "blogger" ? "Плашка «Блогер»" : role === "moderator" ? "Роль модератора" : "Роль администратора"}
+                        <small className={active ? "ml-2 text-emerald-300" : "ml-2 text-slate-500"}>{active ? "активна" : "не назначена"}</small>
+                      </span>
+                      <button
+                        onClick={() => toggleRole(selectedUser.id, role, active ? "remove" : "add")}
+                        disabled={busy}
+                        className={`min-w-24 rounded px-3 py-1 text-xs disabled:opacity-50 ${active ? "bg-red-600" : "bg-green-600"}`}
+                      >
+                        {busy ? "Сохраняем…" : active ? "Снять" : "Назначить"}
+                      </button>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </>
             )}
@@ -417,6 +441,7 @@ interface AuthUserPayload {
   user_metadata?: { nickname?: string; game_id?: string };
   created_at: string;
   roles?: string[];
+  badges?: string[];
   isOwner?: boolean;
   profile?: { profile_level: number; reputation_score: number; main_rating: number } | null;
 }

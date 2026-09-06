@@ -125,7 +125,7 @@ export default function ProfilePage() {
         supabase.from("user_roles").select("role").eq("user_id", currentUser.id).maybeSingle(),
         supabase.from("player_stats").select("kills, matches_played").eq("user_id", currentUser.id).eq("status", "approved").in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]),
         supabase.from("team_members").select("role_in_team, teams(id, name, type, verified)").eq("user_id", currentUser.id),
-        supabase.from("bloggers").select("id").eq("user_id", currentUser.id).maybeSingle(),
+        supabase.from("profile_badges").select("badge").eq("user_id", currentUser.id).eq("badge", "blogger").maybeSingle(),
       ]);
 
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);

@@ -32,17 +32,27 @@ export async function GET(request: Request) {
     if (error) throw error;
     const activeUsers = data.users.filter((user) => !user.deleted_at);
     const ids = activeUsers.map((user) => user.id);
-    const [{ data: roleRows }, { data: profileRows }] = await Promise.all([
+    const [rolesResult, profilesResult, badgesResult] = await Promise.all([
       ids.length ? supabase.from("user_roles").select("user_id, role").in("user_id", ids) : Promise.resolve({ data: [] }),
       ids.length ? supabase.from("profiles").select("id, profile_level, reputation_score, main_rating").in("id", ids) : Promise.resolve({ data: [] }),
+      ids.length ? supabase.from("profile_badges").select("user_id, badge").in("user_id", ids) : Promise.resolve({ data: [] }),
     ]);
+    if ("error" in rolesResult && rolesResult.error) throw rolesResult.error;
+    if ("error" in profilesResult && profilesResult.error) throw profilesResult.error;
+    if ("error" in badgesResult && badgesResult.error) throw badgesResult.error;
+    const roleRows = rolesResult.data;
+    const profileRows = profilesResult.data;
+    const badgeRows = badgesResult.data;
     const rolesByUser = new Map<string, string[]>();
     for (const row of roleRows ?? []) rolesByUser.set(row.user_id, [...(rolesByUser.get(row.user_id) ?? []), row.role]);
+    const badgesByUser = new Map<string, string[]>();
+    for (const row of badgeRows ?? []) badgesByUser.set(row.user_id, [...(badgesByUser.get(row.user_id) ?? []), row.badge]);
     const profileByUser = new Map((profileRows ?? []).map((row) => [row.id, row]));
     return Response.json({
       users: activeUsers.map((user) => ({
         ...user,
         roles: rolesByUser.get(user.id) ?? [],
+        badges: badgesByUser.get(user.id) ?? [],
         profile: profileByUser.get(user.id) ?? null,
         isOwner: user.email?.toLowerCase() === "stepanklinov8@gmail.com",
       })),
@@ -98,6 +108,7 @@ export async function DELETE(request: Request) {
       supabase.from("team_join_requests").delete().eq("user_id", payload.userId),
       supabase.from("player_stats").delete().eq("user_id", payload.userId),
       supabase.from("bloggers").delete().eq("user_id", payload.userId),
+      supabase.from("profile_badges").delete().eq("user_id", payload.userId),
       supabase.from("comments").delete().eq("author_id", payload.userId),
       supabase.from("comment_reports").delete().eq("reported_by", payload.userId),
       supabase.from("messages").delete().or(`to_user_id.eq.${payload.userId},from_user_id.eq.${payload.userId}`),

@@ -138,8 +138,8 @@ export default function PublicProfilePage() {
       if (roleData) newBadges.push(roleData.role === "superadmin" ? "Владелец" : roleData.role === "admin" ? "Администратор" : "Модератор");
 
       // Блогер
-      const { data: blogger } = await supabase.from("bloggers").select("id").eq("user_id", id).single();
-      if (blogger) newBadges.push("Блогер");
+      const { data: bloggerBadge } = await supabase.from("profile_badges").select("badge").eq("user_id", id).eq("badge", "blogger").maybeSingle();
+      if (bloggerBadge) newBadges.push("Блогер");
 
       setBadges(newBadges);
 

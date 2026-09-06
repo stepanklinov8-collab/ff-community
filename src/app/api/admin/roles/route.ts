@@ -22,26 +22,31 @@ export async function POST(request: Request) {
     await assertCanManageUserTarget(actor, payload.userId);
 
     const supabase = createAdminClient();
-    let result;
     if (payload.role === "blogger") {
-      result = payload.action === "add"
-        ? await supabase.from("bloggers").upsert({ user_id: payload.userId })
-        : await supabase.from("bloggers").delete().eq("user_id", payload.userId);
+      const result = payload.action === "add"
+        ? await supabase.from("profile_badges").upsert({
+            user_id: payload.userId,
+            badge: "blogger",
+            granted_by: actor.user.id,
+          }, { onConflict: "user_id,badge" })
+        : await supabase
+            .from("profile_badges")
+            .delete()
+            .eq("user_id", payload.userId)
+            .eq("badge", "blogger");
+      if (result.error) throw result.error;
     } else {
-      result = payload.action === "add"
+      const result = payload.action === "add"
         ? await supabase.from("user_roles").upsert({
             user_id: payload.userId,
             role: payload.role,
-          })
+          }, { onConflict: "user_id" })
         : await supabase
             .from("user_roles")
             .delete()
             .eq("user_id", payload.userId)
             .eq("role", payload.role);
-    }
-
-    if (result.error) throw result.error;
-    if (payload.role !== "blogger") {
+      if (result.error) throw result.error;
       const { error: auditError } = await supabase.from("role_change_logs").insert({
         target_user_id: payload.userId,
         changed_by: actor.user.id,
@@ -50,7 +55,19 @@ export async function POST(request: Request) {
       });
       if (auditError) throw auditError;
     }
-    return Response.json({ success: true });
+
+    const [{ data: roles, error: rolesError }, { data: badges, error: badgesError }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("user_id", payload.userId),
+      supabase.from("profile_badges").select("badge").eq("user_id", payload.userId),
+    ]);
+    if (rolesError) throw rolesError;
+    if (badgesError) throw badgesError;
+
+    return Response.json({
+      success: true,
+      roles: (roles ?? []).map((row) => row.role),
+      badges: (badges ?? []).map((row) => row.badge),
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Некорректные данные роли" }, { status: 400 });

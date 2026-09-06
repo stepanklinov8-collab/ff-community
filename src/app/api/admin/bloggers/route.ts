@@ -31,6 +31,17 @@ export async function PATCH(request: Request) {
     const supabase = createAdminClient();
     const { data: blogger, error } = await supabase.from("bloggers").update({ status: payload.status }).eq("id", payload.id).select("user_id").single();
     if (error) throw error;
+    const badgeResult = payload.status === "approved"
+      ? await supabase.from("profile_badges").upsert({
+          user_id: blogger.user_id,
+          badge: "blogger",
+        }, { onConflict: "user_id,badge" })
+      : await supabase
+          .from("profile_badges")
+          .delete()
+          .eq("user_id", blogger.user_id)
+          .eq("badge", "blogger");
+    if (badgeResult.error) throw badgeResult.error;
     await supabase.from("notifications").insert({
       user_id: blogger.user_id,
       type: "blogger_status",
