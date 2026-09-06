@@ -20,16 +20,20 @@ export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState("");
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setMode("update");
         setMessage("Введите новый пароль для аккаунта.");
+      } else if (event === "SIGNED_IN" && new URLSearchParams(window.location.search).get("confirmed") === "1") {
+        router.replace("/profile");
+        router.refresh();
       }
     });
     return () => listener.subscription.unsubscribe();
-  }, [supabase]);
+  }, [router, supabase]);
 
   const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -48,7 +52,10 @@ export default function AuthPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { nickname, game_id: gameId } },
+      options: {
+        data: { nickname, game_id: gameId },
+        emailRedirectTo: `${window.location.origin}/auth?confirmed=1`,
+      },
     });
     if (error || !data.user) {
       setBusy(false);
@@ -56,23 +63,44 @@ export default function AuthPage() {
       return;
     }
 
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: data.user.id,
-      nickname,
-      game_id: gameId,
-    });
     setBusy(false);
-    if (profileError) {
-      setMessage(`Аккаунт создан, но профиль не сохранён: ${profileError.message}`);
-      return;
-    }
     if (data.session) {
       router.push("/profile");
       router.refresh();
     } else {
-      setMessage("Аккаунт создан. Для входа проверьте настройки подтверждения email в Supabase.");
+      setPendingConfirmationEmail(email);
+      setMessage(
+        data.user.identities?.length === 0
+          ? "Проверьте почту. Если аккаунт с таким email уже существует, войдите или восстановите пароль."
+          : "Аккаунт и профиль созданы. Мы отправили письмо для подтверждения email. Проверьте также папки «Спам» и «Промоакции».",
+      );
       setMode("login");
     }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirmationEmail) return;
+
+    setBusy(true);
+    setMessage("Повторно отправляем письмо...");
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: pendingConfirmationEmail,
+      options: { emailRedirectTo: `${window.location.origin}/auth?confirmed=1` },
+    });
+    setBusy(false);
+
+    if (error) {
+      const rateLimited = error.status === 429 || error.message.toLowerCase().includes("rate limit");
+      setMessage(
+        rateLimited
+          ? "Повторная отправка временно ограничена. Подождите около минуты и попробуйте снова."
+          : `Не удалось повторно отправить письмо: ${error.message}`,
+      );
+      return;
+    }
+
+    setMessage("Письмо отправлено повторно. Проверьте входящие, «Спам» и «Промоакции».");
   };
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -199,10 +227,25 @@ export default function AuthPage() {
 
           {message && <p className="mt-5 rounded-xl border border-sky-900/35 bg-slate-950/50 p-3 text-center text-sm text-slate-200">{message}</p>}
 
+          {mode === "login" && pendingConfirmationEmail && (
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={busy}
+              className="mt-4 text-sm text-cyan-300 hover:underline disabled:opacity-50"
+            >
+              Отправить письмо подтверждения повторно
+            </button>
+          )}
+
           {mode !== "update" && (
             <button
               type="button"
-              onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); }}
+              onClick={() => {
+                setMode(mode === "login" ? "register" : "login");
+                setMessage("");
+                setPendingConfirmationEmail("");
+              }}
               className="mt-5 text-sm text-cyan-300 hover:underline"
             >
               {mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Вернуться ко входу"}
