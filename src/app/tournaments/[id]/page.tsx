@@ -71,6 +71,28 @@ interface PlayerSummary {
   nickname: string;
 }
 
+function registrationErrorMessage(errorMessage: string) {
+  if (errorMessage.includes("duplicate key") || errorMessage.includes("already registered for this session")) {
+    return "На это время уже есть активная заявка с этой командой или одним из выбранных игроков.";
+  }
+  if (errorMessage.includes("overlapping session")) {
+    return "Один из выбранных игроков уже участвует в другой пересекающейся сессии.";
+  }
+  if (errorMessage.includes("Not enough players")) {
+    return "В составе недостаточно игроков.";
+  }
+  if (errorMessage.includes("outside this team")) {
+    return "В составе есть игрок, который больше не состоит в этой команде или гильдии.";
+  }
+  if (errorMessage.includes("banned")) {
+    return "Команда или один из выбранных игроков заблокированы для участия.";
+  }
+  if (errorMessage.includes("Roster is locked")) {
+    return "Изменение состава уже заблокировано — до начала осталось 10 минут или меньше.";
+  }
+  return errorMessage;
+}
+
 export default function EventPage() {
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
@@ -90,6 +112,7 @@ export default function EventPage() {
   const [myMembers, setMyMembers] = useState<TeamMember[]>([]);
   const [selectedRoster, setSelectedRoster] = useState<string[]>([]);
   const [showRosterForm, setShowRosterForm] = useState(false);
+  const [rosterSaving, setRosterSaving] = useState(false);
 
   const [scores, setScores] = useState<Record<string, number>>({});
   const [winnerTeamId, setWinnerTeamId] = useState("");
@@ -249,11 +272,12 @@ export default function EventPage() {
     });
 
     if (error) {
-      setMessage("Ошибка: " + error.message);
+      setMessage("Ошибка: " + registrationErrorMessage(error.message));
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы в основном составе!" : "⏳ Вы в листе ожидания.");
-      refreshRegistrations();
+      setShowRosterForm(false);
+      void refreshRegistrations();
     }
   };
 
@@ -267,12 +291,37 @@ export default function EventPage() {
     });
 
     if (error) {
-      setMessage("Ошибка: " + error.message);
+      setMessage("Ошибка: " + registrationErrorMessage(error.message));
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы записаны!" : "⏳ Вы в листе ожидания.");
-      refreshRegistrations();
+      void refreshRegistrations();
     }
+  };
+
+  const saveRoster = async (registrationId: string) => {
+    const minPlayers = event?.min_players || 4;
+    if (selectedRoster.length < minPlayers) {
+      setMessage(`В составе команды должно быть минимум ${minPlayers} игроков.`);
+      return;
+    }
+
+    setRosterSaving(true);
+    setMessage("Сохраняем состав...");
+    const { error } = await supabase.rpc("update_team_registration_roster", {
+      p_registration_id: registrationId,
+      p_roster: selectedRoster,
+    });
+    setRosterSaving(false);
+
+    if (error) {
+      setMessage("Ошибка: " + registrationErrorMessage(error.message));
+      return;
+    }
+
+    setShowRosterForm(false);
+    setMessage("✅ Состав обновлён.");
+    await refreshRegistrations();
   };
 
   const cancelRegistration = async () => {
@@ -291,7 +340,8 @@ export default function EventPage() {
     }
 
     setMessage("Регистрация отменена.");
-    refreshRegistrations();
+    setShowRosterForm(false);
+    void refreshRegistrations();
   };
 
   const toggleRegistrationsVisibility = async () => {
@@ -406,7 +456,7 @@ export default function EventPage() {
   const alreadyRegistered = Boolean(selectedRegistration);
   const registrationStatus = selectedRegistration?.status ?? "";
   const lockTime = selectedSession
-    ? new Date(new Date(selectedSession.start_time).getTime() - (event.roster_lock_minutes || 10) * 60_000)
+    ? new Date(new Date(selectedSession.start_time).getTime() - (event.roster_lock_minutes ?? 10) * 60_000)
     : null;
   const canEditRoster = !lockTime || new Date() < lockTime;
   const hasStarted = Boolean(selectedSession && new Date() >= new Date(selectedSession.start_time));
@@ -652,7 +702,15 @@ export default function EventPage() {
       {alreadyRegistered && (canManageTeam || selectedRegistration?.participant_user_id === currentUser?.id) && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <label className="text-sm text-gray-300 block mb-2">Выбранное время</label>
-          <select className="mb-3" value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+          <select
+            className="mb-3"
+            value={selectedSessionId}
+            onChange={(event) => {
+              setSelectedSessionId(event.target.value);
+              setShowRosterForm(false);
+              setMessage("");
+            }}
+          >
             {sessions.map((session) => (
               <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
             ))}
@@ -661,7 +719,91 @@ export default function EventPage() {
             {selectedRegistration?.participant_user_id ? "Личная заявка: " : "Заявка команды: "}
             {registrationStatus === "confirmed" ? "✅ участие подтверждено" : "⏳ лист ожидания"}
           </p>
+
+          {selectedRegistration?.team_id && canManageTeam && (
+            <div className="mb-4 rounded bg-gray-700 p-3">
+              <p className="text-sm font-semibold">
+                Состав ({selectedRegistration.roster.length}/{event.min_players || 4})
+              </p>
+              <div className="mt-2 space-y-1 text-sm text-gray-300">
+                {selectedRegistration.roster.length > 0 ? selectedRegistration.roster.map((userId) => (
+                  <p key={userId}>— {myMembers.find((member) => member.user_id === userId)?.nickname || allPlayers.find((player) => player.id === userId)?.nickname || "Игрок"}</p>
+                )) : <p className="text-gray-400">Состав не указан.</p>}
+              </div>
+
+              {canEditRoster ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showRosterForm) {
+                        setSelectedRoster(selectedRegistration.roster);
+                        setMessage("");
+                      }
+                      setShowRosterForm(!showRosterForm);
+                    }}
+                    className="mt-3 text-sm text-blue-400 hover:underline"
+                  >
+                    {showRosterForm ? "Закрыть изменение состава" : "Изменить состав"}
+                  </button>
+
+                  {showRosterForm && (
+                    <div className="mt-3 border-t border-gray-600 pt-3">
+                      <p className="mb-2 text-sm text-gray-300">
+                        Выбрано: {selectedRoster.length}. Минимум: {event.min_players || 4}.
+                      </p>
+                      <div className="max-h-48 space-y-1 overflow-y-auto">
+                        {myMembers.map((member) => (
+                          <label key={member.user_id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedRoster.includes(member.user_id)}
+                              onChange={(checkboxEvent) => {
+                                if (checkboxEvent.target.checked) {
+                                  setSelectedRoster((current) => [...current, member.user_id]);
+                                } else {
+                                  setSelectedRoster((current) => current.filter((userId) => userId !== member.user_id));
+                                }
+                              }}
+                            />
+                            {member.nickname} ({member.role_in_team === "leader" ? "Лидер" : member.role_in_team === "senior_deputy" ? "Старший зам" : member.role_in_team === "deputy" ? "Зам" : member.position === "main" ? "Основа" : "Запас"})
+                          </label>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveRoster(selectedRegistration.id)}
+                          disabled={rosterSaving || selectedRoster.length < (event.min_players || 4)}
+                          className="rounded bg-blue-500 px-4 py-2 hover:bg-blue-600 disabled:opacity-50"
+                        >
+                          {rosterSaving ? "Сохраняем..." : "Сохранить состав"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedRoster(selectedRegistration.roster);
+                            setShowRosterForm(false);
+                            setMessage("");
+                          }}
+                          className="rounded bg-gray-600 px-4 py-2 hover:bg-gray-500"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-yellow-300">
+                  Состав заблокирован за {event.roster_lock_minutes ?? 10} минут до начала.
+                </p>
+              )}
+            </div>
+          )}
+
           <button onClick={cancelRegistration} className="px-4 py-2 bg-red-500 rounded hover:bg-red-600">Отменить запись</button>
+          {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
