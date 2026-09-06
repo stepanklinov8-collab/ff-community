@@ -30,6 +30,7 @@ export async function getManagedOrganizations(supabase: SupabaseClient, userId: 
     .from("teams")
     .select("id, name, type, avatar_url")
     .in("id", teamIds)
+    .is("dissolved_at", null)
     .order("name");
 
   if (teamsError) throw teamsError;
@@ -56,6 +57,7 @@ export async function requireManagedOrganization(
     .from("teams")
     .select("id, name, type, avatar_url")
     .eq("id", teamId)
+    .is("dissolved_at", null)
     .single();
 
   if (teamError || !organization) throw teamError ?? new ClanWarRequestError("Организация не найдена", 404);

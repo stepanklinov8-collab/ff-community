@@ -85,6 +85,7 @@ export async function POST(request: Request) {
         .from("teams")
         .select("id, name, type")
         .eq("id", payload.opponentTeamId)
+        .is("dissolved_at", null)
         .single();
       if (error || !data) throw error ?? new ClanWarRequestError("Соперник не найден", 404);
       opponent = data;

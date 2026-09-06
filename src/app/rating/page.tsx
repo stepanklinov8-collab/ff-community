@@ -33,7 +33,7 @@ export default function RatingPage() {
       const [{ data: profiles }, { data: mainEvents }, { data: organizationRows }] = await Promise.all([
         supabase.from("profiles").select("id, nickname, game_id, avatar_url, main_rating"),
         supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]),
-        supabase.from("teams").select("id,name,type,main_rating,avatar_url").eq("verified", true).order("main_rating", { ascending: false }),
+        supabase.from("teams").select("id,name,type,main_rating,avatar_url").eq("verified", true).is("dissolved_at", null).order("main_rating", { ascending: false }),
       ]);
       const mainEventIds = (mainEvents ?? []).map((event) => event.id);
       setOrganizations((organizationRows ?? []).map((row) => ({ ...row, main_rating: Number(row.main_rating ?? 1) })) as OrganizationRating[]);

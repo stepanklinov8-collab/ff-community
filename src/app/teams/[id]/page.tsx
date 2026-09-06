@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
@@ -20,6 +20,14 @@ interface Team {
   avatar_url: string;
   main_rating: number;
   reputation_score: number;
+  dissolved_at: string | null;
+}
+
+interface LeadershipTransfer {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  status: "pending";
 }
 
 interface HistoryItem {
@@ -71,6 +79,7 @@ interface TeamWarnings {
 
 export default function TeamPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -101,6 +110,8 @@ export default function TeamPage() {
   // Передача лидерства
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferUserId, setTransferUserId] = useState("");
+  const [pendingTransfer, setPendingTransfer] = useState<LeadershipTransfer | null>(null);
+  const [organizationBusy, setOrganizationBusy] = useState(false);
 
   // Предупреждения команды
   const [teamWarnings, setTeamWarnings] = useState<TeamWarnings>({
@@ -175,10 +186,21 @@ export default function TeamPage() {
       setCurrentUser(user);
       if (user) {
         const membership = loadedMembers.find((member) => member.user_id === user.id);
-        const leader = teamData?.leader_id === user.id || membership?.role_in_team === "leader";
-        const manager = ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
+        const organizationIsActive = !teamData?.dissolved_at;
+        const leader = organizationIsActive && (teamData?.leader_id === user.id || membership?.role_in_team === "leader");
+        const manager = organizationIsActive && ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
         setIsLeader(leader);
         setCanManage(manager);
+        if (organizationIsActive) {
+          const { data: transfer } = await supabase
+            .from("leadership_transfers")
+            .select("id, from_user_id, to_user_id, status")
+            .eq("team_id", id)
+            .eq("status", "pending")
+            .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+            .maybeSingle();
+          setPendingTransfer((transfer as LeadershipTransfer | null) ?? null);
+        }
         if (manager) {
           const res = await authFetch(`/api/team/warnings?teamId=${id}`);
           const data = await res.json();
@@ -286,25 +308,69 @@ export default function TeamPage() {
 
   const transferLeadership = async () => {
     if (!transferUserId || !currentUser) return;
-    await supabase.from("leadership_transfers").insert({
-      team_id: id, from_user_id: currentUser.id, to_user_id: transferUserId,
+    setOrganizationBusy(true);
+    const { data, error } = await supabase.rpc("request_team_leadership_transfer", {
+      p_team_id: id,
+      p_to_user_id: transferUserId,
+    });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось передать лидерство: " + error.message);
+      return;
+    }
+    setPendingTransfer({
+      id: String(data),
+      from_user_id: currentUser.id,
+      to_user_id: transferUserId,
+      status: "pending",
     });
     setInviteMessage("Запрос на передачу лидерства отправлен. Игрок должен подтвердить.");
     setShowTransfer(false);
+    setTransferUserId("");
   };
 
-  const acceptLeadership = async () => {
-    if (!currentUser) return;
-    const { data: transfer } = await supabase.from("leadership_transfers")
-      .select("id").eq("team_id", id).eq("to_user_id", currentUser.id).eq("status", "pending").single();
-    if (!transfer) return;
-    await supabase.from("leadership_transfers").update({ status: "accepted" }).eq("id", transfer.id);
-    await supabase.from("teams").update({ leader_id: currentUser.id }).eq("id", id);
-    await supabase.from("team_members").update({ role_in_team: "main" }).eq("team_id", id).eq("user_id", team?.leader_id);
-    await supabase.from("team_members").upsert({ team_id: id, user_id: currentUser.id, role_in_team: "leader", position: "main" });
-    fetchTeam();
-    fetchMembers();
+  const respondLeadership = async (accept: boolean) => {
+    if (!currentUser || !pendingTransfer || pendingTransfer.to_user_id !== currentUser.id) return;
+    setOrganizationBusy(true);
+    const { error } = await supabase.rpc("respond_team_leadership_transfer", {
+      p_transfer_id: pendingTransfer.id,
+      p_accept: accept,
+    });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось обработать передачу лидерства: " + error.message);
+      return;
+    }
+    setPendingTransfer(null);
+    if (!accept) {
+      setInviteMessage("Предложение лидерства отклонено.");
+      return;
+    }
+    await Promise.all([fetchTeam(), fetchMembers()]);
+    setIsLeader(true);
+    setCanManage(true);
     setInviteMessage("Вы стали лидером!");
+  };
+
+  const dissolveOrganization = async () => {
+    if (!team || !isLeader || organizationBusy) return;
+    const kind = team.type === "guild" ? "гильдию" : "команду";
+    if (!confirm(`Распустить ${kind} «${team.name}»? Все текущие заявки и незавершённые КВ будут отменены.`)) return;
+    const confirmation = prompt(`Для подтверждения введите название: ${team.name}`);
+    if (confirmation !== team.name) {
+      setInviteMessage("Роспуск отменён: название введено неверно.");
+      return;
+    }
+
+    setOrganizationBusy(true);
+    const { error } = await supabase.rpc("dissolve_organization", { p_team_id: id });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось распустить организацию: " + error.message);
+      return;
+    }
+    router.push("/teams");
+    router.refresh();
   };
 
   const sendJoinRequest = async () => {
@@ -373,6 +439,11 @@ export default function TeamPage() {
 
       {/* Профиль */}
       <div className="mt-4 bg-gray-800 p-6 rounded">
+        {team.dissolved_at && (
+          <div className="mb-4 rounded border border-red-500/40 bg-red-950/50 p-3 text-red-100">
+            Эта {team.type === "guild" ? "гильдия" : "команда"} распущена и больше не принимает участников.
+          </div>
+        )}
         {editMode ? (
           <div className="space-y-3">
             <input className="w-full p-2 text-black rounded" value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -418,7 +489,10 @@ export default function TeamPage() {
             {isLeader && (
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => setEditMode(true)} className="px-4 py-2 bg-blue-500 rounded">Редактировать</button>
-                <button onClick={() => setShowTransfer(!showTransfer)} className="px-4 py-2 bg-yellow-600 rounded">Передать лидерство</button>
+                <button onClick={() => setShowTransfer(!showTransfer)} disabled={organizationBusy} className="px-4 py-2 bg-yellow-600 rounded disabled:opacity-50">Передать лидерство</button>
+                <button onClick={dissolveOrganization} disabled={organizationBusy} className="px-4 py-2 bg-red-700 rounded disabled:opacity-50">
+                  {organizationBusy ? "Обработка…" : `Распустить ${team.type === "guild" ? "гильдию" : "команду"}`}
+                </button>
               </div>
             )}
             {showTransfer && (
@@ -429,11 +503,18 @@ export default function TeamPage() {
                     <option key={m.user_id} value={m.user_id}>{m.nickname}</option>
                   ))}
                 </select>
-                <button onClick={transferLeadership} className="px-3 py-1 bg-green-600 rounded text-sm">Передать</button>
+                <button onClick={transferLeadership} disabled={!transferUserId || organizationBusy} className="px-3 py-1 bg-green-600 rounded text-sm disabled:opacity-50">Передать</button>
               </div>
             )}
-            {isMember && !isLeader && (
-              <button onClick={acceptLeadership} className="mt-2 px-4 py-2 bg-green-600 rounded">Принять лидерство (если предложено)</button>
+            {pendingTransfer?.from_user_id === currentUser?.id && (
+              <p className="mt-3 text-sm text-yellow-300">Ожидается подтверждение выбранного участника.</p>
+            )}
+            {isMember && !isLeader && pendingTransfer?.to_user_id === currentUser?.id && (
+              <div className="mt-3 flex flex-wrap gap-2 rounded bg-yellow-950/40 p-3">
+                <p className="w-full text-sm text-yellow-100">Вам предлагают стать новым лидером.</p>
+                <button onClick={() => respondLeadership(true)} disabled={organizationBusy} className="px-4 py-2 bg-green-600 rounded disabled:opacity-50">Принять</button>
+                <button onClick={() => respondLeadership(false)} disabled={organizationBusy} className="px-4 py-2 bg-gray-600 rounded disabled:opacity-50">Отклонить</button>
+              </div>
             )}
           </>
         )}

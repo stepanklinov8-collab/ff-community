@@ -60,6 +60,12 @@ interface Registration {
 interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
 const gameMapLabels: Record<string, string> = { bermuda: "Бермуды", nexterra: "Некстера", solara: "Солара", purgatory: "Чистилище", kalahari: "Калахари" };
 
+interface RoomFormData {
+  code: string;
+  password: string;
+  note: string;
+}
+
 interface TeamMember {
   user_id: string;
   role_in_team: string;
@@ -123,7 +129,8 @@ export default function EventPage() {
 
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleUserId, setResponsibleUserId] = useState("");
-  const [roomData, setRoomData] = useState<Record<string, { code: string; password: string; note: string }>>({});
+  const [roomData, setRoomData] = useState<Record<string, RoomFormData>>({});
+  const [roomSavingId, setRoomSavingId] = useState<string | null>(null);
 
   const loadRegistrations = useCallback(async (authenticated: boolean) => {
     const response = authenticated
@@ -170,11 +177,16 @@ export default function EventPage() {
         try {
           const roomResponse = await authFetch(`/api/events/${id}/rooms`);
           if (roomResponse.ok) {
-            const roomPayload = await roomResponse.json();
+            const roomPayload = await roomResponse.json() as { sessions?: Session[] };
             setSessions((current) => current.map((session) => ({
               ...session,
               ...(roomPayload.sessions?.find((room: { id: string }) => room.id === session.id) ?? {}),
             })));
+            setRoomData(Object.fromEntries((roomPayload.sessions ?? []).map((session) => [session.id, {
+              code: session.room_code ?? "",
+              password: session.room_password ?? "",
+              note: session.room_note ?? "",
+            }])));
           }
         } catch {
           // Room credentials are optional and remain hidden when access is denied.
@@ -391,25 +403,53 @@ export default function EventPage() {
     if (data) setSessions(data);
   };
 
-  const saveRoomData = async (sessionId: string) => {
-    const data = roomData[sessionId];
-    if (!data) return;
-    const response = await authFetch(`/api/events/${id}/rooms`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId,
-        roomCode: data.code ?? "",
-        roomPassword: data.password ?? "",
-        roomNote: data.note ?? "",
-      }),
+  const roomValues = (session: Session): RoomFormData => roomData[session.id] ?? {
+    code: session.room_code ?? "",
+    password: session.room_password ?? "",
+    note: session.room_note ?? "",
+  };
+
+  const updateRoomField = (session: Session, field: keyof RoomFormData, value: string) => {
+    setRoomData((current) => {
+      const existing = current[session.id] ?? {
+        code: session.room_code ?? "",
+        password: session.room_password ?? "",
+        note: session.room_note ?? "",
+      };
+      return { ...current, [session.id]: { ...existing, [field]: value } };
     });
-    if (!response.ok) {
-      const payload = await response.json();
-      setMessage(payload.error ?? "Не удалось сохранить данные комнаты");
-      return;
+  };
+
+  const saveRoomData = async (session: Session) => {
+    const data = roomValues(session);
+    setRoomSavingId(session.id);
+    setMessage("Отправляем данные комнаты...");
+    try {
+      const response = await authFetch(`/api/events/${id}/rooms`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: session.id,
+          roomCode: data.code,
+          roomPassword: data.password,
+          roomNote: data.note,
+        }),
+      });
+      const payload = await response.json() as { error?: string; warning?: string; room?: Session };
+      if (!response.ok) {
+        setMessage(payload.error ?? "Не удалось сохранить данные комнаты");
+        return;
+      }
+      setSessions((current) => current.map((item) => item.id === session.id
+        ? { ...item, ...(payload.room ?? { room_code: data.code, room_password: data.password, room_note: data.note }) }
+        : item));
+      setRoomData((current) => ({ ...current, [session.id]: data }));
+      setMessage(payload.warning ?? "Данные комнаты сохранены и отправлены участникам.");
+    } catch (roomError) {
+      setMessage(roomError instanceof Error ? roomError.message : "Не удалось сохранить данные комнаты");
+    } finally {
+      setRoomSavingId(null);
     }
-    setMessage("Данные комнаты сохранены.");
   };
 
   const refreshRegistrations = async () => {
@@ -541,6 +581,7 @@ export default function EventPage() {
         {sessions.map((s) => {
           const isResponsible = s.responsible_user_id === currentUser?.id;
           const canEditRoom = Boolean(s.can_edit_room || isAdmin || isOrganizer || isResponsible);
+          const room = roomValues(s);
           return (
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
@@ -565,22 +606,25 @@ export default function EventPage() {
                   <input
                     className="w-full p-2 text-black rounded mb-2"
                     placeholder="Код комнаты"
-                    value={roomData[s.id]?.code || s.room_code}
-                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], code: e.target.value } })}
+                    value={room.code}
+                    onChange={(e) => updateRoomField(s, "code", e.target.value)}
                   />
                   <input
                     className="w-full p-2 text-black rounded mb-2"
                     placeholder="Пароль"
-                    value={roomData[s.id]?.password || s.room_password}
-                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], password: e.target.value } })}
+                    value={room.password}
+                    onChange={(e) => updateRoomField(s, "password", e.target.value)}
                   />
-                  <input
+                  <textarea
                     className="w-full p-2 text-black rounded mb-2"
                     placeholder="Примечание"
-                    value={roomData[s.id]?.note || s.room_note}
-                    onChange={(e) => setRoomData({ ...roomData, [s.id]: { ...roomData[s.id], note: e.target.value } })}
+                    value={room.note}
+                    onChange={(e) => updateRoomField(s, "note", e.target.value)}
                   />
-                  <button onClick={() => saveRoomData(s.id)} className="px-3 py-1 bg-blue-600 rounded text-sm">Сохранить и отправить</button>
+                  <p className="mb-2 text-xs text-gray-400">Код, пароль и примечание принимают любые символы без ограничения длины.</p>
+                  <button onClick={() => saveRoomData(s)} disabled={roomSavingId === s.id} className="px-3 py-1 bg-blue-600 rounded text-sm disabled:opacity-50">
+                    {roomSavingId === s.id ? "Отправка…" : "Сохранить и отправить"}
+                  </button>
                 </div>
               )}
 

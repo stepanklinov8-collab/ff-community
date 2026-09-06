@@ -30,7 +30,7 @@ export default function TeamsStatsPage() {
   useEffect(() => {
     const fetchTeams = async () => {
       const [{ data: teamsData }, { data: mainEvents }] = await Promise.all([
-        supabase.from("teams").select("id,name,type,avatar_url").eq("verified", true),
+        supabase.from("teams").select("id,name,type,avatar_url").eq("verified", true).is("dissolved_at", null),
         supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]),
       ]);
       const mainEventIds = (mainEvents ?? []).map((event) => event.id);

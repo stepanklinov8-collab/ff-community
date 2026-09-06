@@ -4,9 +4,9 @@ import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
 const updateRoomSchema = z.object({
   sessionId: z.string().uuid(),
-  roomCode: z.string().trim().max(100),
-  roomPassword: z.string().trim().max(100),
-  roomNote: z.string().trim().max(500),
+  roomCode: z.string(),
+  roomPassword: z.string(),
+  roomNote: z.string(),
 });
 
 interface RouteContext {
@@ -133,17 +133,31 @@ export async function PATCH(request: Request, context: RouteContext) {
         .in("team_id", teamIds);
       for (const userId of (members ?? []).map((row) => row.user_id)) recipientIds.add(userId);
     }
+    let notificationWarning: string | null = null;
     if (recipientIds.size) {
-      await permissions.supabase.from("notifications").insert([...recipientIds].map((userId) => ({
+      const { error: notificationError } = await permissions.supabase.from("notifications").insert([...recipientIds].map((userId) => ({
         user_id: userId,
         type: "room_updated",
         title: "Данные комнаты готовы",
         body: "Код и пароль доступны на странице мероприятия",
         link: `/tournaments/${eventId}`,
       })));
+      if (notificationError) {
+        console.error("Room notification error", notificationError);
+        notificationWarning = "Данные сохранены, но часть уведомлений не отправлена";
+      }
     }
 
-    return Response.json({ success: true });
+    return Response.json({
+      success: true,
+      warning: notificationWarning,
+      room: {
+        id: payload.sessionId,
+        room_code: payload.roomCode,
+        room_password: payload.roomPassword,
+        room_note: payload.roomNote,
+      },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Проверьте данные комнаты" }, { status: 400 });

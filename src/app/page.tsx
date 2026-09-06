@@ -81,7 +81,7 @@ export default function Home() {
           .from("events")
           .select("id, title, type")
           .or(`is_published.eq.true,publish_at.lte.${now}`),
-        supabase.from("teams").select("id", { count: "exact", head: true }).eq("verified", true),
+        supabase.from("teams").select("id", { count: "exact", head: true }).eq("verified", true).is("dissolved_at", null),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
       ]);
 
@@ -140,6 +140,7 @@ export default function Home() {
       .select("id, name, type")
       .ilike("name", `%${query.trim()}%`)
       .eq("verified", true)
+      .is("dissolved_at", null)
       .limit(6);
 
     setSearchResults((data ?? []) as SearchResult[]);

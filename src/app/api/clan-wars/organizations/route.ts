@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const { user } = await requireUser(request);
     const supabase = createAdminClient();
     const [{ data: organizations, error }, managedOrganizations] = await Promise.all([
-      supabase.from("teams").select("id, name, type, avatar_url").order("name"),
+      supabase.from("teams").select("id, name, type, avatar_url").is("dissolved_at", null).order("name"),
       getManagedOrganizations(supabase, user.id),
     ]);
     if (error) throw error;

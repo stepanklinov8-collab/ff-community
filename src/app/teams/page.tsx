@@ -48,6 +48,7 @@ export default function TeamsPage() {
         .from("teams")
         .select("id, name, description, type, created_at, avatar_url, main_rating, team_members(count)")
         .eq("verified", true)
+        .is("dissolved_at", null)
         .order("created_at", { ascending: false });
 
       if (teamsError) {

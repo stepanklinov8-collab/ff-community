@@ -67,7 +67,7 @@ export async function DELETE(request: Request) {
     const [{ data: target, error: targetError }, { data: roles, error: rolesError }, { data: ledTeam, error: teamError }] = await Promise.all([
       supabase.auth.admin.getUserById(payload.userId),
       supabase.from("user_roles").select("role").eq("user_id", payload.userId),
-      supabase.from("teams").select("id, name, type").eq("leader_id", payload.userId).limit(1).maybeSingle(),
+      supabase.from("teams").select("id, name, type").eq("leader_id", payload.userId).is("dissolved_at", null).limit(1).maybeSingle(),
     ]);
     if (targetError || !target.user) throw new UserDeletionError("Пользователь не найден", 404);
     if (rolesError) throw rolesError;
