@@ -53,6 +53,9 @@ export default function TournamentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [user, setUser] = useState<User | null>(null);
+  const [view, setView] = useState<"active" | "archive">("active");
+  const [archiveLimit, setArchiveLimit] = useState(10);
+  const [referenceTime, setReferenceTime] = useState(0);
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -61,33 +64,26 @@ export default function TournamentsPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      const { data, error: eventsError } = await supabase
-        .from("events")
-        .select("id, title, type, cost, organizer, description, image_url, max_teams, created_at")
-        .or(`is_published.eq.true,publish_at.lte.${new Date().toISOString()}`)
-        .order("created_at", { ascending: false });
-      if (eventsError) {
+      const response = await fetch("/api/events/public");
+      const payload = await response.json() as { events?: EventRow[]; sessions?: EventSession[]; generatedAt?: number };
+      if (!response.ok) {
         setError(t("tournaments.loadError"));
         setLoading(false);
         return;
       }
 
-      const rows = (data ?? []) as EventRow[];
-      const eventIds = rows.map((event) => event.id);
-      const { data: sessions, error: sessionsError } = eventIds.length
-        ? await supabase.from("event_sessions").select("id, event_id, start_time, end_time, registration_open_time, registration_close_time, max_teams").in("event_id", eventIds).order("start_time", { ascending: true })
-        : { data: [] as EventSession[], error: null };
-      if (sessionsError) setError(t("tournaments.sessionsError"));
-      const sessionRows = (sessions ?? []) as EventSession[];
+      const rows = payload.events ?? [];
+      const sessionRows = payload.sessions ?? [];
       setEvents(rows.map((event) => ({ ...event, sessions: sessionRows.filter((session) => session.event_id === event.id) })));
+      setReferenceTime(payload.generatedAt ?? 0);
       setLoading(false);
     };
     void fetchEvents();
-  }, [supabase, t]);
+  }, [t]);
 
   const typeLabels: Record<string, string> = {
     all: t("tournaments.all"), training: t("tournaments.trainings"), bo: "БО",
-    tournament: t("tournaments.tournaments"), kv: "КВ", solo: t("event.solo"),
+    tournament: t("tournaments.tournaments"), kv: "КВ", kb: "КБ", solo: t("event.solo"),
   };
   const registrationLabels = {
     pending: t("tournaments.schedulePending"), soon: t("tournaments.registrationSoon"),
@@ -108,6 +104,20 @@ export default function TournamentsPage() {
       });
   }, [events, filter, query]);
 
+  const { activeEvents, archiveEvents } = useMemo(() => {
+    const isPast = (event: EventWithSessions) => event.sessions.length > 0 && event.sessions.every((session) =>
+      new Date(session.end_time || session.start_time).getTime() < referenceTime,
+    );
+    return {
+      activeEvents: filteredEvents.filter((event) => !isPast(event)),
+      archiveEvents: filteredEvents.filter(isPast).sort((left, right) => {
+        const latest = (event: EventWithSessions) => Math.max(...event.sessions.map((session) => new Date(session.end_time || session.start_time).getTime()));
+        return latest(right) - latest(left);
+      }),
+    };
+  }, [filteredEvents, referenceTime]);
+  const displayedEvents = view === "active" ? activeEvents : archiveEvents.slice(0, archiveLimit);
+
   return (
     <div className="page-shell">
       <section className="panel relative mb-6 overflow-hidden p-6 sm:p-8">
@@ -125,15 +135,21 @@ export default function TournamentsPage() {
         </div>
       </section>
 
+      <div className="mb-6 flex gap-2">
+        <button type="button" onClick={() => setView("active")} className={view === "active" ? "btn-primary" : "btn-secondary"}>Активные</button>
+        <button type="button" onClick={() => setView("archive")} className={view === "archive" ? "btn-primary" : "btn-secondary"}>Архив ({archiveEvents.length})</button>
+      </div>
+
       {loading ? (
         <div className="grid gap-5 lg:grid-cols-2">{Array.from({ length: 4 }, (_, index) => <div key={index} className="panel h-80 animate-pulse bg-white/[.03]" />)}</div>
       ) : error ? (
         <div className="panel border-red-500/30 p-6 text-red-200">{error}</div>
-      ) : filteredEvents.length === 0 ? (
+      ) : displayedEvents.length === 0 ? (
         <div className="panel p-10 text-center"><CalendarDays className="mx-auto mb-4 h-10 w-10 text-slate-600" /><h2 className="text-xl font-bold">{t("tournaments.empty")}</h2><p className="mt-2 text-slate-400">{t("tournaments.emptyText")}</p></div>
       ) : (
+        <>
         <div className="grid gap-5 lg:grid-cols-2">
-          {filteredEvents.map((event) => {
+          {displayedEvents.map((event) => {
             const nextSession = event.sessions.find((session) => new Date(session.start_time).getTime() >= Date.now()) ?? event.sessions[0];
             const status = registrationStatus(nextSession);
             const registrationLabel = registrationLabels[status];
@@ -158,6 +174,8 @@ export default function TournamentsPage() {
             );
           })}
         </div>
+        {view === "archive" && archiveLimit < archiveEvents.length && <button type="button" className="btn-secondary mx-auto mt-6 flex" onClick={() => setArchiveLimit((current) => current + 10)}>Показать ещё</button>}
+        </>
       )}
     </div>
   );

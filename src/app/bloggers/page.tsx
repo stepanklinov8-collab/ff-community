@@ -224,6 +224,7 @@ export default function BloggersPage() {
                   </a>
                 )}
                 <p className="text-gray-300">Подписчики: {b.followers_count.toLocaleString()}</p>
+                <Link href={`/bloggers/${b.id}`} className="mt-3 inline-block text-cyan-300 hover:underline">Страница блогера →</Link>
               </div>
             </div>
           ))}

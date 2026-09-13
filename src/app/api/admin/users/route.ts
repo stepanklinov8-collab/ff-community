@@ -5,8 +5,8 @@ import { assertCanManageUserTarget, assertNotOwnerTarget, authErrorResponse, req
 
 const updateUserSchema = z.object({
   userId: z.string().uuid(),
-  nickname: z.string().trim().min(2).max(32),
-  gameId: z.string().trim().min(2).max(32),
+  nickname: z.string().trim().min(1).max(20),
+  gameId: z.string().trim().regex(/^\d+$/),
 });
 
 const deleteUserSchema = z.object({
@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   try {
     const auth = await requireAdmin(request);
     const supabase = createAdminClient();
+
     const { data, error } = await supabase.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
@@ -146,10 +147,28 @@ export async function PATCH(request: Request) {
     await assertCanManageUserTarget(auth, payload.userId);
     const supabase = createAdminClient();
 
+    const [{ data: duplicateNickname }, { data: duplicateGameId }] = await Promise.all([
+      supabase.from("profiles").select("id").eq("nickname", payload.nickname).neq("id", payload.userId).limit(1),
+      supabase.from("profiles").select("id").eq("game_id", payload.gameId).neq("id", payload.userId).limit(1),
+    ]);
+    if (duplicateNickname?.length) return Response.json({ error: "Этот ник уже используется" }, { status: 409 });
+    if (duplicateGameId?.length) return Response.json({ error: "Этот Free Fire ID уже используется" }, { status: 409 });
+
     const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(
       payload.userId,
     );
     if (authError || !authUser.user) throw authError ?? new Error("Пользователь не найден");
+
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: payload.userId,
+      nickname: payload.nickname,
+      game_id: payload.gameId,
+    });
+    if (profileError) {
+      if (profileError.message.includes("NICKNAME_ALREADY_USED")) return Response.json({ error: "Этот ник уже используется" }, { status: 409 });
+      if (profileError.code === "23505" || profileError.message.includes("GAME_ID_ALREADY_USED")) return Response.json({ error: "Этот Free Fire ID уже используется" }, { status: 409 });
+      throw profileError;
+    }
 
     const { error: updateAuthError } = await supabase.auth.admin.updateUserById(
       payload.userId,
@@ -162,13 +181,6 @@ export async function PATCH(request: Request) {
       },
     );
     if (updateAuthError) throw updateAuthError;
-
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: payload.userId,
-      nickname: payload.nickname,
-      game_id: payload.gameId,
-    });
-    if (profileError) throw profileError;
 
     return Response.json({ success: true });
   } catch (error) {

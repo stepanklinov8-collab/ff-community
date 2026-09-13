@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
@@ -21,8 +21,19 @@ export default function AuthPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState("");
+  const registrationFailures = useRef(0);
+  const warnedEmailTypo = useRef("");
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let errorTimer: number | undefined;
+    if (params.get("confirmation_error")) {
+      errorTimer = window.setTimeout(() => {
+        setMode("register");
+        setMessage("Произошла ошибка подтверждения. Попробуйте немного позже или напишите в техподдержку. Код ошибки: AUTH_CONFIRMATION");
+      }, 0);
+    }
+
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setMode("update");
@@ -32,8 +43,24 @@ export default function AuthPage() {
         router.refresh();
       }
     });
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      if (errorTimer) window.clearTimeout(errorTimer);
+      listener.subscription.unsubscribe();
+    };
   }, [router, supabase]);
+
+  const logRegistration = (outcome: "success" | "error", code: string, email: string) => {
+    void fetch("/api/auth/registration-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outcome,
+        code,
+        emailDomain: email.split("@")[1] ?? "",
+      }),
+      keepalive: true,
+    }).catch(() => undefined);
+  };
 
   const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -42,28 +69,64 @@ export default function AuthPage() {
     const gameId = String(formData.get("gameId") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    if (!nickname || !gameId || !email || password.length < 8) {
-      setMessage("Заполните все поля; пароль должен содержать не менее 8 символов.");
+    if (email.endsWith("@gmail.ru") && warnedEmailTypo.current !== email) {
+      warnedEmailTypo.current = email;
+      setMessage("Возможно, вы имели в виду @gmail.com. Проверьте адрес. Если @gmail.ru указан намеренно, нажмите «Создать аккаунт» ещё раз.");
+      return;
+    }
+    if (!nickname || nickname.length > 20 || !/^\d+$/.test(gameId) || !email || password.length < 6) {
+      setMessage("Укажите ник до 20 символов и цифровой Free Fire ID; пароль — не короче 6 символов.");
       return;
     }
 
     setBusy(true);
     setMessage("Создаём аккаунт...");
+    const availabilityResponse = await fetch("/api/auth/availability", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname, gameId }),
+    });
+    const availability = await availabilityResponse.json() as {
+      nicknameAvailable?: boolean;
+      gameIdAvailable?: boolean;
+      error?: string;
+    };
+    if (!availabilityResponse.ok) {
+      setBusy(false);
+      setMessage(availability.error ?? "Не удалось проверить данные. Попробуйте немного позже.");
+      return;
+    }
+    if (!availability.nicknameAvailable || !availability.gameIdAvailable) {
+      setBusy(false);
+      const conflicts = [
+        !availability.nicknameAvailable ? "Этот ник уже используется." : "",
+        !availability.gameIdAvailable ? "Этот Free Fire ID уже используется." : "",
+      ].filter(Boolean);
+      setMessage(conflicts.join(" "));
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { nickname, game_id: gameId },
-        emailRedirectTo: `${window.location.origin}/auth?confirmed=1`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/profile`,
       },
     });
     if (error || !data.user) {
       setBusy(false);
-      setMessage(`Ошибка: ${error?.message ?? "не удалось создать аккаунт"}`);
+      registrationFailures.current += 1;
+      const code = error?.code || `SIGNUP_${error?.status ?? "UNKNOWN"}`;
+      logRegistration("error", code, email);
+      setMessage(registrationFailures.current > 1
+        ? `Регистрация снова не завершилась. Напишите в техподдержку. Код ошибки: ${code}`
+        : "Произошла ошибка. Попробуйте немного позже или напишите в техподдержку.");
       return;
     }
 
     setBusy(false);
+    logRegistration("success", data.session ? "SIGNED_IN" : "AWAITING_CONFIRMATION", email);
     if (data.session) {
       router.push("/profile");
       router.refresh();
@@ -71,7 +134,7 @@ export default function AuthPage() {
       setPendingConfirmationEmail(email);
       setMessage(
         data.user.identities?.length === 0
-          ? "Проверьте почту. Если аккаунт с таким email уже существует, войдите или восстановите пароль."
+          ? "Этот email уже зарегистрирован. Войдите или восстановите старый аккаунт."
           : "Аккаунт и профиль созданы. Мы отправили письмо для подтверждения email. Проверьте также папки «Спам» и «Промоакции».",
       );
       setMode("login");
@@ -86,7 +149,7 @@ export default function AuthPage() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: pendingConfirmationEmail,
-      options: { emailRedirectTo: `${window.location.origin}/auth?confirmed=1` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/profile` },
     });
     setBusy(false);
 
@@ -151,8 +214,8 @@ export default function AuthPage() {
     const formData = new FormData(event.currentTarget);
     const password = String(formData.get("password") ?? "");
     const confirmation = String(formData.get("confirmation") ?? "");
-    if (password.length < 8) {
-      setMessage("Пароль должен содержать не менее 8 символов.");
+    if (password.length < 6) {
+      setMessage("Пароль должен содержать не менее 6 символов.");
       return;
     }
     if (password !== confirmation) {
@@ -191,10 +254,10 @@ export default function AuthPage() {
 
           {mode === "register" && (
             <form onSubmit={handleRegister} className="space-y-4">
-              <input type="text" name="nickname" placeholder="Никнейм" autoComplete="username" maxLength={40} required />
-              <input type="text" name="gameId" placeholder="Игровой ID" inputMode="numeric" maxLength={40} required />
+              <input type="text" name="nickname" placeholder="Никнейм" autoComplete="username" maxLength={20} required />
+              <input type="text" name="gameId" placeholder="Free Fire ID — только цифры" inputMode="numeric" pattern="[0-9]+" required />
               <input type="email" name="email" placeholder="Email" autoComplete="email" required />
-              <input type="password" name="password" placeholder="Пароль — минимум 8 символов" autoComplete="new-password" minLength={8} required />
+              <input type="password" name="password" placeholder="Пароль — минимум 6 символов" autoComplete="new-password" minLength={6} required />
               <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Создание..." : "Создать аккаунт"}</button>
               <p className="text-xs leading-5 text-slate-500">Регистрируясь, вы принимаете <Link className="text-cyan-300" href="/terms">условия</Link> и <Link className="text-cyan-300" href="/privacy">политику конфиденциальности</Link>.</p>
             </form>
@@ -219,13 +282,15 @@ export default function AuthPage() {
 
           {mode === "update" && (
             <form onSubmit={handleUpdatePassword} className="space-y-4">
-              <input type="password" name="password" placeholder="Новый пароль" autoComplete="new-password" minLength={8} required />
-              <input type="password" name="confirmation" placeholder="Повторите пароль" autoComplete="new-password" minLength={8} required />
+              <input type="password" name="password" placeholder="Новый пароль" autoComplete="new-password" minLength={6} required />
+              <input type="password" name="confirmation" placeholder="Повторите пароль" autoComplete="new-password" minLength={6} required />
               <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Сохранение..." : "Сохранить пароль"}</button>
             </form>
           )}
 
           {message && <p className="mt-5 rounded-xl border border-sky-900/35 bg-slate-950/50 p-3 text-center text-sm text-slate-200">{message}</p>}
+
+          {message.includes("техподдерж") && <Link href="/support" className="mt-3 text-center text-sm text-cyan-300 hover:underline">Открыть техподдержку</Link>}
 
           {mode === "login" && pendingConfirmationEmail && (
             <button

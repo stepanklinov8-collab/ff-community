@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireAdmin(request);
+    const actor = await requireAdmin(request);
     const payload = statusSchema.parse(await request.json());
     const supabase = createAdminClient();
     const { data: blogger, error } = await supabase.from("bloggers").update({ status: payload.status }).eq("id", payload.id).select("user_id").single();
@@ -48,6 +48,12 @@ export async function PATCH(request: Request) {
       title: payload.status === "approved" ? "Статус блогера подтверждён" : "Заявка блогера отклонена",
       body: payload.status === "approved" ? "Профиль появился на витрине блогеров" : "Свяжитесь с администрацией для уточнения причины",
       link: "/bloggers",
+    });
+    await supabase.from("admin_action_logs").insert({
+      actor_user_id: actor.user.id,
+      target_user_id: blogger.user_id,
+      action: payload.status === "approved" ? "approve_blogger" : "revoke_blogger",
+      details: { blogger_id: payload.id, status: payload.status },
     });
     return Response.json({ success: true });
   } catch (error) {

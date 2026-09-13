@@ -258,6 +258,7 @@ export default function AdminUsersPage() {
                     {editUserId === user.id ? (
                       <input
                         className="p-1 text-black rounded w-full"
+                        maxLength={20}
                         value={editNickname}
                         onChange={(e) => setEditNickname(e.target.value)}
                       />
@@ -278,6 +279,8 @@ export default function AdminUsersPage() {
                     {editUserId === user.id ? (
                       <input
                         className="p-1 text-black rounded w-full"
+                        inputMode="numeric"
+                        pattern="[0-9]+"
                         value={editGameId}
                         onChange={(e) => setEditGameId(e.target.value)}
                       />

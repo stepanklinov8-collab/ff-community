@@ -76,14 +76,16 @@ export async function GET(request: Request, context: RouteContext) {
     const participantIds = [...new Set(visibleRows
       .map((row) => row.participant_user_id)
       .filter((id): id is string => Boolean(id)))];
+    const rosterIds = [...new Set(visibleRows.flatMap((row) => parseRoster(row.roster_json, row.roster)))];
     const { data: teams } = teamIds.length
-      ? await supabase.from("teams").select("id, name").in("id", teamIds)
+      ? await supabase.from("teams").select("id, name, avatar_url, main_rating").in("id", teamIds)
       : { data: [] };
-    const { data: participants } = participantIds.length
-      ? await supabase.from("profiles").select("id, nickname").in("id", participantIds)
+    const profileIds = [...new Set([...participantIds, ...rosterIds])];
+    const { data: participants } = profileIds.length
+      ? await supabase.from("profiles").select("id, nickname, avatar_url, main_rating").in("id", profileIds)
       : { data: [] };
-    const teamById = new Map((teams ?? []).map((team) => [team.id, team.name]));
-    const participantById = new Map((participants ?? []).map((profile) => [profile.id, profile.nickname]));
+    const teamById = new Map((teams ?? []).map((team) => [team.id, team]));
+    const participantById = new Map((participants ?? []).map((profile) => [profile.id, profile]));
 
     const registrations = visibleRows.map((row) => {
       const maySeeRoster = isPrivileged ||
@@ -91,19 +93,24 @@ export async function GET(request: Request, context: RouteContext) {
         row.participant_user_id === auth?.user.id ||
         event.show_registrations;
       const participantName = row.participant_user_id
-        ? participantById.get(row.participant_user_id) || "Игрок"
+        ? participantById.get(row.participant_user_id)?.nickname || "Игрок"
         : null;
+      const team = row.team_id ? teamById.get(row.team_id) : null;
+      const roster = maySeeRoster ? parseRoster(row.roster_json, row.roster) : [];
       return {
         id: row.id,
         session_id: row.session_id,
         team_id: row.team_id,
         participant_user_id: row.participant_user_id,
-        team_name: row.team_name_override || participantName || (row.team_id ? teamById.get(row.team_id) : null) || "Участник",
+        team_name: row.team_name_override || participantName || team?.name || "Участник",
+        team_avatar_url: team?.avatar_url || (row.participant_user_id ? participantById.get(row.participant_user_id)?.avatar_url : null) || null,
+        team_rating: Number(team?.main_rating ?? (row.participant_user_id ? participantById.get(row.participant_user_id)?.main_rating : 1) ?? 1),
         registration_kind: row.participant_user_id ? "individual" : "team",
         status: row.status,
         is_winner: row.is_winner,
         created_at: row.created_at,
-        roster: maySeeRoster ? parseRoster(row.roster_json, row.roster) : [],
+        roster,
+        roster_players: roster.map((userId) => participantById.get(userId)).filter(Boolean),
       };
     });
 

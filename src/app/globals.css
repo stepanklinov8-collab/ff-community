@@ -449,6 +449,19 @@ input[type="radio"] {
   filter: brightness(1.08);
 }
 
+button:active,
+a[role="button"]:active,
+.primary-button:active,
+.secondary-button:active,
+.btn-primary:active,
+.btn-secondary:active,
+.icon-button:active,
+.nav-item:active,
+.auth-action:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
+}
+
 .site-footer {
   display: flex;
   gap: 28px;

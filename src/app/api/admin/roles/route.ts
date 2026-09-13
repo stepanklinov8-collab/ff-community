@@ -56,6 +56,26 @@ export async function POST(request: Request) {
       if (auditError) throw auditError;
     }
 
+    const [{ error: actionLogError }, { error: notificationError }] = await Promise.all([
+      supabase.from("admin_action_logs").insert({
+        actor_user_id: actor.user.id,
+        target_user_id: payload.userId,
+        action: `${payload.action}_${payload.role}`,
+        details: { role: payload.role, action: payload.action },
+      }),
+      supabase.from("notifications").insert({
+        user_id: payload.userId,
+        type: "role_changed",
+        title: payload.action === "add" ? "Права профиля обновлены" : "Права профиля изменены",
+        body: payload.role === "blogger"
+          ? `Плашка «Блогер» ${payload.action === "add" ? "добавлена" : "отозвана"}`
+          : `Роль ${payload.role === "admin" ? "администратора" : "модератора"} ${payload.action === "add" ? "назначена" : "снята"}`,
+        link: "/profile",
+      }),
+    ]);
+    if (actionLogError) console.error("Admin action audit error", actionLogError);
+    if (notificationError) console.error("Role notification error", notificationError);
+
     const [{ data: roles, error: rolesError }, { data: badges, error: badgesError }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", payload.userId),
       supabase.from("profile_badges").select("badge").eq("user_id", payload.userId),

@@ -55,6 +55,9 @@ interface Registration {
   is_winner: boolean;
   created_at: string;
   roster: string[];
+  team_avatar_url?: string | null;
+  team_rating?: number;
+  roster_players?: { id: string; nickname: string; avatar_url?: string | null; main_rating?: number }[];
 }
 
 interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
@@ -70,11 +73,6 @@ interface TeamMember {
   user_id: string;
   role_in_team: string;
   position: string;
-  nickname: string;
-}
-
-interface PlayerSummary {
-  id: string;
   nickname: string;
 }
 
@@ -125,7 +123,6 @@ export default function EventPage() {
   const [winnerTeamId, setWinnerTeamId] = useState("");
 
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
-  const [allPlayers, setAllPlayers] = useState<PlayerSummary[]>([]);
 
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleUserId, setResponsibleUserId] = useState("");
@@ -166,10 +163,6 @@ export default function EventPage() {
       const { data: gameRows } = await supabase.from("event_games").select("id,session_id,game_number,map_name").eq("event_id", id).order("game_number");
       setGames((gameRows ?? []) as EventGame[]);
 
-      const { data: profiles } = await supabase.from("profiles").select("id, nickname");
-      if (profiles) setAllPlayers(profiles);
-      const nicknameById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
-
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
       await loadRegistrations(Boolean(user));
@@ -195,8 +188,9 @@ export default function EventPage() {
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
-          .single();
-        if (roleData) setIsAdmin(true);
+          .in("role", ["moderator", "admin", "superadmin"])
+          .limit(1);
+        if (roleData?.length) setIsAdmin(true);
 
         if (ev?.organizer_user_id === user.id) setIsOrganizer(true);
 
@@ -226,6 +220,10 @@ export default function EventPage() {
               .select("user_id, role_in_team, position")
               .eq("team_id", team.id);
             if (members) {
+              const { data: memberProfiles } = await supabase.from("profiles")
+                .select("id,nickname")
+                .in("id", members.map((membership) => membership.user_id));
+              const nicknameById = new Map((memberProfiles ?? []).map((profile) => [profile.id, profile.nickname]));
               const enrichedMembers = members.map((membership) => ({
                 ...membership,
                 nickname: nicknameById.get(membership.user_id) || "—",
@@ -507,8 +505,8 @@ export default function EventPage() {
   const allowsCollectiveRegistration = event.type !== "solo";
   const collectiveLabel = myTeam?.type === "guild" ? "Гильдия" : "Команда";
   const canViewRoom = isAdmin || isOrganizer ||
-    (myTeam && confirmed.some(r => r.team_id === myTeam.id)) ||
-    confirmed.some(r => r.participant_user_id === currentUser?.id);
+    confirmed.some((registration) => registration.participant_user_id === currentUser?.id ||
+      Boolean(currentUser && registration.roster.includes(currentUser.id)));
 
   return (
     <div className="min-h-screen p-6">
@@ -757,7 +755,7 @@ export default function EventPage() {
               </p>
               <div className="mt-2 space-y-1 text-sm text-gray-300">
                 {selectedRegistration.roster.length > 0 ? selectedRegistration.roster.map((userId) => (
-                  <p key={userId}>— {myMembers.find((member) => member.user_id === userId)?.nickname || allPlayers.find((player) => player.id === userId)?.nickname || "Игрок"}</p>
+                  <p key={userId}>— {myMembers.find((member) => member.user_id === userId)?.nickname || selectedRegistration.roster_players?.find((player) => player.id === userId)?.nickname || "Игрок"}</p>
                 )) : <p className="text-gray-400">Состав не указан.</p>}
               </div>
 
@@ -880,19 +878,25 @@ export default function EventPage() {
           {confirmed.map((r) => (
             <div key={r.id} className="bg-gray-800 p-3 rounded mb-2">
               <div className="flex justify-between items-center">
-                <div>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 overflow-hidden rounded-lg bg-slate-700">
+                    {r.team_avatar_url ? <Image src={r.team_avatar_url} alt="" width={40} height={40} unoptimized className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center font-bold">{(r.team_name_override || r.team_name)?.[0]?.toUpperCase()}</div>}
+                  </div>
+                  <div>
                   <button onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)} className="text-blue-400 hover:underline">
                     {r.team_name_override || r.team_name}
                   </button>
+                  <p className="text-xs text-slate-400">Рейтинг {Number(r.team_rating ?? 1).toFixed(0)} · вероятность победы {Math.round((Number(r.team_rating ?? 1) / Math.max(1, confirmed.reduce((sum, item) => sum + Number(item.team_rating ?? 1), 0))) * 100)}%</p>
                   {r.is_winner && <span className="ml-2 text-yellow-400">🏆 Победитель</span>}
+                  </div>
                 </div>
                 <span className="text-green-400">✓</span>
               </div>
               {selectedRegistrationId === r.id && (
                 <div className="mt-2 text-sm text-gray-300">
                   {r.roster.length > 0 ? r.roster.map((userId: string) => {
-                    const player = allPlayers.find((p) => p.id === userId);
-                    return <div key={userId}>— {player?.nickname || userId}</div>;
+                    const player = r.roster_players?.find((item) => item.id === userId);
+                    return <div key={userId}>— {player?.nickname || userId}{player?.main_rating != null ? ` · рейтинг ${Number(player.main_rating).toFixed(0)}` : ""}</div>;
                   }) : <p className="text-gray-500">Состав не указан</p>}
                 </div>
               )}

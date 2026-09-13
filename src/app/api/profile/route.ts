@@ -3,8 +3,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
 const profileSchema = z.object({
-  nickname: z.string().trim().min(2).max(32),
-  gameId: z.string().trim().min(3).max(32),
+  nickname: z.string().trim().min(1).max(20),
+  gameId: z.string().trim().regex(/^\d+$/),
   bio: z.string().trim().max(500),
   phone: z.string().trim().max(32),
   locale: z.enum(["ru", "kk", "ky"]),
@@ -46,13 +46,12 @@ export async function PATCH(request: Request) {
     const { user } = await requireUser(request);
     const payload = profileSchema.parse(await request.json());
     const supabase = createAdminClient();
-    const { data: duplicate } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("game_id", payload.gameId)
-      .neq("id", user.id)
-      .maybeSingle();
-    if (duplicate) return Response.json({ error: "Этот игровой ID уже используется" }, { status: 409 });
+    const [{ data: duplicateNickname }, { data: duplicateGameId }] = await Promise.all([
+      supabase.from("profiles").select("id").eq("nickname", payload.nickname).neq("id", user.id).limit(1),
+      supabase.from("profiles").select("id").eq("game_id", payload.gameId).neq("id", user.id).limit(1),
+    ]);
+    if (duplicateNickname?.length) return Response.json({ error: "Этот ник уже используется" }, { status: 409 });
+    if (duplicateGameId?.length) return Response.json({ error: "Этот Free Fire ID уже используется" }, { status: 409 });
 
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,
@@ -63,7 +62,11 @@ export async function PATCH(request: Request) {
       locale: payload.locale,
       updated_at: new Date().toISOString(),
     });
-    if (error) throw error;
+    if (error) {
+      if (error.message.includes("NICKNAME_ALREADY_USED")) return Response.json({ error: "Этот ник уже используется" }, { status: 409 });
+      if (error.code === "23505" || error.message.includes("GAME_ID_ALREADY_USED")) return Response.json({ error: "Этот Free Fire ID уже используется" }, { status: 409 });
+      throw error;
+    }
 
     const { error: metadataError } = await supabase.auth.admin.updateUserById(user.id, {
       user_metadata: {

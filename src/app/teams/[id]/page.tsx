@@ -309,7 +309,7 @@ export default function TeamPage() {
   const transferLeadership = async () => {
     if (!transferUserId || !currentUser) return;
     setOrganizationBusy(true);
-    const { data, error } = await supabase.rpc("request_team_leadership_transfer", {
+    const { error } = await supabase.rpc("transfer_team_leadership", {
       p_team_id: id,
       p_to_user_id: transferUserId,
     });
@@ -318,13 +318,11 @@ export default function TeamPage() {
       setInviteMessage("Не удалось передать лидерство: " + error.message);
       return;
     }
-    setPendingTransfer({
-      id: String(data),
-      from_user_id: currentUser.id,
-      to_user_id: transferUserId,
-      status: "pending",
-    });
-    setInviteMessage("Запрос на передачу лидерства отправлен. Игрок должен подтвердить.");
+    await Promise.all([fetchTeam(), fetchMembers()]);
+    setIsLeader(false);
+    setCanManage(false);
+    setPendingTransfer(null);
+    setInviteMessage("Лидерство передано. Новый лидер уже получил права управления.");
     setShowTransfer(false);
     setTransferUserId("");
   };
@@ -356,11 +354,6 @@ export default function TeamPage() {
     if (!team || !isLeader || organizationBusy) return;
     const kind = team.type === "guild" ? "гильдию" : "команду";
     if (!confirm(`Распустить ${kind} «${team.name}»? Все текущие заявки и незавершённые КВ будут отменены.`)) return;
-    const confirmation = prompt(`Для подтверждения введите название: ${team.name}`);
-    if (confirmation !== team.name) {
-      setInviteMessage("Роспуск отменён: название введено неверно.");
-      return;
-    }
 
     setOrganizationBusy(true);
     const { error } = await supabase.rpc("dissolve_organization", { p_team_id: id });

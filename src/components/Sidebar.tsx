@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { authFetch } from "@/utils/api/auth-fetch";
 import { localeNames, locales } from "@/i18n/messages";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -52,13 +53,9 @@ export default function Sidebar() {
         if (!window.localStorage.getItem("omcite-locale") && locales.includes(profileLocale)) {
           setLocale(profileLocale);
         }
-        const { data: roleRows } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.user.id)
-          .in("role", ["moderator", "admin", "superadmin"]);
-        if (active) setIsAdmin(Boolean(roleRows?.length));
-        if (!roleRows && active) setIsAdmin(false);
+        const response = await authFetch("/api/admin/capabilities");
+        const capabilities = response.ok ? await response.json() as { canOpenAdmin?: boolean } : null;
+        if (active) setIsAdmin(Boolean(capabilities?.canOpenAdmin));
       }
     }
 
@@ -88,6 +85,7 @@ export default function Sidebar() {
     { href: "/messages", label: t("messages"), icon: Mail, auth: true },
     { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
     { href: "/profile", label: t("profile"), icon: UserRound, auth: true },
+    { href: "/support", label: "Поддержка", icon: Contact },
     { href: "/contacts", label: t("contacts"), icon: Contact },
   ];
 
@@ -194,7 +192,7 @@ export default function Sidebar() {
                   <LogOut size={18} /> {t("signOut")}
                 </button>
               ) : (
-                <Link href="/auth" className="auth-action">
+                <Link href="/auth" onClick={() => setOpen(false)} className="auth-action">
                   <LogIn size={18} /> {t("signIn")}
                 </Link>
               )}

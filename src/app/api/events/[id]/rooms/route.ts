@@ -13,6 +13,18 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+function parseRoster(rosterJson: unknown, legacyRoster: unknown) {
+  const value = Array.isArray(rosterJson) ? rosterJson : Array.isArray(legacyRoster) ? legacyRoster : null;
+  if (value) return value.filter((item): item is string => typeof item === "string");
+  if (!legacyRoster) return [];
+  try {
+    const parsed: unknown = JSON.parse(String(legacyRoster));
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 async function getPermissions(request: Request, eventId: string) {
   const auth = await requireUser(request);
   const supabase = createAdminClient();
@@ -25,34 +37,19 @@ async function getPermissions(request: Request, eventId: string) {
   if (eventError) throw eventError;
 
   const isOrganizer = event.organizer_user_id === auth.user.id;
-  const { data: memberships } = await supabase
-    .from("team_members")
-    .select("team_id")
-    .eq("user_id", auth.user.id);
-  const teamIds = (memberships ?? []).map((row) => row.team_id);
-
-  const { data: personalRegistrations } = await supabase
+  const { data: registrations, error: registrationsError } = await supabase
     .from("event_registrations")
-    .select("session_id")
+    .select("session_id, participant_user_id, roster, roster_json")
     .eq("event_id", eventId)
-    .eq("participant_user_id", auth.user.id)
     .eq("status", "confirmed")
     .not("session_id", "is", null);
+  if (registrationsError) throw registrationsError;
   const confirmedSessionIds = new Set(
-    (personalRegistrations ?? []).map((row) => row.session_id).filter(Boolean) as string[],
+    (registrations ?? [])
+      .filter((row) => row.participant_user_id === auth.user.id || parseRoster(row.roster_json, row.roster).includes(auth.user.id))
+      .map((row) => row.session_id)
+      .filter(Boolean) as string[],
   );
-  if (teamIds.length) {
-    const { data: registrations } = await supabase
-      .from("event_registrations")
-      .select("session_id")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed")
-      .in("team_id", teamIds)
-      .not("session_id", "is", null);
-    for (const sessionId of (registrations ?? []).map((row) => row.session_id).filter(Boolean) as string[]) {
-      confirmedSessionIds.add(sessionId);
-    }
-  }
 
   return { auth, supabase, isAdmin, isOrganizer, confirmedSessionIds };
 }
@@ -117,21 +114,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const { data: registrations } = await permissions.supabase
       .from("event_registrations")
-      .select("team_id, participant_user_id")
+      .select("participant_user_id, roster, roster_json")
       .eq("session_id", payload.sessionId)
       .eq("status", "confirmed");
-    const teamIds = [...new Set((registrations ?? [])
-      .map((row) => row.team_id)
-      .filter((id): id is string => Boolean(id)))];
     const recipientIds = new Set((registrations ?? [])
       .map((row) => row.participant_user_id)
       .filter((id): id is string => Boolean(id)));
-    if (teamIds.length) {
-      const { data: members } = await permissions.supabase
-        .from("team_members")
-        .select("user_id")
-        .in("team_id", teamIds);
-      for (const userId of (members ?? []).map((row) => row.user_id)) recipientIds.add(userId);
+    for (const registration of registrations ?? []) {
+      for (const userId of parseRoster(registration.roster_json, registration.roster)) recipientIds.add(userId);
     }
     let notificationWarning: string | null = null;
     if (recipientIds.size) {

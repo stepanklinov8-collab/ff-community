@@ -285,8 +285,8 @@ export default function ProfilePage() {
       {editingProfile && (
         <section className="panel grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
           <div className="sm:col-span-2"><p className="eyebrow">Настройки аккаунта</p><h2 className="section-title mt-2">Редактирование профиля</h2></div>
-          <label className="field-label">Игровой ник<input className="field mt-2" maxLength={32} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
-          <label className="field-label">Игровой ID<input className="field mt-2" maxLength={32} value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
+          <label className="field-label">Игровой ник<input className="field mt-2" maxLength={20} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
+          <label className="field-label">Free Fire ID<input className="field mt-2" inputMode="numeric" pattern="[0-9]+" value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
           <label className="field-label">Телефон или контакт<input className="field mt-2" maxLength={32} placeholder="Необязательно" value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} /></label>
           <label className="field-label">Язык<select className="field mt-2" value={profileForm.locale} onChange={(event) => setProfileForm((current) => ({ ...current, locale: event.target.value as EditableProfile["locale"] }))}><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="ky">Кыргызча</option></select></label>
           <label className="field-label sm:col-span-2">О себе<textarea className="field mt-2 min-h-28 resize-y" maxLength={500} value={profileForm.bio} onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))} /></label>

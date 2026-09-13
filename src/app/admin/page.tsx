@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [message, setMessage] = useState("");
+  const [canViewLogs, setCanViewLogs] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
   // Для предупреждений команде
@@ -39,6 +40,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void fetchTeams(); }, 0);
+    void authFetch("/api/admin/logs?probe=1").then((response) => setCanViewLogs(response.ok));
     return () => window.clearTimeout(timer);
   }, [fetchTeams]);
 
@@ -323,6 +325,11 @@ export default function AdminPage() {
         <h2 className="text-xl font-semibold mb-4">Блогеры</h2>
         <Link href="/admin/bloggers" className="px-4 py-2 bg-pink-600 rounded hover:bg-pink-700 inline-block">Управление блогерами</Link>
       </div>
+
+      {canViewLogs && <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Системный журнал</h2>
+        <Link href="/admin/logs" className="inline-block rounded bg-slate-700 px-4 py-2 hover:bg-slate-600">Ошибки регистрации и действия</Link>
+      </div>}
     </div>
   );
 }
