@@ -75,14 +75,14 @@ export default function BettingPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const response = await authFetch("/api/betting");
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || t("betting.signIn"));
       setData(payload);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("betting.loadError"));
+      if (!silent) setMessage(error instanceof Error ? error.message : t("betting.loadError"));
     } finally {
       setLoading(false);
     }
@@ -147,28 +147,34 @@ export default function BettingPage() {
     }
     setBusy(true);
     setMessage(t("betting.loadingQuote"));
-    const response = await authFetch("/api/betting", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "quote",
-        sourceId,
-        gameId: isClassic ? gameId : null,
-        teamId,
-        marketType,
-        selectionValue: marketType === "exact_place" || marketType === "exact_score" ? selectionValue : marketType,
-        line: marketType.startsWith("kills_") ? Number(line) : null,
-      }),
-    });
-    const payload = await response.json();
-    setBusy(false);
-    if (!response.ok) {
+    try {
+      const response = await authFetch("/api/betting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "quote",
+          sourceId,
+          gameId: isClassic ? gameId : null,
+          teamId,
+          marketType,
+          selectionValue: marketType === "exact_place" || marketType === "exact_score" ? selectionValue : marketType,
+          line: marketType.startsWith("kills_") ? Number(line) : null,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        resetQuote();
+        setMessage(payload.error || t("betting.calculateError"));
+        return;
+      }
+      setQuote(payload);
+      setMessage(payload.available ? t("betting.quoteReady") : payload.message || t("betting.unavailable"));
+    } catch (error) {
       resetQuote();
-      setMessage(payload.error || t("betting.calculateError"));
-      return;
+      setMessage(error instanceof Error ? error.message : t("betting.calculateError"));
+    } finally {
+      setBusy(false);
     }
-    setQuote(payload);
-    setMessage(payload.available ? t("betting.quoteReady") : t("betting.unavailable"));
   };
 
   const confirmBet = async () => {
@@ -183,27 +189,45 @@ export default function BettingPage() {
     }
     setBusy(true);
     setMessage(t("betting.confirming"));
-    const response = await authFetch("/api/betting", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "confirm", quoteId: quote.quoteId, stake: stakeNumber }),
-    });
-    const payload = await response.json();
-    setBusy(false);
-    if (!response.ok) {
-      if (payload.code === "QUOTE_CHANGED" && payload.quote?.available) {
-        setQuote(payload.quote);
-        setMessage(t("betting.changed", { odds: Number(payload.quote.odds).toFixed(2) }));
-      } else {
-        resetQuote();
-        setMessage(payload.error || t("betting.confirmError"));
+    try {
+      const response = await authFetch("/api/betting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm", quoteId: quote.quoteId, stake: stakeNumber }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        if (payload.code === "QUOTE_CHANGED" && payload.quote?.available) {
+          setQuote(payload.quote);
+          setMessage(t("betting.changed", { odds: Number(payload.quote.odds).toFixed(2) }));
+        } else {
+          resetQuote();
+          if (payload.code === "DUPLICATE_BET") await load(true);
+          setMessage(payload.error || t("betting.confirmError"));
+        }
+        return;
       }
-      return;
+
+      if (payload.bet || typeof payload.balance === "number") {
+        setData((current) => ({
+          ...current,
+          balance: typeof payload.balance === "number" ? payload.balance : current.balance,
+          bets: payload.bet
+            ? [payload.bet as Bet, ...current.bets.filter((bet) => bet.id !== payload.bet.id)]
+            : current.bets,
+        }));
+      }
+      if (!payload.bet || typeof payload.balance !== "number") {
+        await load(true);
+      }
+      setStake("");
+      resetQuote();
+      setMessage(t("betting.accepted"));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t("betting.confirmError"));
+    } finally {
+      setBusy(false);
     }
-    setMessage(t("betting.accepted"));
-    setStake("");
-    resetQuote();
-    await load();
   };
 
   return (

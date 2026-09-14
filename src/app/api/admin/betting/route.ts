@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isEventEffectivelyPublished } from "@/lib/event-publication";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
 
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
     const [{ data: markets, error: marketsError }, { data: events, error: eventsError }, { data: wars, error: warsError }, { data: sources, error: sourcesError }, { data: settings }] =
       await Promise.all([
         supabase.from("betting_markets").select("id,event_id,game_id,clan_war_id,subject_team_name,mode,market_type,selection_value,line,odds,status,locks_at,outcome,created_at").order("created_at", { ascending: false }).limit(300),
-        supabase.from("events").select("id,title,type,is_published").in("type", ["tournament", "training", "bo"]).order("created_at", { ascending: false }).limit(200),
+        supabase.from("events").select("id,title,type,is_published,publish_at").in("type", ["tournament", "training", "bo"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("clan_wars").select("id,title,creator_team_id,opponent_team_id,status,scheduled_at").in("status", ["agreed", "completed", "cancelled"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("betting_sources").select("id,event_id,clan_war_id,enabled,updated_at"),
         auth.roles.includes("superadmin")
@@ -101,14 +102,14 @@ export async function POST(request: Request) {
     let locksAt: string | null = null;
     if (payload.sourceKind === "event") {
       const [{ data: event, error: eventError }, { data: session, error: sessionError }] = await Promise.all([
-        supabase.from("events").select("id,type,is_published").eq("id", payload.sourceId).maybeSingle(),
+        supabase.from("events").select("id,type,is_published,publish_at").eq("id", payload.sourceId).maybeSingle(),
         supabase.from("event_sessions").select("start_time").eq("event_id", payload.sourceId).order("start_time").limit(1).maybeSingle(),
       ]);
       if (eventError || sessionError) throw eventError ?? sessionError;
       if (!event || !["tournament", "training", "bo"].includes(event.type)) {
         return Response.json({ error: "Этот тип мероприятия не поддерживает ставки" }, { status: 400 });
       }
-      if (!event.is_published) return Response.json({ error: "Сначала опубликуйте мероприятие" }, { status: 400 });
+      if (!isEventEffectivelyPublished(event)) return Response.json({ error: "Сначала опубликуйте мероприятие" }, { status: 400 });
       eventId = event.id;
       locksAt = session?.start_time ?? null;
     } else {

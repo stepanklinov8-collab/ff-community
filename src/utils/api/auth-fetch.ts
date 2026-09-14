@@ -15,5 +15,5 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${session.access_token}`);
 
-  return fetch(input, { ...init, headers });
+  return fetch(input, { cache: "no-store", ...init, headers });
 }

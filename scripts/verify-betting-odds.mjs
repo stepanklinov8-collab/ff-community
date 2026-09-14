@@ -4,6 +4,8 @@ import {
   isBettingOddsAvailable,
   roundHalfUpToHundredths,
 } from "../src/lib/betting-odds.ts";
+import { classifyBettingDatabaseError } from "../src/lib/betting-errors.ts";
+import { isEventEffectivelyPublished } from "../src/lib/event-publication.ts";
 
 assert.equal(roundHalfUpToHundredths(1.1049), 1.10);
 assert.equal(roundHalfUpToHundredths(1.105), 1.11);
@@ -34,5 +36,17 @@ const exactThreshold = calculateFixedOdds({
 });
 assert.equal(exactThreshold.eligible, true);
 assert.ok(exactThreshold.offeredOdds !== null && exactThreshold.offeredOdds >= 1.10);
+
+assert.equal(isEventEffectivelyPublished({ is_published: true, publish_at: null }), true);
+assert.equal(isEventEffectivelyPublished({ is_published: false, publish_at: "2026-09-14T10:00:00Z" }, Date.parse("2026-09-14T11:00:00Z")), true);
+assert.equal(isEventEffectivelyPublished({ is_published: false, publish_at: "2026-09-14T12:00:00Z" }, Date.parse("2026-09-14T11:00:00Z")), false);
+
+assert.deepEqual(classifyBettingDatabaseError({ message: "Insufficient balance" }), {
+  code: "INSUFFICIENT_BALANCE",
+  message: "Недостаточно монет",
+  status: 409,
+});
+assert.equal(classifyBettingDatabaseError({ code: "23505", message: "duplicate key value" }).code, "DUPLICATE_BET");
+assert.equal(classifyBettingDatabaseError({ code: "XX000", message: "unexpected" }).code, "BET_DATABASE_XX000");
 
 console.log("Betting odds verification passed");

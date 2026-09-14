@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { useLanguage } from "@/components/LanguageProvider";
+import { isEventEffectivelyPublished } from "@/lib/event-publication";
 
 type Source = { id: string; event_id: string | null; clan_war_id: string | null; enabled: boolean };
-type EventItem = { id: string; title: string; type: string; is_published: boolean; locks_at: string | null };
+type EventItem = { id: string; title: string; type: string; is_published: boolean; publish_at: string | null; locks_at: string | null };
 type WarItem = { id: string; title: string; status: string; scheduled_at: string | null; opponent_team_id: string | null };
 type Market = {
   id: string;
@@ -136,7 +137,15 @@ export default function AdminBettingPage() {
             {data.events.length === 0 && <p className="text-sm text-slate-500">{t("adminBetting.eventsEmpty")}</p>}
             {data.events.map((event) => {
               const enabled = enabledEvents.get(event.id) ?? false;
-              const unavailable = !event.is_published || !event.locks_at || new Date(event.locks_at) <= new Date();
+              const published = isEventEffectivelyPublished(event);
+              const hasStartTime = Boolean(event.locks_at);
+              const startIsFuture = Boolean(event.locks_at && new Date(event.locks_at) > new Date());
+              const unavailable = !published || !hasStartTime || !startIsFuture;
+              const unavailableMessage = !published
+                ? t("adminBetting.eventNotPublished")
+                : !hasStartTime
+                  ? t("adminBetting.eventNoStart")
+                  : t("adminBetting.eventStarted");
               const key = `event:${event.id}`;
               return <article key={event.id} className="rounded-xl border border-white/10 p-4">
                 <div className="flex items-start justify-between gap-4">
@@ -145,7 +154,7 @@ export default function AdminBettingPage() {
                     {enabled ? t("adminBetting.disable") : t("adminBetting.enable")}
                   </button>
                 </div>
-                {unavailable && !enabled && <p className="mt-2 text-xs text-amber-300">{t("adminBetting.eventUnavailable")}</p>}
+                {unavailable && !enabled && <p className="mt-2 text-xs text-amber-300">{unavailableMessage}</p>}
               </article>;
             })}
           </div>

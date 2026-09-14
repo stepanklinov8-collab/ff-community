@@ -5,6 +5,8 @@ import {
   QUOTE_LIFETIME_SECONDS,
   suggestedKillsLine,
 } from "@/lib/betting-odds";
+import { classifyBettingDatabaseError } from "@/lib/betting-errors";
+import { isEventEffectivelyPublished } from "@/lib/event-publication";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
@@ -81,6 +83,8 @@ interface CatalogSource {
 }
 
 const unavailableMessage = "Коэффициент ниже 1,10. Ставка на этот исход недоступна";
+const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
+const betSelection = "id,market_id,stake,odds,potential_payout,status,payout,placed_at,betting_markets(subject_team_name,mode,market_type,selection_value,line,event_id,game_id,clan_war_id)";
 
 function average(values: number[], fallback: number) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : fallback;
@@ -131,12 +135,12 @@ async function evaluateSelection(
 
   if (eventId) {
     const [{ data: event, error: eventError }, { data: firstSession, error: sessionError }] = await Promise.all([
-      supabase.from("events").select("id,type,is_published").eq("id", eventId).maybeSingle(),
+      supabase.from("events").select("id,type,is_published,publish_at").eq("id", eventId).maybeSingle(),
       supabase.from("event_sessions").select("start_time").eq("event_id", eventId)
         .order("start_time", { ascending: true }).limit(1).maybeSingle(),
     ]);
     if (eventError || sessionError) throw eventError ?? sessionError;
-    if (!event?.is_published || !["tournament", "training", "bo"].includes(event.type)) {
+    if (!event || !isEventEffectivelyPublished(event) || !["tournament", "training", "bo"].includes(event.type)) {
       throw new Error("Мероприятие недоступно для ставок");
     }
     mode = event.type as SelectionEvaluation["mode"];
@@ -272,36 +276,88 @@ async function saveQuote(
   };
 }
 
+async function findBetByQuote(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  quoteId: string,
+) {
+  return supabase.from("site_bets")
+    .select(betSelection)
+    .eq("user_id", userId)
+    .eq("quote_id", quoteId)
+    .maybeSingle();
+}
+
+async function acceptedBetResponse(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  betId: string,
+  status = 201,
+) {
+  const [{ data: wallet, error: walletError }, { data: bet, error: betError }] = await Promise.all([
+    supabase.from("site_wallets").select("balance").eq("user_id", userId).maybeSingle(),
+    supabase.from("site_bets").select(betSelection).eq("id", betId).eq("user_id", userId).maybeSingle(),
+  ]);
+
+  // The transaction has already succeeded at this point. A secondary read
+  // failure must not turn it into a false rejection in the interface.
+  if (walletError || betError) {
+    console.error("Bet accepted but refresh data could not be loaded", {
+      userId,
+      betId,
+      walletError,
+      betError,
+    });
+  }
+
+  return Response.json({
+    success: true,
+    betId,
+    balance: walletError ? null : wallet?.balance ?? null,
+    bet: betError ? null : bet ?? null,
+  }, { status, headers: noStoreHeaders });
+}
+
 export async function GET(request: Request) {
   try {
     const { user } = await requireUser(request);
     const supabase = createAdminClient();
     const now = new Date().toISOString();
-    await Promise.all([
+    const [{ error: lockMarketsError }, { error: cleanupQuotesError }] = await Promise.all([
       supabase.from("betting_markets").update({ status: "locked" }).eq("status", "open").lte("locks_at", now),
       supabase.from("betting_quotes").delete().is("confirmed_at", null).lt("expires_at", new Date(Date.now() - 86_400_000).toISOString()),
     ]);
+    if (lockMarketsError || cleanupQuotesError) {
+      console.error("Betting maintenance did not complete", { lockMarketsError, cleanupQuotesError });
+    }
 
-    const [{ data: sourceRows, error: sourcesError }, { data: wallet, error: walletError }, { data: settings }, { data: bets, error: betsError }] = await Promise.all([
+    const [{ data: sourceRows, error: sourcesError }, { data: wallet, error: walletError }, { data: settings, error: settingsError }, { data: bets, error: betsError }] = await Promise.all([
       supabase.from("betting_sources").select("id,event_id,clan_war_id").eq("enabled", true),
       supabase.from("site_wallets").select("balance").eq("user_id", user.id).maybeSingle(),
       supabase.from("economy_settings").select("currency_name,minimum_stake,maximum_stake,maximum_odds").eq("singleton", true).maybeSingle(),
       supabase.from("site_bets")
-        .select("id,market_id,stake,odds,potential_payout,status,payout,placed_at,betting_markets(subject_team_name,mode,market_type,selection_value,line,event_id,game_id,clan_war_id)")
+        .select(betSelection)
         .eq("user_id", user.id).order("placed_at", { ascending: false }).limit(100),
     ]);
-    if (sourcesError || walletError || betsError) throw sourcesError ?? walletError ?? betsError;
+    if (sourcesError || walletError || settingsError || betsError) throw sourcesError ?? walletError ?? settingsError ?? betsError;
 
     const eventIds = (sourceRows ?? []).map((row) => row.event_id).filter(Boolean) as string[];
     const warIds = (sourceRows ?? []).map((row) => row.clan_war_id).filter(Boolean) as string[];
     const empty = Promise.resolve({ data: [], error: null });
-    const [{ data: events }, { data: sessions }, { data: games }, { data: registrations }, { data: wars }] = await Promise.all([
-      eventIds.length ? supabase.from("events").select("id,title,type,is_published").in("id", eventIds) : empty,
+    const [eventsResult, sessionsResult, gamesResult, registrationsResult, warsResult] = await Promise.all([
+      eventIds.length ? supabase.from("events").select("id,title,type,is_published,publish_at").in("id", eventIds) : empty,
       eventIds.length ? supabase.from("event_sessions").select("id,event_id,start_time").in("event_id", eventIds).order("start_time") : empty,
       eventIds.length ? supabase.from("event_games").select("id,event_id,session_id,game_number,map_name").in("event_id", eventIds).order("game_number") : empty,
       eventIds.length ? supabase.from("event_registrations").select("event_id,session_id,team_id,status").in("event_id", eventIds).eq("status", "confirmed").not("team_id", "is", null) : empty,
       warIds.length ? supabase.from("clan_wars").select("id,title,status,scheduled_at,creator_team_id,opponent_team_id").in("id", warIds) : empty,
     ]);
+    const secondaryError = eventsResult.error ?? sessionsResult.error ?? gamesResult.error ?? registrationsResult.error ?? warsResult.error;
+    if (secondaryError) throw secondaryError;
+    const events = eventsResult.data;
+    const sessions = sessionsResult.data;
+    const games = gamesResult.data;
+    const registrations = registrationsResult.data;
+    const wars = warsResult.data;
 
     const participantIds = new Set<string>();
     for (const registration of registrations ?? []) if (registration.team_id) participantIds.add(registration.team_id);
@@ -310,10 +366,13 @@ export async function GET(request: Request) {
       if (war.opponent_team_id) participantIds.add(war.opponent_team_id);
     }
     const teamIds = [...participantIds];
-    const [{ data: teams }, { data: history }] = await Promise.all([
+    const [teamsResult, historyResult] = await Promise.all([
       teamIds.length ? supabase.from("teams").select("id,name,type,main_rating").in("id", teamIds) : empty,
       teamIds.length ? supabase.from("event_game_results").select("team_id,kills,place,created_at").in("team_id", teamIds).eq("status", "confirmed").order("created_at", { ascending: false }).limit(2000) : empty,
     ]);
+    if (teamsResult.error || historyResult.error) throw teamsResult.error ?? historyResult.error;
+    const teams = teamsResult.data;
+    const history = historyResult.data;
 
     const teamById = new Map<string, CatalogTeam>(((teams ?? []) as CatalogTeam[]).map((team) => [team.id, team]));
     const eventById = new Map((events ?? []).map((event) => [event.id, event]));
@@ -331,7 +390,7 @@ export async function GET(request: Request) {
         const event = eventById.get(source.event_id);
         const sourceSessions = (sessions ?? []).filter((session) => session.event_id === source.event_id);
         const locksAt = sourceSessions[0]?.start_time;
-        if (!event?.is_published || !locksAt || new Date(locksAt) <= new Date()) continue;
+        if (!event || !isEventEffectivelyPublished(event) || !locksAt || new Date(locksAt) <= new Date()) continue;
         const sourceGames = (games ?? []).filter((game) => game.event_id === source.event_id) as CatalogGame[];
         const sourceRegistrations = (registrations ?? []).filter((registration) => registration.event_id === source.event_id);
         const sourceTeamIds = [...new Set(sourceRegistrations.map((row) => row.team_id).filter(Boolean))] as string[];
@@ -414,7 +473,7 @@ export async function GET(request: Request) {
       sources,
       previews: previews.slice(0, 24),
       bets: bets ?? [],
-    });
+    }, { headers: noStoreHeaders });
   } catch (error) {
     return authErrorResponse(error);
   }
@@ -428,17 +487,22 @@ export async function POST(request: Request) {
 
     if (payload.action === "quote") {
       const evaluation = await evaluateSelection(supabase, payload);
-      return Response.json(await saveQuote(supabase, user.id, evaluation));
+      return Response.json(await saveQuote(supabase, user.id, evaluation), { headers: noStoreHeaders });
     }
 
     const { data: storedQuote, error: quoteError } = await supabase.from("betting_quotes")
       .select("id,source_id,event_id,game_id,clan_war_id,subject_team_id,market_type,selection_value,line,offered_odds,expires_at,confirmed_at")
       .eq("id", payload.quoteId).eq("user_id", user.id).maybeSingle();
     if (quoteError) throw quoteError;
-    if (!storedQuote) return Response.json({ error: "Котировка не найдена" }, { status: 404 });
-    if (storedQuote.confirmed_at) return Response.json({ error: "Эта котировка уже использована" }, { status: 409 });
+    if (!storedQuote) return Response.json({ error: "Котировка не найдена", code: "QUOTE_NOT_FOUND" }, { status: 404, headers: noStoreHeaders });
+    if (storedQuote.confirmed_at) {
+      const { data: existingBet, error: existingBetError } = await findBetByQuote(supabase, user.id, storedQuote.id);
+      if (existingBetError) throw existingBetError;
+      if (existingBet) return acceptedBetResponse(supabase, user.id, existingBet.id, 200);
+      return Response.json({ error: "Эта котировка уже использована", code: "QUOTE_USED" }, { status: 409, headers: noStoreHeaders });
+    }
     if (new Date(storedQuote.expires_at) <= new Date()) {
-      return Response.json({ error: "Котировка истекла. Рассчитайте коэффициент ещё раз", code: "QUOTE_EXPIRED" }, { status: 409 });
+      return Response.json({ error: "Котировка истекла. Рассчитайте коэффициент ещё раз", code: "QUOTE_EXPIRED" }, { status: 409, headers: noStoreHeaders });
     }
 
     const current = await evaluateSelection(supabase, {
@@ -450,7 +514,7 @@ export async function POST(request: Request) {
       line: storedQuote.line == null ? null : Number(storedQuote.line),
     });
     if (!current.quote.eligible || current.quote.offeredOdds == null) {
-      return Response.json({ error: unavailableMessage, code: "OUTCOME_UNAVAILABLE" }, { status: 409 });
+      return Response.json({ error: unavailableMessage, code: "OUTCOME_UNAVAILABLE" }, { status: 409, headers: noStoreHeaders });
     }
     if (current.quote.offeredOdds !== Number(storedQuote.offered_odds)) {
       const replacement = await saveQuote(supabase, user.id, current);
@@ -458,7 +522,7 @@ export async function POST(request: Request) {
         error: "Коэффициент изменился. Подтвердите новую котировку",
         code: "QUOTE_CHANGED",
         quote: replacement,
-      }, { status: 409 });
+      }, { status: 409, headers: noStoreHeaders });
     }
 
     const { data, error } = await supabase.rpc("place_dynamic_site_bet_for", {
@@ -467,27 +531,27 @@ export async function POST(request: Request) {
       p_stake: payload.stake,
     });
     if (error) {
-      const message = error.message.includes("own organization")
-        ? "Нельзя ставить на себя или свою команду"
-        : error.message.includes("Insufficient")
-          ? "Недостаточно монет"
-          : error.message.includes("limits")
-            ? "Сумма вне разрешённых лимитов"
-            : error.message.includes("expired")
-              ? "Котировка истекла. Рассчитайте коэффициент ещё раз"
-              : error.message.includes("already exists")
-                ? "Вы уже поставили на этот исход"
-                : error.message.includes("closed") || error.message.includes("disabled")
-                  ? "Приём ставок уже закрыт"
-                  : "Не удалось принять ставку";
-      return Response.json({ error: message }, { status: 400 });
+      const failure = classifyBettingDatabaseError(error);
+      if (failure.code === "QUOTE_USED") {
+        const { data: existingBet, error: existingBetError } = await findBetByQuote(supabase, user.id, payload.quoteId);
+        if (!existingBetError && existingBet) return acceptedBetResponse(supabase, user.id, existingBet.id, 200);
+      }
+      console.error("Bet confirmation rejected", {
+        userId: user.id,
+        quoteId: payload.quoteId,
+        databaseCode: error.code,
+        databaseMessage: error.message,
+        databaseDetails: error.details,
+        applicationCode: failure.code,
+      });
+      return Response.json({ error: failure.message, code: failure.code }, { status: failure.status, headers: noStoreHeaders });
     }
-    return Response.json({ success: true, betId: data }, { status: 201 });
+    return acceptedBetResponse(supabase, user.id, data, 201);
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Проверьте параметры ставки" }, { status: 400 });
     if (error instanceof Error && [
       "Для", "Выберите", "Линия", "Укажите", "Допустимый", "Ставки", "Мероприятие",
-      "КВ", "Источник", "Приём", "Команда", "Указанное",
+      "КВ", "Источник", "Приём", "Команда", "Указанное", "Игра",
     ].some((prefix) => error.message.startsWith(prefix))) {
       return Response.json({ error: error.message }, { status: 400 });
     }
