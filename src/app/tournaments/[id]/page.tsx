@@ -76,6 +76,12 @@ interface TeamMember {
   nickname: string;
 }
 
+interface ManagedOrganization {
+  id: string;
+  name: string;
+  type: "team" | "guild";
+}
+
 function registrationErrorMessage(errorMessage: string) {
   if (errorMessage.includes("duplicate key") || errorMessage.includes("already registered for this session")) {
     return "На это время уже есть активная заявка с этой командой или одним из выбранных игроков.";
@@ -105,7 +111,8 @@ export default function EventPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<EventGame[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [myTeam, setMyTeam] = useState<{ id: string; name: string; type: "team" | "guild" } | null>(null);
+  const [myTeam, setMyTeam] = useState<ManagedOrganization | null>(null);
+  const [managedOrganizations, setManagedOrganizations] = useState<ManagedOrganization[]>([]);
   const [canManageTeam, setCanManageTeam] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [message, setMessage] = useState("");
@@ -133,10 +140,43 @@ export default function EventPage() {
     const response = authenticated
       ? await authFetch(`/api/events/${id}/registrations`)
       : await fetch(`/api/events/${id}/registrations`);
-    if (!response.ok) return;
+    if (!response.ok) return [] as Registration[];
     const payload = await response.json() as { registrations?: Registration[] };
-    setRegistrations(payload.registrations ?? []);
+    const rows = payload.registrations ?? [];
+    setRegistrations(rows);
+    return rows;
   }, [id]);
+
+  const loadOrganizationMembers = useCallback(async (team: ManagedOrganization) => {
+    setMyTeam(team);
+    setCanManageTeam(false);
+    setMyMembers([]);
+    setSelectedRoster([]);
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id, role_in_team, position")
+      .eq("team_id", team.id);
+    const memberRows = members ?? [];
+    const { data: memberProfiles } = memberRows.length
+      ? await supabase.from("profiles")
+          .select("id,nickname")
+          .in("id", memberRows.map((membership) => membership.user_id))
+      : { data: [] };
+    const nicknameById = new Map((memberProfiles ?? []).map((profile) => [profile.id, profile.nickname]));
+    const enrichedMembers = memberRows.map((membership) => ({
+      ...membership,
+      nickname: nicknameById.get(membership.user_id) || "—",
+    }));
+    setMyMembers(enrichedMembers);
+    setSelectedRoster(
+      enrichedMembers
+        .filter((item) => item.position === "main")
+        .slice(0, 4)
+        .map((item) => item.user_id),
+    );
+    setCanManageTeam(true);
+    setShowRosterForm(false);
+  }, [supabase]);
 
   useEffect(() => {
     const init = async () => {
@@ -165,7 +205,7 @@ export default function EventPage() {
 
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
-      await loadRegistrations(Boolean(user));
+      const loadedRegistrations = await loadRegistrations(Boolean(user));
       if (user) {
         try {
           const roomResponse = await authFetch(`/api/events/${id}/rooms`);
@@ -205,46 +245,30 @@ export default function EventPage() {
           const eligibleTeamIds = new Set((membershipTeams ?? [])
             .filter((team) => (team.type === "team" || team.type === "guild") && team.verified)
             .map((team) => team.id));
-          const member = memberships.find((candidate) => eligibleTeamIds.has(candidate.team_id)) ?? null;
-          if (!member) {
-            setLoading(false);
-            return;
-          }
-          setCanManageTeam(["leader", "senior_deputy", "deputy"].includes(member.role_in_team));
-          const team = (membershipTeams ?? []).find((candidate) => candidate.id === member.team_id) ?? null;
+          const manageableTeamIds = new Set(memberships
+            .filter((membership) => ["leader", "senior_deputy", "deputy"].includes(membership.role_in_team))
+            .map((membership) => membership.team_id));
+          const manageableTeams = (membershipTeams ?? [])
+            .filter((team): team is typeof team & { type: "team" | "guild" } =>
+              eligibleTeamIds.has(team.id) && manageableTeamIds.has(team.id) &&
+              (team.type === "team" || team.type === "guild"),
+            )
+            .map(({ id: teamId, name, type }) => ({ id: teamId, name, type }));
+          setManagedOrganizations(manageableTeams);
 
-          if (team) {
-            setMyTeam(team);
-            const { data: members } = await supabase
-              .from("team_members")
-              .select("user_id, role_in_team, position")
-              .eq("team_id", team.id);
-            if (members) {
-              const { data: memberProfiles } = await supabase.from("profiles")
-                .select("id,nickname")
-                .in("id", members.map((membership) => membership.user_id));
-              const nicknameById = new Map((memberProfiles ?? []).map((profile) => [profile.id, profile.nickname]));
-              const enrichedMembers = members.map((membership) => ({
-                ...membership,
-                nickname: nicknameById.get(membership.user_id) || "—",
-              }));
-              setMyMembers(enrichedMembers);
-              setSelectedRoster(
-                enrichedMembers
-                  .filter((item) => item.position === "main")
-                  .slice(0, 4)
-                  .map((item) => item.user_id),
-              );
-            }
-
-          }
+          const registeredTeamId = loadedRegistrations.find((registration) =>
+            registration.status !== "cancelled" &&
+            Boolean(registration.team_id && manageableTeamIds.has(registration.team_id)),
+          )?.team_id;
+          const team = manageableTeams.find((candidate) => candidate.id === registeredTeamId) ?? manageableTeams[0] ?? null;
+          if (team) await loadOrganizationMembers(team);
         }
       }
 
       setLoading(false);
     };
     init();
-  }, [id, loadRegistrations, supabase]);
+  }, [id, loadOrganizationMembers, loadRegistrations, supabase]);
 
   const registerTeam = async () => {
     if (!myTeam) { setMessage("У вас нет верифицированной команды или гильдии."); return; }
@@ -294,8 +318,14 @@ export default function EventPage() {
   };
 
   const saveRoster = async (registrationId: string) => {
+    const currentMemberIds = new Set(myMembers.map((member) => member.user_id));
+    const normalizedRoster = [...new Set(selectedRoster)];
+    if (normalizedRoster.some((userId) => !currentMemberIds.has(userId))) {
+      setMessage("Список участников изменился. Закройте форму, снова нажмите «Изменить состав» и выберите игроков заново.");
+      return;
+    }
     const minPlayers = event?.min_players || 4;
-    if (selectedRoster.length < minPlayers) {
+    if (normalizedRoster.length < minPlayers) {
       setMessage(`В составе команды должно быть минимум ${minPlayers} игроков.`);
       return;
     }
@@ -304,7 +334,7 @@ export default function EventPage() {
     setMessage("Сохраняем состав...");
     const { error } = await supabase.rpc("update_team_registration_roster", {
       p_registration_id: registrationId,
-      p_roster: selectedRoster,
+      p_roster: normalizedRoster,
     });
     setRosterSaving(false);
 
@@ -452,6 +482,39 @@ export default function EventPage() {
 
   const refreshRegistrations = async () => {
     await loadRegistrations(Boolean(currentUser));
+  };
+
+  const selectOrganization = async (teamId: string) => {
+    const team = managedOrganizations.find((candidate) => candidate.id === teamId);
+    if (!team || team.id === myTeam?.id) return;
+    setMessage("");
+    await loadOrganizationMembers(team);
+  };
+
+  const selectSession = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setShowRosterForm(false);
+    setMessage("");
+
+    const registeredTeamId = registrations.find((registration) =>
+      registration.session_id === sessionId &&
+      registration.status !== "cancelled" &&
+      Boolean(registration.team_id && managedOrganizations.some((team) => team.id === registration.team_id)),
+    )?.team_id;
+    if (registeredTeamId && registeredTeamId !== myTeam?.id) {
+      void selectOrganization(registeredTeamId);
+    }
+  };
+
+  const beginRosterEdit = (registration: Registration) => {
+    const currentMemberIds = new Set(myMembers.map((member) => member.user_id));
+    const editableRoster = [...new Set(registration.roster.filter((userId) => currentMemberIds.has(userId)))];
+    const removedCount = registration.roster.length - editableRoster.length;
+    setSelectedRoster(editableRoster);
+    setShowRosterForm(true);
+    setMessage(removedCount > 0
+      ? `Из прежнего состава исключено игроков, которые больше не состоят в этой команде или гильдии: ${removedCount}. Выберите замену и сохраните состав.`
+      : "");
   };
 
   const typeLabels: Record<string, string> = {
@@ -639,13 +702,32 @@ export default function EventPage() {
       </div>
 
       {/* Запись */}
+      {allowsCollectiveRegistration && managedOrganizations.length > 1 && myTeam && (
+        <div className="mt-6 rounded bg-gray-800 p-4">
+          <label className="mb-2 block text-sm text-gray-300" htmlFor="registration-organization">
+            От какой команды или гильдии подаётся заявка
+          </label>
+          <select
+            id="registration-organization"
+            value={myTeam.id}
+            onChange={(event) => void selectOrganization(event.target.value)}
+          >
+            {managedOrganizations.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.type === "guild" ? "Гильдия" : "Команда"}: {team.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {allowsCollectiveRegistration && myTeam && canManageTeam && !alreadyRegistered && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <p className="mb-3">{collectiveLabel}: <Link href={`/teams/${myTeam.id}`} className="text-blue-400">{myTeam.name}</Link></p>
 
           <div className="mb-4">
             <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
-            <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+            <select value={selectedSessionId} onChange={(event) => selectSession(event.target.value)}>
               {sessions.map((session) => (
                 <option key={session.id} value={session.id}>
                   {new Date(session.start_time).toLocaleString("ru")}
@@ -691,7 +773,7 @@ export default function EventPage() {
           <p className="mt-1 text-sm text-gray-300">Можно участвовать самостоятельно, даже если вы не состоите в команде или гильдии.</p>
           <div className="my-4">
             <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
-            <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
+            <select value={selectedSessionId} onChange={(event) => selectSession(event.target.value)}>
               {sessions.map((session) => (
                 <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
               ))}
@@ -733,11 +815,7 @@ export default function EventPage() {
           <select
             className="mb-3"
             value={selectedSessionId}
-            onChange={(event) => {
-              setSelectedSessionId(event.target.value);
-              setShowRosterForm(false);
-              setMessage("");
-            }}
+            onChange={(event) => selectSession(event.target.value)}
           >
             {sessions.map((session) => (
               <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
@@ -765,10 +843,11 @@ export default function EventPage() {
                     type="button"
                     onClick={() => {
                       if (!showRosterForm) {
-                        setSelectedRoster(selectedRegistration.roster);
+                        beginRosterEdit(selectedRegistration);
+                      } else {
+                        setShowRosterForm(false);
                         setMessage("");
                       }
-                      setShowRosterForm(!showRosterForm);
                     }}
                     className="mt-3 text-sm text-blue-400 hover:underline"
                   >
