@@ -24,6 +24,7 @@ export async function GET() {
     const { data: wars, error } = await supabase
       .from("clan_wars")
       .select("id, creator_team_id, opponent_team_id, title, description, rules, format, challenge_kind, status, scheduled_at, completed_at, cancelled_at, cancellation_reason, created_at, updated_at")
+      .eq("is_hidden", false)
       .order("created_at", { ascending: false });
     if (error) throw error;
 

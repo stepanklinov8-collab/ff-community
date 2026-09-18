@@ -15,10 +15,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const { data: clanWar, error } = await supabase
       .from("clan_wars")
-      .select("id, creator_team_id, opponent_team_id")
+      .select("id, creator_team_id, opponent_team_id, is_hidden")
       .eq("id", clanWarId)
       .single();
     if (error || !clanWar) throw new ClanWarRequestError("КВ не найдено", 404);
+    if (clanWar.is_hidden) throw new ClanWarRequestError("КВ не найдено", 404);
 
     const managedIds = (await getManagedOrganizations(supabase, user.id)).map((organization) => organization.id);
     const { data: responses, error: responsesError } = await supabase

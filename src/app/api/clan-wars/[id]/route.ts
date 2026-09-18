@@ -52,10 +52,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     const { data: clanWar, error: clanWarError } = await supabase
       .from("clan_wars")
-      .select("id, creator_team_id, opponent_team_id, created_by, title, description, rules, format, challenge_kind, status, scheduled_at, completed_at, cancelled_at, cancellation_reason, created_at, updated_at")
+      .select("id, creator_team_id, opponent_team_id, created_by, title, description, rules, format, challenge_kind, status, scheduled_at, completed_at, cancelled_at, cancellation_reason, created_at, updated_at, is_hidden")
       .eq("id", clanWarId)
       .single();
     if (clanWarError || !clanWar) throw new ClanWarRequestError("КВ не найдено", 404);
+    const canViewHidden = auth?.roles.some((role) => role === "admin" || role === "superadmin") ?? false;
+    if (clanWar.is_hidden && !canViewHidden) throw new ClanWarRequestError("КВ не найдено", 404);
 
     const [responsesResult, rostersResult, commentsResult] = await Promise.all([
       supabase.from("clan_war_responses").select("id, team_id, created_by, message, status, responded_at, created_at").eq("clan_war_id", clanWarId).order("created_at"),
@@ -154,17 +156,20 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { user } = await requireUser(request);
+    const { user, roles } = await requireUser(request);
     const { id } = await context.params;
     const clanWarId = z.string().uuid().parse(id);
     const payload = actionSchema.parse(await request.json());
     const supabase = createAdminClient();
     const { data: clanWar, error: clanWarError } = await supabase
       .from("clan_wars")
-      .select("id, title, creator_team_id, opponent_team_id, challenge_kind, status, format")
+      .select("id, title, creator_team_id, opponent_team_id, challenge_kind, status, format, is_hidden")
       .eq("id", clanWarId)
       .single();
     if (clanWarError || !clanWar) throw new ClanWarRequestError("КВ не найдено", 404);
+    if (clanWar.is_hidden && !roles.some((role) => role === "admin" || role === "superadmin")) {
+      throw new ClanWarRequestError("КВ не найдено", 404);
+    }
 
     if (payload.action === "accept_direct" || payload.action === "decline_direct") {
       if (clanWar.challenge_kind !== "direct" || clanWar.status !== "pending" || !clanWar.opponent_team_id) {

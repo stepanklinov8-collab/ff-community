@@ -287,6 +287,11 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Клановые войны</h2>
+        <Link href="/admin/clan-wars" className="inline-block rounded bg-red-700 px-4 py-2 hover:bg-red-600">Управление КВ</Link>
+      </div>
+
+      <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Предложенные мероприятия</h2>
         <Link href="/admin/events/proposals" className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 inline-block">Просмотр предложений</Link>
       </div>

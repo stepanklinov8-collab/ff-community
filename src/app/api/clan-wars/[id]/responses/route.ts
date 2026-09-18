@@ -23,10 +23,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const { data: clanWar, error: clanWarError } = await supabase
       .from("clan_wars")
-      .select("id, title, creator_team_id, opponent_team_id, challenge_kind, status")
+      .select("id, title, creator_team_id, opponent_team_id, challenge_kind, status, is_hidden")
       .eq("id", clanWarId)
       .single();
     if (clanWarError || !clanWar) throw clanWarError ?? new ClanWarRequestError("КВ не найдено", 404);
+    if (clanWar.is_hidden) throw new ClanWarRequestError("КВ не найдено", 404);
     if (clanWar.challenge_kind !== "open" || clanWar.status !== "open" || clanWar.opponent_team_id) {
       throw new ClanWarRequestError("Этот вызов больше не принимает отклики", 409);
     }
