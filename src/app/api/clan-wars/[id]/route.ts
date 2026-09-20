@@ -96,7 +96,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const managedOrganizations = auth ? await getManagedOrganizations(supabase, auth.user.id) : [];
     const managedIds = managedOrganizations.map((organization) => organization.id);
     const { data: managedMemberships, error: managedMembershipsError } = managedIds.length
-      ? await supabase.from("team_members").select("team_id, user_id, role_in_team, position").in("team_id", managedIds).order("created_at")
+      ? await supabase.from("team_members").select("team_id, user_id, role_in_team, position").in("team_id", managedIds).order("joined_at")
       : { data: [], error: null };
     if (managedMembershipsError) throw managedMembershipsError;
     const managedMemberIds = [...new Set((managedMemberships ?? []).map((membership) => membership.user_id))];
