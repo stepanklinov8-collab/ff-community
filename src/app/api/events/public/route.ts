@@ -13,5 +13,5 @@ export async function GET(){try{
  .in("session_id",sessions.slice(i,i+100).map(s=>s.id)).not("first_published_at","is",null).order("session_id").range(a,b)));}
  const bySession=new Map(publications.map(p=>[p.session_id,p]));
  return Response.json({events,sessions:sessions.map(s=>({...s,published:!!bySession.get(s.id),summary:(bySession.get(s.id)?.standings as Array<{name:string;place:number}>|null)?.slice(0,3).map(r=>({name:r.name,place:r.place}))??[]})),generatedAt:Date.now()},
- {headers:{"Cache-Control":"public, s-maxage=30, stale-while-revalidate=60"}});
+ {headers:{"Cache-Control":"no-store"}});
  }catch(error){console.error("Public events",error);return Response.json({error:"Не удалось загрузить мероприятия"},{status:500});}}

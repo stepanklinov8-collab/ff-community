@@ -73,13 +73,12 @@ export default function CompetitionResultsEditor({eventId,kind="event"}:{eventId
   catch(error){setMessage(error instanceof Error?error.message:t("failed"));}finally{inFlight.current=false;setBusy(false);}
  };
  useEffect(()=>{
-  if(!draft||!loaded?.canEdit||loaded.firstPublishedAt||JSON.stringify(draft)===savedRef.current)return;
-  const timer=window.setTimeout(()=>void send("draft",true),1200);return()=>window.clearTimeout(timer);
- },[draft,loaded,send]);
- useEffect(()=>{
-  const leave=(event:BeforeUnloadEvent)=>{if(draftRef.current&&JSON.stringify(draftRef.current)!==savedRef.current){event.preventDefault();event.returnValue="";if(!dataRef.current?.firstPublishedAt)void send("draft",true);}};
-  const hidden=()=>{if(document.visibilityState==="hidden"&&!dataRef.current?.firstPublishedAt&&draftRef.current&&JSON.stringify(draftRef.current)!==savedRef.current)void send("draft",true);};
-  window.addEventListener("beforeunload",leave);document.addEventListener("visibilitychange",hidden);return()=>{window.removeEventListener("beforeunload",leave);document.removeEventListener("visibilitychange",hidden);};
+  const saveOnClose=()=>{if(!dataRef.current?.firstPublishedAt&&draftRef.current&&JSON.stringify(draftRef.current)!==savedRef.current)void send("draft",true);};
+  const leave=(event:BeforeUnloadEvent)=>{if(draftRef.current&&JSON.stringify(draftRef.current)!==savedRef.current){event.preventDefault();event.returnValue="";saveOnClose();}};
+  const hidden=()=>{if(document.visibilityState==="hidden")saveOnClose();};
+  const pagehide=()=>saveOnClose();
+  window.addEventListener("beforeunload",leave);window.addEventListener("pagehide",pagehide);document.addEventListener("visibilitychange",hidden);
+  return()=>{window.removeEventListener("beforeunload",leave);window.removeEventListener("pagehide",pagehide);document.removeEventListener("visibilitychange",hidden);};
  },[send]);
  const updateRow=(row:ResultInput,patch:Partial<ResultInput>)=>setDraft(previous=>previous?{...previous,rows:previous.rows.map(item=>item.gameId===row.gameId&&item.registrationId===row.registrationId?{...item,...patch}:item)}:previous);
  if(!loaded||!draft)return <div className="page-shell"><p role="status">{message||t("loading")}</p></div>;

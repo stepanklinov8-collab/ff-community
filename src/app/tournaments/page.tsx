@@ -68,7 +68,7 @@ export default function TournamentsPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      const response = await fetch("/api/events/public");
+      const response = await fetch("/api/events/public", { cache: "no-store" });
       const payload = await response.json() as { events?: EventRow[]; sessions?: EventSession[]; generatedAt?: number };
       if (!response.ok) {
         setError(t("tournaments.loadError"));
