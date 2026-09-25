@@ -5,7 +5,9 @@ import { createClient } from "@/utils/supabase/client";
 import { authFetch } from "@/utils/api/auth-fetch";
 import TranslatedText from "@/components/TranslatedText";
 import CommentsSection from "@/components/CommentsSection";
+import SessionControls from "@/components/SessionControls";
 import { useParams } from "next/navigation";
+import {useLanguage} from "@/components/LanguageProvider";
 import Link from "next/link";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
@@ -63,12 +65,6 @@ interface Registration {
 interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
 const gameMapLabels: Record<string, string> = { bermuda: "Бермуды", nexterra: "Некстера", solara: "Солара", purgatory: "Чистилище", kalahari: "Калахари" };
 
-interface RoomFormData {
-  code: string;
-  password: string;
-  note: string;
-}
-
 interface TeamMember {
   user_id: string;
   role_in_team: string;
@@ -105,6 +101,9 @@ function registrationErrorMessage(errorMessage: string) {
 }
 
 export default function EventPage() {
+  const {locale} = useLanguage();
+  const [clockNow,setClockNow] = useState(() => Date.now());
+  useEffect(() => {const timer=setInterval(()=>setClockNow(Date.now()),30000);return()=>clearInterval(timer);}, []);
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
@@ -126,15 +125,11 @@ export default function EventPage() {
   const [showRosterForm, setShowRosterForm] = useState(false);
   const [rosterSaving, setRosterSaving] = useState(false);
 
-  const [scores, setScores] = useState<Record<string, number>>({});
-  const [winnerTeamId, setWinnerTeamId] = useState("");
 
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
 
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleUserId, setResponsibleUserId] = useState("");
-  const [roomData, setRoomData] = useState<Record<string, RoomFormData>>({});
-  const [roomSavingId, setRoomSavingId] = useState<string | null>(null);
 
   const loadRegistrations = useCallback(async (authenticated: boolean) => {
     const response = authenticated
@@ -180,7 +175,7 @@ export default function EventPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: ev } = await supabase.from("events").select("*").eq("id", id).single();
+      const { data: ev } = await supabase.from("events").select("id,title,type,cost,organizer,organizer_user_id,description,image_url,stream_url,is_published,max_teams,show_registrations,roster_lock_minutes,min_players,comments_enabled,payment_url,allow_individual_registration").eq("id", id).single();
       if (ev) setEvent(ev);
 
       const publicSessions = await supabase
@@ -198,7 +193,7 @@ export default function EventPage() {
       const sess = publicSessions.data ?? legacySessions?.data;
       if (sess) {
         setSessions(sess);
-        setSelectedSessionId((current) => current || sess[0]?.id || "");
+        setSelectedSessionId((current) => current || sess.find(s=>s.id===new URLSearchParams(window.location.search).get("sessionId"))?.id || sess.find(s=>Date.parse(s.end_time||s.start_time)>Date.now())?.id || sess[sess.length-1]?.id || "");
       }
       const { data: gameRows } = await supabase.from("event_games").select("id,session_id,game_number,map_name").eq("event_id", id).order("game_number");
       setGames((gameRows ?? []) as EventGame[]);
@@ -207,23 +202,6 @@ export default function EventPage() {
       setCurrentUser(user);
       const loadedRegistrations = await loadRegistrations(Boolean(user));
       if (user) {
-        try {
-          const roomResponse = await authFetch(`/api/events/${id}/rooms`);
-          if (roomResponse.ok) {
-            const roomPayload = await roomResponse.json() as { sessions?: Session[] };
-            setSessions((current) => current.map((session) => ({
-              ...session,
-              ...(roomPayload.sessions?.find((room: { id: string }) => room.id === session.id) ?? {}),
-            })));
-            setRoomData(Object.fromEntries((roomPayload.sessions ?? []).map((session) => [session.id, {
-              code: session.room_code ?? "",
-              password: session.room_password ?? "",
-              note: session.room_note ?? "",
-            }])));
-          }
-        } catch {
-          // Room credentials are optional and remain hidden when access is denied.
-        }
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
@@ -282,6 +260,7 @@ export default function EventPage() {
       return;
     }
 
+    setRestrictionLinks([]);
     setMessage("Регистрация...");
     const { data, error } = await supabase.rpc("register_team_for_session", {
       p_session_id: selectedSessionId,
@@ -291,6 +270,7 @@ export default function EventPage() {
 
     if (error) {
       setMessage("Ошибка: " + registrationErrorMessage(error.message));
+      await loadRegistrationRestrictions(myTeam.id);
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы в основном составе!" : "⏳ Вы в листе ожидания.");
@@ -299,10 +279,16 @@ export default function EventPage() {
     }
   };
 
+  const [restrictionLinks,setRestrictionLinks] = useState<Array<{id:string;reason:string;appealUrl:string}>>([]);
+  const loadRegistrationRestrictions = async (teamId?:string) => {
+    try {const r=await authFetch(`/api/events/${id}/eligibility${teamId?`?teamId=${teamId}`:""}`),d=await r.json();if(r.ok)setRestrictionLinks(d.restrictions??[]);}catch { /* Keep the original registration error visible. */ }
+  };
+
   const registerPlayer = async () => {
     if (!currentUser) { setMessage("Войдите, чтобы записаться."); return; }
     if (!selectedSessionId) { setMessage("Выберите время участия."); return; }
 
+    setRestrictionLinks([]);
     setMessage("Регистрация...");
     const { data, error } = await supabase.rpc("register_player_for_session", {
       p_session_id: selectedSessionId,
@@ -310,6 +296,7 @@ export default function EventPage() {
 
     if (error) {
       setMessage("Ошибка: " + registrationErrorMessage(error.message));
+      await loadRegistrationRestrictions();
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы записаны!" : "⏳ Вы в листе ожидания.");
@@ -384,27 +371,6 @@ export default function EventPage() {
     setEvent({ ...event, show_registrations: newVisibility });
   };
 
-  const saveResults = async () => {
-    if (!event) return;
-    const response = await authFetch(`/api/events/${id}/results`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        results: confirmed.filter((registration) => registration.team_id).map((registration) => ({
-          teamId: registration.team_id,
-          score: scores[registration.id] || 0,
-          isWinner: registration.team_id === winnerTeamId,
-        })),
-      }),
-    });
-    if (!response.ok) {
-      const payload = await response.json();
-      setMessage(payload.error ?? "Не удалось сохранить результаты");
-      return;
-    }
-    setMessage("Результаты сохранены.");
-  };
-
   const assignResponsible = async (sessionId: string) => {
     if (!responsibleUserId) return;
     const response = await authFetch(`/api/events/${id}/manage`, {
@@ -429,55 +395,6 @@ export default function EventPage() {
       .eq("event_id", id)
       .order("start_time", { ascending: true });
     if (data) setSessions(data);
-  };
-
-  const roomValues = (session: Session): RoomFormData => roomData[session.id] ?? {
-    code: session.room_code ?? "",
-    password: session.room_password ?? "",
-    note: session.room_note ?? "",
-  };
-
-  const updateRoomField = (session: Session, field: keyof RoomFormData, value: string) => {
-    setRoomData((current) => {
-      const existing = current[session.id] ?? {
-        code: session.room_code ?? "",
-        password: session.room_password ?? "",
-        note: session.room_note ?? "",
-      };
-      return { ...current, [session.id]: { ...existing, [field]: value } };
-    });
-  };
-
-  const saveRoomData = async (session: Session) => {
-    const data = roomValues(session);
-    setRoomSavingId(session.id);
-    setMessage("Отправляем данные комнаты...");
-    try {
-      const response = await authFetch(`/api/events/${id}/rooms`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.id,
-          roomCode: data.code,
-          roomPassword: data.password,
-          roomNote: data.note,
-        }),
-      });
-      const payload = await response.json() as { error?: string; warning?: string; room?: Session };
-      if (!response.ok) {
-        setMessage(payload.error ?? "Не удалось сохранить данные комнаты");
-        return;
-      }
-      setSessions((current) => current.map((item) => item.id === session.id
-        ? { ...item, ...(payload.room ?? { room_code: data.code, room_password: data.password, room_note: data.note }) }
-        : item));
-      setRoomData((current) => ({ ...current, [session.id]: data }));
-      setMessage(payload.warning ?? "Данные комнаты сохранены и отправлены участникам.");
-    } catch (roomError) {
-      setMessage(roomError instanceof Error ? roomError.message : "Не удалось сохранить данные комнаты");
-    } finally {
-      setRoomSavingId(null);
-    }
   };
 
   const refreshRegistrations = async () => {
@@ -560,17 +477,13 @@ export default function EventPage() {
   const registrationHint = !selectedSession
     ? "Расписание пока не добавлено."
     : registrationOpensAt && new Date() < registrationOpensAt
-      ? `Регистрация откроется ${registrationOpensAt.toLocaleString("ru")}.`
+      ? `Регистрация откроется ${registrationOpensAt.toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}.`
       : registrationClosesAt && new Date() >= registrationClosesAt
         ? "Регистрация закрыта."
         : "Регистрация открыта.";
   const allowsIndividualRegistration = event.type === "solo" || Boolean(event.allow_individual_registration);
   const allowsCollectiveRegistration = event.type !== "solo";
   const collectiveLabel = myTeam?.type === "guild" ? "Гильдия" : "Команда";
-  const canViewRoom = isAdmin || isOrganizer ||
-    confirmed.some((registration) => registration.participant_user_id === currentUser?.id ||
-      Boolean(currentUser && registration.roster.includes(currentUser.id)));
-
   return (
     <div className="min-h-screen p-6">
       <Link href="/tournaments" className="text-blue-400 hover:underline">← К турнирам</Link>
@@ -624,12 +537,13 @@ export default function EventPage() {
             <button onClick={() => setShowResponsible(!showResponsible)} className="px-3 py-1 bg-blue-600 rounded text-sm">
               Назначить ответственных
             </button>
+            <Link href={`/tournaments/${id}/edit`} className="rounded bg-cyan-800 px-3 py-1 text-sm">Редактировать мероприятие</Link>
             {isAdmin && (
               <Link href={`/admin/events/${id}/stats`} className="px-3 py-1 bg-red-600 rounded text-sm">
                 Модерация статистики
               </Link>
             )}
-            <Link href={`/admin/events/${id}/competition-results`} className="rounded bg-emerald-700 px-3 py-1 text-sm">
+            <Link href={`/tournaments/${id}/manage-results`} className="rounded bg-emerald-700 px-3 py-1 text-sm">
               Игры и итоговые результаты
             </Link>
           </div>
@@ -641,14 +555,14 @@ export default function EventPage() {
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
         {sessions.map((s) => {
           const isResponsible = s.responsible_user_id === currentUser?.id;
-          const canEditRoom = Boolean(s.can_edit_room || isAdmin || isOrganizer || isResponsible);
-          const room = roomValues(s);
           return (
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
-              <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru")}</p>
-              {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru")}</p>}
+              <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
+              {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
               {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {gameMapLabels[game.map_name] ?? game.map_name}</span>)}</div>}
 
+              <div className="my-3 flex gap-3"><Link className="text-cyan-300" href={`/tournaments/${id}/results?sessionId=${s.id}`}>Итоги сессии</Link>{(isResponsible||isAdmin||isOrganizer)&&<Link className="text-emerald-300" href={`/tournaments/${id}/manage-results?sessionId=${s.id}`}>Ввести результаты</Link>}</div>
+              <SessionControls eventId={id} sessionId={s.id} authenticated={!!currentUser}/>
               {showResponsible && (isAdmin || isOrganizer) && (
                 <div className="mt-2 flex gap-2">
                   <input
@@ -661,41 +575,6 @@ export default function EventPage() {
                 </div>
               )}
 
-              {canEditRoom && (
-                <div className="mt-3 bg-gray-700 p-3 rounded">
-                  <p className="text-sm font-semibold mb-2">Данные комнаты</p>
-                  <input
-                    className="w-full p-2 text-black rounded mb-2"
-                    placeholder="Код комнаты"
-                    value={room.code}
-                    onChange={(e) => updateRoomField(s, "code", e.target.value)}
-                  />
-                  <input
-                    className="w-full p-2 text-black rounded mb-2"
-                    placeholder="Пароль"
-                    value={room.password}
-                    onChange={(e) => updateRoomField(s, "password", e.target.value)}
-                  />
-                  <textarea
-                    className="w-full p-2 text-black rounded mb-2"
-                    placeholder="Примечание"
-                    value={room.note}
-                    onChange={(e) => updateRoomField(s, "note", e.target.value)}
-                  />
-                  <p className="mb-2 text-xs text-gray-400">Код, пароль и примечание принимают любые символы без ограничения длины.</p>
-                  <button onClick={() => saveRoomData(s)} disabled={roomSavingId === s.id} className="px-3 py-1 bg-blue-600 rounded text-sm disabled:opacity-50">
-                    {roomSavingId === s.id ? "Отправка…" : "Сохранить и отправить"}
-                  </button>
-                </div>
-              )}
-
-              {canViewRoom && (s.room_code || s.room_password) && !canEditRoom && (
-                <div className="mt-3 bg-gray-700 p-3 rounded">
-                  <p><span className="text-gray-400">Код:</span> {s.room_code}</p>
-                  <p><span className="text-gray-400">Пароль:</span> {s.room_password}</p>
-                  {s.room_note && <p><span className="text-gray-400">Примечание:</span> {s.room_note}</p>}
-                </div>
-              )}
             </div>
           );
         })}
@@ -728,9 +607,9 @@ export default function EventPage() {
           <div className="mb-4">
             <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
             <select value={selectedSessionId} onChange={(event) => selectSession(event.target.value)}>
-              {sessions.map((session) => (
+              {sessions.filter(session=>Date.parse(session.end_time||session.start_time)>clockNow).map((session) => (
                 <option key={session.id} value={session.id}>
-                  {new Date(session.start_time).toLocaleString("ru")}
+                  {new Date(session.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}
                 </option>
               ))}
             </select>
@@ -763,7 +642,7 @@ export default function EventPage() {
           <button onClick={registerTeam} disabled={!registrationIsOpen || !canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
             {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}` : "Состав заблокирован"}
           </button>
-          {message && <p className="mt-3 text-sm">{message}</p>}
+          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
         </div>
       )}
 
@@ -774,8 +653,8 @@ export default function EventPage() {
           <div className="my-4">
             <label className="text-sm text-gray-300 block mb-2">Выберите время участия</label>
             <select value={selectedSessionId} onChange={(event) => selectSession(event.target.value)}>
-              {sessions.map((session) => (
-                <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
+              {sessions.filter(session=>Date.parse(session.end_time||session.start_time)>clockNow).map((session) => (
+                <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</option>
               ))}
             </select>
           </div>
@@ -783,7 +662,7 @@ export default function EventPage() {
           <button onClick={registerPlayer} disabled={!registrationIsOpen} className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50">
             {registrationIsOpen ? "Записаться лично" : "Регистрация недоступна"}
           </button>
-          {message && <p className="mt-3 text-sm">{message}</p>}
+          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
         </div>
       )}
 
@@ -817,8 +696,8 @@ export default function EventPage() {
             value={selectedSessionId}
             onChange={(event) => selectSession(event.target.value)}
           >
-            {sessions.map((session) => (
-              <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru")}</option>
+            {sessions.filter(session=>Date.parse(session.end_time||session.start_time)>clockNow).map((session) => (
+              <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</option>
             ))}
           </select>
           <p className="mb-2">
@@ -910,7 +789,7 @@ export default function EventPage() {
           )}
 
           <button onClick={cancelRegistration} className="px-4 py-2 bg-red-500 rounded hover:bg-red-600">Отменить запись</button>
-          {message && <p className="mt-3 text-sm">{message}</p>}
+          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
         </div>
       )}
 
@@ -920,33 +799,6 @@ export default function EventPage() {
           <Link href={`/tournaments/${id}/add-stats`} className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 inline-block">
             + Добавить статистику
           </Link>
-        </div>
-      )}
-
-      {/* Результаты */}
-      {hasStarted && (isAdmin || isOrganizer) && (
-        <div className="mt-6 bg-gray-800 p-4 rounded">
-          <h2 className="text-xl font-semibold mb-3">Результаты</h2>
-          {confirmed.map(r => (
-            <div key={r.id} className="flex items-center gap-3 mb-2">
-              <input
-                type="number"
-                placeholder="Счёт"
-                className="p-2 text-black rounded w-24"
-                onChange={(e) => setScores(prev => ({ ...prev, [r.id]: parseInt(e.target.value) || 0 }))}
-              />
-              <span className="text-blue-400">{r.team_name_override || r.team_name}</span>
-              {r.team_id && (
-                <button
-                  onClick={() => setWinnerTeamId(r.team_id!)}
-                  className={"px-3 py-1 rounded text-sm " + (winnerTeamId === r.team_id ? "bg-yellow-600" : "bg-gray-600")}
-                >
-                  {winnerTeamId === r.team_id ? "🏆 Победитель" : "Отметить"}
-                </button>
-              )}
-            </div>
-          ))}
-          <button onClick={saveResults} className="mt-2 px-4 py-2 bg-green-600 rounded hover:bg-green-700">Сохранить результаты</button>
         </div>
       )}
 
@@ -991,7 +843,7 @@ export default function EventPage() {
           ))}
         </div>
       )}
-      {event.comments_enabled !== false && <CommentsSection eventId={id} />}
+      {event.comments_enabled !== false && <CommentsSection eventId={id} sessionId={selectedSessionId||undefined} />}
     </div>
   );
 }

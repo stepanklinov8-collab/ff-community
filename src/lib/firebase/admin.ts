@@ -3,6 +3,7 @@ import "server-only";
 import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { deliverPushTokens } from "./delivery";
 
 interface PushPayload {
   title: string;
@@ -35,33 +36,34 @@ function getFirebaseAdminApp() {
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   if (!userIds.length) return { successCount: 0, failureCount: 0 };
   const supabase = createAdminClient();
-  const { data: subscriptions, error } = await supabase
-    .from("push_subscriptions")
-    .select("token")
-    .in("user_id", [...new Set(userIds)])
-    .eq("is_active", true);
-  if (error) throw error;
-  const tokens = [...new Set((subscriptions ?? []).map((item) => item.token).filter(Boolean))];
+  const users = [...new Set(userIds)], tokens: string[] = [];
+  // Chunk filters to keep REST URLs short; one user can have multiple devices.
+  for (let offset = 0; offset < users.length; offset += 100) {
+    for (let from = 0; ; from += 500) {
+      const { data, error } = await supabase.from("push_subscriptions").select("id,token")
+        .in("user_id", users.slice(offset, offset + 100)).eq("is_active", true)
+        .order("id").range(from, from + 499);
+      if (error) throw error;
+      tokens.push(...(data ?? []).map(item => item.token));
+      if ((data?.length ?? 0) < 500) break;
+    }
+  }
   if (!tokens.length) return { successCount: 0, failureCount: 0 };
 
-  const result = await getMessaging(getFirebaseAdminApp()).sendEachForMulticast({
-    tokens,
+  const result = await deliverPushTokens(tokens, batch => getMessaging(getFirebaseAdminApp()).sendEachForMulticast({
+    tokens: batch,
     notification: { title: payload.title, body: payload.body },
     data: { link: payload.link ?? "/notifications" },
     webpush: {
       notification: { icon: "/brand/omcite-emblem.jpg", badge: "/brand/omcite-emblem.jpg" },
       fcmOptions: { link: payload.link ?? "/notifications" },
     },
-  });
+  }));
 
-  const invalidTokens = result.responses.flatMap((response, index) => {
-    const code = response.error?.code ?? "";
-    return !response.success && (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token"))
-      ? [tokens[index]]
-      : [];
-  });
-  if (invalidTokens.length) {
-    await supabase.from("push_subscriptions").update({ is_active: false }).in("token", invalidTokens);
+  for (let offset = 0; offset < result.invalidTokens.length; offset += 50) {
+    const { error } = await supabase.from("push_subscriptions").update({ is_active: false })
+      .in("token", result.invalidTokens.slice(offset, offset + 50));
+    if (error) console.error("Could not deactivate expired push subscriptions", error.code);
   }
   return { successCount: result.successCount, failureCount: result.failureCount };
 }

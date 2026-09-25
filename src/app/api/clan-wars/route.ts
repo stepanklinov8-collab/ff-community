@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {clanWarConfigurationSchema} from "@/lib/competition/clan-war-schema";
 import {
   ClanWarRequestError,
   notifyOrganizationManagers,
@@ -7,16 +8,7 @@ import {
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
-const createClanWarSchema = z.object({
-  creatorTeamId: z.string().uuid(),
-  opponentTeamId: z.string().uuid().nullable(),
-  title: z.string().trim().min(2).max(160),
-  description: z.string().trim().max(5000),
-  rules: z.string().trim().max(5000),
-  format: z.union([z.literal(4), z.literal(6)]),
-  challengeKind: z.enum(["open", "direct"]),
-  scheduledAt: z.string().datetime().nullable(),
-});
+const createClanWarSchema = clanWarConfigurationSchema;
 
 export async function GET() {
   try {
@@ -106,6 +98,8 @@ export async function POST(request: Request) {
       challenge_kind: payload.challengeKind,
       status: payload.challengeKind === "direct" ? "pending" : "open",
       scheduled_at: payload.scheduledAt,
+      game_count:payload.gameCount,wins_required:payload.winsRequired,maps:payload.maps,
+      room_code:payload.roomCode||null,room_password:payload.roomPassword||null,room_note:payload.roomNote,comments_closed:payload.commentsClosed,
     }).select("id").single();
     if (createError || !clanWar) throw createError ?? new Error("Не удалось создать КВ");
 

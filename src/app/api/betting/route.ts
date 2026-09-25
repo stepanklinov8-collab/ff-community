@@ -6,7 +6,7 @@ import {
   suggestedKillsLine,
 } from "@/lib/betting-odds";
 import { classifyBettingDatabaseError } from "@/lib/betting-errors";
-import { isEventEffectivelyPublished } from "@/lib/event-publication";
+import {loadBettingSources} from "@/lib/competition/betting";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
@@ -46,40 +46,15 @@ interface SelectionEvaluation {
   clanWarId: string | null;
   teamId: string;
   teamName: string;
-  mode: "tournament" | "training" | "bo" | "kv";
+  mode: "tournament" | "training" | "solo" | "bo" | "kv";
+  targetType: "player" | "team";
+  clanWarGameId: string | null;
   marketType: BettingMarketType;
   selectionValue: string;
   line: number | null;
   locksAt: string;
   quote: ReturnType<typeof calculateFixedOdds>;
   modelSnapshot: Record<string, number>;
-}
-
-interface CatalogTeam {
-  id: string;
-  name: string;
-  type: string;
-  main_rating: number | null;
-  sessionIds?: string[];
-}
-
-interface CatalogGame {
-  id: string;
-  event_id: string;
-  session_id: string;
-  game_number: number;
-  map_name: string;
-}
-
-interface CatalogSource {
-  id: string;
-  kind: "event" | "war";
-  sourceId: string;
-  title: string;
-  mode: SelectionEvaluation["mode"];
-  locksAt: string;
-  games: CatalogGame[];
-  teams: CatalogTeam[];
 }
 
 const unavailableMessage = "Коэффициент ниже 1,10. Ставка на этот исход недоступна";
@@ -91,15 +66,14 @@ function average(values: number[], fallback: number) {
 }
 
 function validateSelection(mode: SelectionEvaluation["mode"], input: SelectionInput) {
-  const isClassic = mode === "tournament" || mode === "training";
+  const isClassic = mode === "tournament" || mode === "training" || mode === "solo";
   if (isClassic && !["kills_over", "kills_under", "exact_place"].includes(input.marketType)) {
     throw new Error("Для турниров и тренировок доступны места и убийства");
   }
   if (!isClassic && !["win", "loss", "kills_over", "kills_under", "exact_score"].includes(input.marketType)) {
     throw new Error("Для КВ и БО доступны победа, поражение, убийства и точный счёт");
   }
-  if (isClassic && !input.gameId) throw new Error("Выберите игру");
-  if (!isClassic && input.gameId) throw new Error("Для этого режима отдельная игра не выбирается");
+  if (!input.gameId) throw new Error("Выберите игру");
   if (["kills_over", "kills_under"].includes(input.marketType)) {
     if (input.line == null || !Number.isInteger(input.line * 2) || Number.isInteger(input.line)) {
       throw new Error("Линия убийств должна оканчиваться на ,5");
@@ -118,83 +92,23 @@ async function evaluateSelection(
   supabase: ReturnType<typeof createAdminClient>,
   input: SelectionInput,
 ): Promise<SelectionEvaluation> {
-  const { data: source, error: sourceError } = await supabase
-    .from("betting_sources")
-    .select("id,event_id,clan_war_id,enabled")
-    .eq("id", input.sourceId)
-    .maybeSingle();
-  if (sourceError) throw sourceError;
-  if (!source?.enabled) throw new Error("Ставки на это событие отключены");
-
-  const eventId: string | null = source.event_id;
-  const clanWarId: string | null = source.clan_war_id;
-  let gameId: string | null = null;
-  let mode: SelectionEvaluation["mode"];
-  let locksAt: string | null = null;
-  let participantTeamIds: string[] = [];
-
-  if (eventId) {
-    const [{ data: event, error: eventError }, { data: firstSession, error: sessionError }] = await Promise.all([
-      supabase.from("events").select("id,type,is_published,publish_at").eq("id", eventId).maybeSingle(),
-      supabase.from("event_sessions").select("start_time").eq("event_id", eventId)
-        .order("start_time", { ascending: true }).limit(1).maybeSingle(),
-    ]);
-    if (eventError || sessionError) throw eventError ?? sessionError;
-    if (!event || !isEventEffectivelyPublished(event) || !["tournament", "training", "bo"].includes(event.type)) {
-      throw new Error("Мероприятие недоступно для ставок");
-    }
-    mode = event.type as SelectionEvaluation["mode"];
-    locksAt = firstSession?.start_time ?? null;
-    validateSelection(mode, input);
-
-    let sessionId: string | null = null;
-    if (input.gameId) {
-      const { data: game, error: gameError } = await supabase.from("event_games")
-        .select("id,session_id").eq("id", input.gameId).eq("event_id", eventId).maybeSingle();
-      if (gameError) throw gameError;
-      if (!game) throw new Error("Игра не относится к выбранному мероприятию");
-      gameId = game.id;
-      sessionId = game.session_id;
-    }
-    let registrationsQuery = supabase.from("event_registrations")
-      .select("team_id").eq("event_id", eventId).eq("status", "confirmed")
-      .not("team_id", "is", null);
-    if (sessionId) registrationsQuery = registrationsQuery.eq("session_id", sessionId);
-    const { data: registrations, error: registrationsError } = await registrationsQuery;
-    if (registrationsError) throw registrationsError;
-    participantTeamIds = [...new Set((registrations ?? []).map((row) => row.team_id).filter(Boolean))] as string[];
-  } else if (clanWarId) {
-    const { data: war, error: warError } = await supabase.from("clan_wars")
-      .select("id,status,scheduled_at,creator_team_id,opponent_team_id")
-      .eq("id", clanWarId).maybeSingle();
-    if (warError) throw warError;
-    if (!war || !["agreed", "completed"].includes(war.status) || !war.opponent_team_id) {
-      throw new Error("КВ ещё не согласовано");
-    }
-    mode = "kv";
-    locksAt = war.scheduled_at;
-    participantTeamIds = [war.creator_team_id, war.opponent_team_id];
-    validateSelection(mode, input);
-  } else {
-    throw new Error("Источник ставок не найден");
-  }
-
-  if (!locksAt || new Date(locksAt) <= new Date()) throw new Error("Приём ставок уже закрыт");
-  if (!participantTeamIds.includes(input.teamId)) throw new Error("Команда не участвует в выбранной игре");
-  if (input.marketType === "exact_place" && Number(input.selectionValue) > participantTeamIds.length) {
-    throw new Error("Указанное место превышает число участников игры");
-  }
-
-  const [{ data: teams, error: teamsError }, { data: history, error: historyError }, { data: settings, error: settingsError }] = await Promise.all([
-    supabase.from("teams").select("id,name,main_rating").in("id", participantTeamIds),
-    supabase.from("event_game_results").select("kills,place").eq("team_id", input.teamId)
-      .eq("status", "confirmed").order("created_at", { ascending: false }).limit(20),
-    supabase.from("economy_settings").select("maximum_odds").eq("singleton", true).maybeSingle(),
-  ]);
-  if (teamsError || historyError || settingsError) throw teamsError ?? historyError ?? settingsError;
-  const team = (teams ?? []).find((row) => row.id === input.teamId);
-  if (!team) throw new Error("Команда не найдена");
-
+  const source=(await loadBettingSources(supabase,input.sourceId))[0];
+  if(!source)throw new Error("Ставки на это событие недоступны");
+  const mode=source.mode;
+  validateSelection(mode,input);
+  const game=source.games.find(row=>row.id===input.gameId);
+  if(!game)throw new Error("Игра недоступна для ставок");
+  const locksAt=game.locksAt,eventId=source.kind==="event"?source.sourceId:null,clanWarId=source.kind==="war"?source.sourceId:null;
+  const gameId=source.kind==="event"?game.id:null,clanWarGameId=source.kind==="war"?game.id:null;
+  const teams=source.teams.filter(row=>row.gameIds.includes(game.id));
+  const team=teams.find(row=>row.id===input.teamId);
+  if(!team)throw new Error("Команда или игрок не участвует в выбранной игре");
+  const participantTeamIds=teams.map(row=>row.id);
+  if(input.marketType==="exact_place"&&Number(input.selectionValue)>teams.length)throw new Error("Указанное место превышает число участников игры");
+  let historyQuery=supabase.from("competition_public_history").select("kills,place").eq("target_type",team.type).eq("target_id",team.id).eq("games",1).not("place","is",null).order("occurred_at",{ascending:false}).limit(20);
+  historyQuery=["tournament","training"].includes(mode)?historyQuery.in("mode",["tournament","training"]):historyQuery.eq("mode",mode);
+  const [{data:history,error:historyError},{data:settings,error:settingsError}]=await Promise.all([historyQuery,supabase.from("economy_settings").select("maximum_odds").eq("singleton",true).maybeSingle()]);
+  if(historyError||settingsError)throw historyError??settingsError;
   const sampleSize = history?.length ?? 0;
   const averageKills = average((history ?? []).map((row) => Number(row.kills)), 6);
   const averagePlace = average((history ?? []).map((row) => Number(row.place)), 6.5);
@@ -224,6 +138,8 @@ async function evaluateSelection(
   });
 
   return {
+    targetType: team.type,
+    clanWarGameId,
     sourceId: source.id,
     eventId,
     gameId,
@@ -255,7 +171,9 @@ async function saveQuote(
     event_id: evaluation.eventId,
     game_id: evaluation.gameId,
     clan_war_id: evaluation.clanWarId,
-    subject_team_id: evaluation.teamId,
+    subject_team_id: evaluation.targetType === "team" ? evaluation.teamId : null,
+    subject_user_id: evaluation.targetType === "player" ? evaluation.teamId : null,
+    clan_war_game_id: evaluation.clanWarGameId,
     subject_team_name: evaluation.teamName,
     mode: evaluation.mode,
     market_type: evaluation.marketType,
@@ -331,140 +249,29 @@ export async function GET(request: Request) {
       console.error("Betting maintenance did not complete", { lockMarketsError, cleanupQuotesError });
     }
 
-    const [{ data: sourceRows, error: sourcesError }, { data: wallet, error: walletError }, { data: settings, error: settingsError }, { data: bets, error: betsError }] = await Promise.all([
-      supabase.from("betting_sources").select("id,event_id,clan_war_id").eq("enabled", true),
+    const [{ data: wallet, error: walletError }, { data: settings, error: settingsError }, { data: bets, error: betsError }] = await Promise.all([
       supabase.from("site_wallets").select("balance").eq("user_id", user.id).maybeSingle(),
       supabase.from("economy_settings").select("currency_name,minimum_stake,maximum_stake,maximum_odds").eq("singleton", true).maybeSingle(),
       supabase.from("site_bets")
         .select(betSelection)
         .eq("user_id", user.id).order("placed_at", { ascending: false }).limit(100),
     ]);
-    if (sourcesError || walletError || settingsError || betsError) throw sourcesError ?? walletError ?? settingsError ?? betsError;
+    if (walletError || settingsError || betsError) throw walletError ?? settingsError ?? betsError;
 
-    const eventIds = (sourceRows ?? []).map((row) => row.event_id).filter(Boolean) as string[];
-    const warIds = (sourceRows ?? []).map((row) => row.clan_war_id).filter(Boolean) as string[];
-    const empty = Promise.resolve({ data: [], error: null });
-    const [eventsResult, sessionsResult, gamesResult, registrationsResult, warsResult] = await Promise.all([
-      eventIds.length ? supabase.from("events").select("id,title,type,is_published,publish_at").in("id", eventIds) : empty,
-      eventIds.length ? supabase.from("event_sessions").select("id,event_id,start_time").in("event_id", eventIds).order("start_time") : empty,
-      eventIds.length ? supabase.from("event_games").select("id,event_id,session_id,game_number,map_name").in("event_id", eventIds).order("game_number") : empty,
-      eventIds.length ? supabase.from("event_registrations").select("event_id,session_id,team_id,status").in("event_id", eventIds).eq("status", "confirmed").not("team_id", "is", null) : empty,
-      warIds.length ? supabase.from("clan_wars").select("id,title,status,scheduled_at,creator_team_id,opponent_team_id").in("id", warIds) : empty,
-    ]);
-    const secondaryError = eventsResult.error ?? sessionsResult.error ?? gamesResult.error ?? registrationsResult.error ?? warsResult.error;
-    if (secondaryError) throw secondaryError;
-    const events = eventsResult.data;
-    const sessions = sessionsResult.data;
-    const games = gamesResult.data;
-    const registrations = registrationsResult.data;
-    const wars = warsResult.data;
-
-    const participantIds = new Set<string>();
-    for (const registration of registrations ?? []) if (registration.team_id) participantIds.add(registration.team_id);
-    for (const war of wars ?? []) {
-      if (war.creator_team_id) participantIds.add(war.creator_team_id);
-      if (war.opponent_team_id) participantIds.add(war.opponent_team_id);
-    }
-    const teamIds = [...participantIds];
-    const [teamsResult, historyResult] = await Promise.all([
-      teamIds.length ? supabase.from("teams").select("id,name,type,main_rating").in("id", teamIds) : empty,
-      teamIds.length ? supabase.from("event_game_results").select("team_id,kills,place,created_at").in("team_id", teamIds).eq("status", "confirmed").order("created_at", { ascending: false }).limit(2000) : empty,
-    ]);
-    if (teamsResult.error || historyResult.error) throw teamsResult.error ?? historyResult.error;
-    const teams = teamsResult.data;
-    const history = historyResult.data;
-
-    const teamById = new Map<string, CatalogTeam>(((teams ?? []) as CatalogTeam[]).map((team) => [team.id, team]));
-    const eventById = new Map((events ?? []).map((event) => [event.id, event]));
-    const warById = new Map((wars ?? []).map((war) => [war.id, war]));
-    const historyByTeam = new Map<string, { kills: number; place: number }[]>();
-    for (const row of history ?? []) {
-      const current = historyByTeam.get(row.team_id) ?? [];
-      if (current.length < 20) current.push({ kills: Number(row.kills), place: Number(row.place) });
-      historyByTeam.set(row.team_id, current);
-    }
-
-    const sources: CatalogSource[] = [];
-    for (const source of sourceRows ?? []) {
-      if (source.event_id) {
-        const event = eventById.get(source.event_id);
-        const sourceSessions = (sessions ?? []).filter((session) => session.event_id === source.event_id);
-        const locksAt = sourceSessions[0]?.start_time;
-        if (!event || !isEventEffectivelyPublished(event) || !locksAt || new Date(locksAt) <= new Date()) continue;
-        const sourceGames = (games ?? []).filter((game) => game.event_id === source.event_id) as CatalogGame[];
-        const sourceRegistrations = (registrations ?? []).filter((registration) => registration.event_id === source.event_id);
-        const sourceTeamIds = [...new Set(sourceRegistrations.map((row) => row.team_id).filter(Boolean))] as string[];
-        sources.push({
-          id: source.id,
-          kind: "event",
-          sourceId: source.event_id,
-          title: event.title,
-          mode: event.type as CatalogSource["mode"],
-          locksAt,
-          games: sourceGames,
-          teams: sourceTeamIds.flatMap((teamId) => {
-            const team = teamById.get(teamId);
-            if (!team) return [];
-            return [{ ...team, sessionIds: [...new Set(sourceRegistrations.filter((row) => row.team_id === teamId).map((row) => row.session_id).filter(Boolean))] }];
-          }),
-        });
-        continue;
-      }
-      const war = source.clan_war_id ? warById.get(source.clan_war_id) : null;
-      if (!war?.opponent_team_id || !war.scheduled_at || new Date(war.scheduled_at) <= new Date() || war.status !== "agreed") continue;
-      const warTeams = [teamById.get(war.creator_team_id), teamById.get(war.opponent_team_id)].filter((team): team is CatalogTeam => Boolean(team));
-      sources.push({
-        id: source.id,
-        kind: "war",
-        sourceId: war.id,
-        title: war.title,
-        mode: "kv",
-        locksAt: war.scheduled_at,
-        games: [],
-        teams: warTeams,
-      });
-    }
-
-    const previews: Record<string, unknown>[] = [];
-    for (const source of sources) {
-      const previewTeams = source.games[0]
-        ? source.teams.filter((team) => !team.sessionIds || team.sessionIds.includes(source.games[0].session_id))
-        : source.teams;
-      const fieldRatings = previewTeams.map((team) => Number(team?.main_rating ?? 1));
-      for (const team of previewTeams.slice(0, 4)) {
-        if (!team) continue;
-        const recent = historyByTeam.get(team.id) ?? [];
-        const averageKills = average(recent.map((row) => row.kills), 6);
-        const averagePlace = average(recent.map((row) => row.place), 6.5);
-        const marketType: BettingMarketType = source.mode === "tournament" || source.mode === "training" ? "kills_over" : "win";
-        const line = marketType === "kills_over" ? suggestedKillsLine(averageKills) : null;
-        const quote = calculateFixedOdds({
-          marketType,
-          line,
-          selectionValue: marketType === "win" ? "win" : "over",
-          teamRating: Number(team.main_rating ?? 1),
-          opponentRating: average(fieldRatings.filter((_, index) => previewTeams[index]?.id !== team.id), 50),
-          fieldAverageRating: average(fieldRatings, 50),
-          fieldSize: previewTeams.length,
-          averageKills,
-          averagePlace,
-          sampleSize: recent.length,
-          maximumOdds: Number(settings?.maximum_odds ?? 15),
-        });
-        previews.push({
-          sourceId: source.id,
-          sourceTitle: source.title,
-          teamId: team.id,
-          teamName: team.name,
-          gameId: source.games[0]?.id ?? null,
-          marketType,
-          line,
-          available: quote.eligible,
-          ...(quote.eligible ? { odds: quote.offeredOdds } : { message: unavailableMessage }),
-        });
+    const sources=await loadBettingSources(supabase);
+    const previews: Record<string,unknown>[]=[];
+    for(const source of sources.slice(0,6)){
+      const game=source.games[0],field=source.teams.filter(team=>team.gameIds.includes(game.id));
+      for(const team of field.slice(0,4)){
+        const marketType=source.mode==="bo"||source.mode==="kv"?"win":"kills_over";
+        const line=marketType==="win"?null:suggestedKillsLine(6);
+        const quote=calculateFixedOdds({marketType,line,selectionValue:marketType==="win"?"win":"over",teamRating:team.main_rating,
+          opponentRating:average(field.filter(t=>t.id!==team.id).map(t=>t.main_rating),50),fieldAverageRating:average(field.map(t=>t.main_rating),50),
+          fieldSize:field.length,averageKills:6,averagePlace:(field.length+1)/2,sampleSize:0,maximumOdds:Number(settings?.maximum_odds??15)});
+        previews.push({sourceId:source.id,sourceTitle:source.title,teamId:team.id,teamName:team.name,gameId:game.id,marketType,line,available:quote.eligible,
+          ...(quote.eligible?{odds:quote.offeredOdds}:{message:unavailableMessage})});
       }
     }
-
     return Response.json({
       balance: wallet?.balance ?? 0,
       currencyName: settings?.currency_name ?? "Монеты Арены",
@@ -491,7 +298,7 @@ export async function POST(request: Request) {
     }
 
     const { data: storedQuote, error: quoteError } = await supabase.from("betting_quotes")
-      .select("id,source_id,event_id,game_id,clan_war_id,subject_team_id,market_type,selection_value,line,offered_odds,expires_at,confirmed_at")
+      .select("id,source_id,event_id,game_id,clan_war_id,clan_war_game_id,subject_user_id,subject_team_id,market_type,selection_value,line,offered_odds,expires_at,confirmed_at")
       .eq("id", payload.quoteId).eq("user_id", user.id).maybeSingle();
     if (quoteError) throw quoteError;
     if (!storedQuote) return Response.json({ error: "Котировка не найдена", code: "QUOTE_NOT_FOUND" }, { status: 404, headers: noStoreHeaders });
@@ -507,8 +314,8 @@ export async function POST(request: Request) {
 
     const current = await evaluateSelection(supabase, {
       sourceId: storedQuote.source_id,
-      gameId: storedQuote.game_id,
-      teamId: storedQuote.subject_team_id,
+      gameId: storedQuote.game_id ?? storedQuote.clan_war_game_id,
+      teamId: storedQuote.subject_team_id ?? storedQuote.subject_user_id,
       marketType: storedQuote.market_type as BettingMarketType,
       selectionValue: storedQuote.selection_value,
       line: storedQuote.line == null ? null : Number(storedQuote.line),

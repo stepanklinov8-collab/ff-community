@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const [{ data: markets, error: marketsError }, { data: events, error: eventsError }, { data: wars, error: warsError }, { data: sources, error: sourcesError }, { data: settings }] =
       await Promise.all([
         supabase.from("betting_markets").select("id,event_id,game_id,clan_war_id,subject_team_name,mode,market_type,selection_value,line,odds,status,locks_at,outcome,created_at").order("created_at", { ascending: false }).limit(300),
-        supabase.from("events").select("id,title,type,is_published,publish_at").in("type", ["tournament", "training", "bo"]).order("created_at", { ascending: false }).limit(200),
+        supabase.from("events").select("id,title,type,is_published,publish_at").in("type", ["tournament", "training", "solo", "bo", "kv"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("clan_wars").select("id,title,creator_team_id,opponent_team_id,status,scheduled_at").in("status", ["agreed", "completed", "cancelled"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("betting_sources").select("id,event_id,clan_war_id,enabled,updated_at"),
         auth.roles.includes("superadmin")
@@ -74,13 +74,7 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
 
     if (payload.action === "settle") {
-      const { error } = await supabase.rpc("settle_betting_market", {
-        p_market_id: payload.marketId,
-        p_outcome: payload.outcome,
-        p_actor: auth.user.id,
-      });
-      if (error) throw error;
-      return Response.json({ success: true });
+      return Response.json({error:"Ставки рассчитываются при публикации результатов. Для возврата используйте отмену мероприятия или КВ."},{status:410});
     }
 
     if (payload.action === "settings") {
@@ -102,14 +96,14 @@ export async function POST(request: Request) {
     let locksAt: string | null = null;
     if (payload.sourceKind === "event") {
       const [{ data: event, error: eventError }, { data: session, error: sessionError }] = await Promise.all([
-        supabase.from("events").select("id,type,is_published,publish_at").eq("id", payload.sourceId).maybeSingle(),
-        supabase.from("event_sessions").select("start_time").eq("event_id", payload.sourceId).order("start_time").limit(1).maybeSingle(),
+        supabase.from("events").select("id,type,is_published,publish_at,moderation_status,frozen_at,cancelled_at").eq("id", payload.sourceId).maybeSingle(),
+        supabase.from("event_sessions").select("start_time").eq("event_id", payload.sourceId).neq("status","cancelled").gt("start_time",new Date().toISOString()).order("start_time").limit(1).maybeSingle(),
       ]);
       if (eventError || sessionError) throw eventError ?? sessionError;
-      if (!event || !["tournament", "training", "bo"].includes(event.type)) {
+      if (!event || !["tournament", "training", "solo", "bo", "kv"].includes(event.type)) {
         return Response.json({ error: "Этот тип мероприятия не поддерживает ставки" }, { status: 400 });
       }
-      if (!isEventEffectivelyPublished(event)) return Response.json({ error: "Сначала опубликуйте мероприятие" }, { status: 400 });
+      if (!isEventEffectivelyPublished(event)||event.moderation_status!=="approved"||event.frozen_at||event.cancelled_at) return Response.json({ error: "Сначала опубликуйте мероприятие" }, { status: 400 });
       eventId = event.id;
       locksAt = session?.start_time ?? null;
     } else {

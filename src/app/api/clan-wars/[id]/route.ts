@@ -111,7 +111,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       .map((response) => response.team_id);
     const participantTeamIds = [clanWar.creator_team_id, clanWar.opponent_team_id, ...managedResponseTeamIds].filter(Boolean) as string[];
 
+    const {data:commentDeadline,error:deadlineError}=await supabase.rpc("u2_war_comment_deadline",{p_war:clanWarId});if(deadlineError)throw deadlineError;
+    const canEdit=canViewHidden||managedIds.includes(clanWar.creator_team_id);
+    const canViewRoom=!!auth&&(canViewHidden||managedIds.some(team=>[clanWar.creator_team_id,clanWar.opponent_team_id].includes(team))||rosters.some(r=>[clanWar.creator_team_id,clanWar.opponent_team_id].includes(r.team_id)&&(r.player_ids as string[]).includes(auth.user.id)));
+    const {data:privateRoom,error:roomError}=canViewRoom?await supabase.from("clan_wars").select("room_code,room_password,room_note").eq("id",clanWarId).single():{data:null,error:null};if(roomError)throw roomError;
     return Response.json({
+      room:privateRoom,commentsOpen:commentDeadline==="infinity"||!!commentDeadline&&Date.parse(commentDeadline)>Date.now(),
       clanWar: {
         ...clanWar,
         creator_team: teamById.get(clanWar.creator_team_id) ?? null,
@@ -137,6 +142,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
           })),
       })),
       permissions: {
+        canEdit,
         canManageCreator: managedIds.includes(clanWar.creator_team_id),
         canManageOpponent: Boolean(clanWar.opponent_team_id && managedIds.includes(clanWar.opponent_team_id)),
         canRespond: clanWar.challenge_kind === "open" && clanWar.status === "open" && managedOrganizations.some((organization) =>
@@ -144,9 +150,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
           organization.type === teamById.get(clanWar.creator_team_id)?.type &&
           !responses.some((response) => response.team_id === organization.id && ["pending", "accepted"].includes(response.status)),
         ),
-        canComment: managedIds.some((teamId) => participantTeamIds.includes(teamId)),
+        canComment: (commentDeadline==="infinity"||!!commentDeadline&&Date.parse(commentDeadline)>Date.now())&&managedIds.some((teamId) => participantTeamIds.includes(teamId)),
         canCancel: ["open", "pending", "agreed"].includes(clanWar.status) && managedIds.some((teamId) => [clanWar.creator_team_id, clanWar.opponent_team_id].includes(teamId)),
-        canComplete: clanWar.status === "agreed" && managedIds.some((teamId) => [clanWar.creator_team_id, clanWar.opponent_team_id].includes(teamId)),
+        canComplete: ["agreed","completed"].includes(clanWar.status) && (canViewHidden || managedIds.some((teamId) => [clanWar.creator_team_id, clanWar.opponent_team_id].includes(teamId))),
       },
     });
   } catch (error) {
@@ -280,95 +286,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return Response.json({ success: true });
     }
 
-    if (payload.action === "cancel" || payload.action === "complete") {
-      const managedIds = (await getManagedOrganizations(supabase, user.id)).map((organization) => organization.id);
-      if (![clanWar.creator_team_id, clanWar.opponent_team_id].filter(Boolean).some((teamId) => managedIds.includes(teamId as string))) {
-        throw new ClanWarRequestError("Только руководство участников может изменить статус", 403);
-      }
-      if (payload.action === "complete") {
-        if (clanWar.status !== "agreed") throw new ClanWarRequestError("Завершить можно только согласованное КВ", 409);
-        if (!clanWar.opponent_team_id) throw new ClanWarRequestError("Соперник не выбран", 409);
-        const teamIds = [clanWar.creator_team_id, clanWar.opponent_team_id];
-        const [{ data: teams }, { data: rosters }] = await Promise.all([
-          supabase.from("teams").select("id,name,type").in("id", teamIds),
-          supabase.from("clan_war_rosters").select("team_id,player_ids").eq("clan_war_id", clanWarId),
-        ]);
-        const teamById = new Map((teams ?? []).map((team) => [team.id, team]));
-        const playerIds = [...new Set((rosters ?? []).flatMap((roster) => roster.player_ids as string[]))];
-        const { data: profiles } = playerIds.length ? await supabase.from("profiles").select("id,nickname").in("id", playerIds) : { data: [] };
-        const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile.nickname]));
-        const snapshots = new Map((rosters ?? []).map((roster) => [roster.team_id, (roster.player_ids as string[]).map((playerId) => ({ id: playerId, nickname: profileById.get(playerId) ?? "Игрок" }))]));
-        const creator = teamById.get(clanWar.creator_team_id);
-        const opponent = teamById.get(clanWar.opponent_team_id);
-        if (!creator || !opponent) throw new ClanWarRequestError("Не удалось загрузить участников", 409);
-        const { error: resultError } = await supabase.from("round_match_results").insert({
-          clan_war_id: clanWarId,
-          team_a_id: creator.id,
-          team_b_id: opponent.id,
-          team_a_name_snapshot: creator.name,
-          team_b_name_snapshot: opponent.name,
-          team_a_score: payload.creatorScore,
-          team_b_score: payload.opponentScore,
-          team_a_kills: payload.creatorKills,
-          team_b_kills: payload.opponentKills,
-          status: "confirmed",
-          confirmed_by: user.id,
-          confirmed_at: new Date().toISOString(),
-        });
-        if (resultError) throw resultError;
-        const occurredAt = new Date().toISOString();
-        const { error: historyError } = await supabase.from("organization_participation_history").insert([
-          { organization_id: creator.id, organization_name: creator.name, organization_type: creator.type, mode: "kv", clan_war_id: clanWarId, event_title: clanWar.title, occurred_at: occurredAt, roster_snapshot: snapshots.get(creator.id) ?? [], kills: payload.creatorKills, score: `${payload.creatorScore}:${payload.opponentScore}`, recorded_by: user.id },
-          { organization_id: opponent.id, organization_name: opponent.name, organization_type: opponent.type, mode: "kv", clan_war_id: clanWarId, event_title: clanWar.title, occurred_at: occurredAt, roster_snapshot: snapshots.get(opponent.id) ?? [], kills: payload.opponentKills, score: `${payload.opponentScore}:${payload.creatorScore}`, recorded_by: user.id },
-        ]);
-        if (historyError) throw historyError;
-        const { error } = await supabase.from("clan_wars").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", clanWarId).eq("status", "agreed");
-        if (error) throw error;
-        const { data: markets } = await supabase.from("betting_markets").select("id,subject_team_id,market_type,selection_value,line").eq("clan_war_id", clanWarId).in("status", ["open", "locked"]);
-          for (const market of markets ?? []) {
-          const creatorSubject = market.subject_team_id === creator.id;
-          const ownScore = creatorSubject ? payload.creatorScore : payload.opponentScore;
-          const rivalScore = creatorSubject ? payload.opponentScore : payload.creatorScore;
-          const kills = creatorSubject ? payload.creatorKills : payload.opponentKills;
-          const won = market.market_type === "win" ? ownScore === 7
-            : market.market_type === "loss" ? ownScore < rivalScore
-            : market.market_type === "kills_over" ? kills > Number(market.line)
-            : market.market_type === "kills_under" ? kills < Number(market.line)
-            : market.market_type === "exact_score" ? market.selection_value === `${ownScore}:${rivalScore}`
-            : false;
-            const { error: settleError } = await supabase.rpc("settle_betting_market", { p_market_id: market.id, p_outcome: won ? "won" : "lost", p_actor: user.id });
-            if (settleError) throw settleError;
-        }
-      } else {
-        if (!["open", "pending", "agreed"].includes(clanWar.status)) throw new ClanWarRequestError("Это КВ уже завершено", 409);
-        const { error } = await supabase.from("clan_wars").update({
-          status: "cancelled",
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: user.id,
-          cancellation_reason: payload.reason || "КВ отменено участником",
-          }).eq("id", clanWarId).in("status", ["open", "pending", "agreed"]);
-          if (error) throw error;
-          const { data: markets, error: marketsError } = await supabase.from("betting_markets")
-            .select("id").eq("clan_war_id", clanWarId).in("status", ["open", "locked"]);
-          if (marketsError) throw marketsError;
-          for (const market of markets ?? []) {
-            const { error: settleError } = await supabase.rpc("settle_betting_market", {
-              p_market_id: market.id,
-              p_outcome: "void",
-              p_actor: user.id,
-            });
-            if (settleError) throw settleError;
-          }
-        }
-
-      const recipientTeamIds = [...new Set([clanWar.creator_team_id, clanWar.opponent_team_id].filter(Boolean))] as string[];
-      await Promise.all(recipientTeamIds.map((teamId) => notifyOrganizationManagers(supabase, teamId, {
-        type: "clan_war_status",
-        title: payload.action === "complete" ? "КВ завершено" : "КВ отменено",
-        body: clanWar.title,
-        link: `/clan-wars/${clanWarId}`,
-      }, user.id)));
-      return Response.json({ success: true, status: payload.action === "complete" ? "completed" : "cancelled" });
+    if (payload.action === "complete") return Response.json({error:"Используйте редактор серии: результат подтверждают обе стороны",resultsUrl:`/clan-wars/${clanWarId}/results`},{status:410});
+    if (payload.action === "cancel") {
+      const {error}=await supabase.rpc("u2_cancel_war",{p_actor:user.id,p_war:clanWarId,p_reason:payload.reason||"КВ отменено участником"});
+      if(error)throw new ClanWarRequestError(error.message,409);
+      return Response.json({success:true,status:"cancelled"});
     }
 
     throw new ClanWarRequestError("Неизвестное действие");

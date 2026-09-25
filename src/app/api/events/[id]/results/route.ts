@@ -1,17 +1,9 @@
 import { z } from "zod";
+import {allRows,publicResults} from "@/lib/competition/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { authErrorResponse, ApiAuthError, requireUser } from "@/utils/supabase/server-auth";
+import { authErrorResponse } from "@/utils/supabase/server-auth";
 
 const paramsSchema = z.object({ id: z.string().uuid() });
-const resultsSchema = z.object({
-  results: z.array(z.object({
-    teamId: z.string().uuid(),
-    score: z.number().int().min(0).max(1_000_000),
-    isWinner: z.boolean(),
-    mvpUserId: z.string().uuid().nullable().optional(),
-  })).max(1000),
-});
-
 interface LegacyResult {
   id: string;
   event_id: string;
@@ -48,6 +40,22 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const { id } = paramsSchema.parse(await context.params);
     const supabase = createAdminClient();
+    const {data:event,error:eventError}=await supabase.from("events").select("id,title,type,public_number,is_published,publish_at,moderation_status").eq("id",id).single();
+    if(eventError||!event||event.moderation_status!=="approved"||(!event.is_published&&(!event.publish_at||Date.parse(event.publish_at)>Date.now())))return Response.json({error:"Мероприятие не найдено"},{status:404});
+    const sessions=await allRows((a,b)=>supabase.from("event_sessions").select("id,start_time,public_number").eq("event_id",id).neq("status","cancelled").order("start_time").order("id").range(a,b));
+    const publicSessions=[];
+    for(const session of sessions){
+      const [{data:pub,error:pubError},games,groups]=await Promise.all([
+        supabase.from("competition_publications").select("published,first_published_at,corrected_at").eq("session_id",session.id).maybeSingle(),
+        allRows((a,b)=>supabase.from("event_games").select("id,group_id,game_number,public_number,map_name").eq("session_id",session.id).neq("status","cancelled").order("game_number").order("id").range(a,b)),
+        allRows((a,b)=>supabase.from("event_groups").select("id,public_number").eq("session_id",session.id).order("public_number").range(a,b)),
+      ]);if(pubError)throw pubError;
+      const prefix=`${event.public_number}-${String(session.public_number).padStart(2,"0")}`;
+      publicSessions.push({id:session.id,startTime:session.start_time,publicId:prefix,publishedAt:pub?.first_published_at,correctedAt:pub?.corrected_at,results:pub?.first_published_at?publicResults(pub.published):null,
+        games:games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,publicId:`${prefix}-${String(groups.find(gr=>gr.id===g.group_id)?.public_number).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`}))});
+    }
+    const publicData={event:{id:event.id,title:event.title,type:event.type},sessions:publicSessions};
+    if(publicSessions.some(s=>s.results))return Response.json({...publicData,results:[]},{headers:{"Cache-Control":"no-store"}});
     const normalized = await supabase
       .from("event_team_results")
       .select("id, event_id, team_id, score, is_winner, mvp_user_id")
@@ -55,7 +63,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       .order("score", { ascending: false });
 
     if (!normalized.error) {
-      return Response.json({ results: await enrichResults(normalized.data ?? []) });
+      return Response.json({ ...publicData, results: await enrichResults(normalized.data ?? []) });
     }
 
     const { data: legacy, error: legacyError } = await supabase
@@ -71,46 +79,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       is_winner: true,
       mvp_user_id: row.mvp_user_id,
     }));
-    return Response.json({ results: await enrichResults(rows), legacy: true });
+    return Response.json({ ...publicData, results: await enrichResults(rows), legacy: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Некорректный ID мероприятия" }, { status: 400 });
     return authErrorResponse(error);
   }
 }
 
-export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = paramsSchema.parse(await context.params);
-    const auth = await requireUser(request);
-    const payload = resultsSchema.parse(await request.json());
-    const supabase = createAdminClient();
-    const { data: event, error: eventError } = await supabase
-      .from("events")
-      .select("organizer_user_id")
-      .eq("id", id)
-      .single();
-    if (eventError) throw eventError;
-    if (!auth.roles.length && event.organizer_user_id !== auth.user.id) {
-      throw new ApiAuthError("Управлять результатами может организатор или администратор", 403);
-    }
-
-    const winners = payload.results.filter((result) => result.isWinner);
-    if (winners.length > 1) return Response.json({ error: "Можно выбрать только одного победителя" }, { status: 400 });
-    const { error } = await supabase.from("event_team_results").upsert(
-      payload.results.map((result) => ({
-        event_id: id,
-        team_id: result.teamId,
-        score: result.score,
-        is_winner: result.isWinner,
-        mvp_user_id: result.mvpUserId ?? null,
-        updated_at: new Date().toISOString(),
-      })),
-      { onConflict: "event_id,team_id" },
-    );
-    if (error) throw error;
-    return Response.json({ success: true });
-  } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ error: "Проверьте результаты" }, { status: 400 });
-    return authErrorResponse(error);
-  }
-}
+export async function PUT(){return Response.json({error:"Используйте редактор сессии: старый способ сохранения результатов закрыт."},{status:410});}

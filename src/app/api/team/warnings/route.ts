@@ -28,6 +28,7 @@ export async function GET(request: Request) {
   const { data: activeWarnings, error: warnError } = await supabaseAdmin
     .from("warnings")
     .select("id, level, reason, created_at, expires_at")
+    .eq("update2",false)
     .eq("target_type", "team")
     .eq("target_id", teamId)
     .or(`expires_at.is.null,expires_at.gt.NOW()`);

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
 
     const startBySession = new Map((sessions ?? []).map((session) => [session.id, session.start_time]));
     return Response.json({
+      userId: user.id,
       stats: (rows ?? []).map((row) => ({
         ...row,
         session_start: row.session_id ? startBySession.get(row.session_id) ?? null : null,

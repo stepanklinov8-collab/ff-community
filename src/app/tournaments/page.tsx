@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import {archiveCards} from "@/lib/competition/archive";
+import {competitionText} from "@/i18n/competition";
 import Link from "next/link";
 import { CalendarDays, Clock3, Search, UsersRound } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -18,11 +20,13 @@ interface EventRow {
   image_url: string | null;
   max_teams: number | null;
   created_at: string;
+  archive_end_time?: string | null; final_session_id?: string | null; frozen_at?: string | null;
 }
 
 interface EventSession {
   id: string;
   event_id: string;
+  published?: boolean; public_number?: number; summary?: Array<{name:string;place:number}>;
   start_time: string;
   end_time: string | null;
   registration_open_time: string | null;
@@ -46,7 +50,7 @@ function registrationStatus(session: EventSession | undefined) {
 
 export default function TournamentsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { t, formatDate, formatNumber } = useLanguage();
+  const { t, locale, formatDate, formatNumber } = useLanguage();
   const [events, setEvents] = useState<EventWithSessions[]>([]);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -104,18 +108,7 @@ export default function TournamentsPage() {
       });
   }, [events, filter, query]);
 
-  const { activeEvents, archiveEvents } = useMemo(() => {
-    const isPast = (event: EventWithSessions) => event.sessions.length > 0 && event.sessions.every((session) =>
-      new Date(session.end_time || session.start_time).getTime() < referenceTime,
-    );
-    return {
-      activeEvents: filteredEvents.filter((event) => !isPast(event)),
-      archiveEvents: filteredEvents.filter(isPast).sort((left, right) => {
-        const latest = (event: EventWithSessions) => Math.max(...event.sessions.map((session) => new Date(session.end_time || session.start_time).getTime()));
-        return latest(right) - latest(left);
-      }),
-    };
-  }, [filteredEvents, referenceTime]);
+  const {activeEvents,archiveEvents}=useMemo(()=>archiveCards(filteredEvents,referenceTime),[filteredEvents,referenceTime]);
   const displayedEvents = view === "active" ? activeEvents : archiveEvents.slice(0, archiveLimit);
 
   return (
@@ -124,7 +117,7 @@ export default function TournamentsPage() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,rgba(249,166,37,.14),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(0,174,255,.15),transparent_36%)]" />
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div><p className="eyebrow">{t("tournaments.eyebrow")}</p><h1 className="mt-2 text-3xl font-black sm:text-5xl">{t("tournaments.title")}</h1><p className="mt-3 max-w-2xl text-slate-400">{t("tournaments.description")}</p></div>
-          {user ? <Link href="/tournaments/propose" className="btn-primary">{t("tournaments.propose")}</Link> : <Link href="/auth" className="btn-secondary">{t("tournaments.signIn")}</Link>}
+          {user ? <div className="flex gap-3"><Link href="/tournaments/manage" className="btn-secondary">{competitionText(locale,"organizer")}</Link><Link href="/tournaments/propose" className="btn-primary">{t("tournaments.propose")}</Link></div> : <Link href="/auth" className="btn-secondary">{t("tournaments.signIn")}</Link>}
         </div>
       </section>
 
@@ -136,8 +129,8 @@ export default function TournamentsPage() {
       </section>
 
       <div className="mb-6 flex gap-2">
-        <button type="button" onClick={() => setView("active")} className={view === "active" ? "btn-primary" : "btn-secondary"}>Активные</button>
-        <button type="button" onClick={() => setView("archive")} className={view === "archive" ? "btn-primary" : "btn-secondary"}>Архив ({archiveEvents.length})</button>
+        <button type="button" onClick={() => setView("active")} className={view === "active" ? "btn-primary" : "btn-secondary"}>{competitionText(locale,"active")}</button>
+        <button type="button" onClick={() => setView("archive")} className={view === "archive" ? "btn-primary" : "btn-secondary"}>{competitionText(locale,"archive")} ({archiveEvents.length})</button>
       </div>
 
       {loading ? (
@@ -150,11 +143,11 @@ export default function TournamentsPage() {
         <>
         <div className="grid gap-5 lg:grid-cols-2">
           {displayedEvents.map((event) => {
-            const nextSession = event.sessions.find((session) => new Date(session.start_time).getTime() >= Date.now()) ?? event.sessions[0];
+            const nextSession = view==="archive" ? event.sessions.find(s=>s.id===event.final_session_id) ?? event.sessions[event.sessions.length-1] : event.sessions.find((session) => new Date(session.start_time).getTime() >= referenceTime) ?? event.sessions[0];
             const status = registrationStatus(nextSession);
             const registrationLabel = registrationLabels[status];
             return (
-              <Link key={event.id} href={"/tournaments/" + event.id} className="panel group overflow-hidden transition hover:-translate-y-1 hover:border-cyan-400/35">
+              <Link key={event.cardId} href={"/tournaments/" + event.id + (event.archivedSessionId ? `?sessionId=${event.archivedSessionId}` : "")} className="panel group overflow-hidden transition hover:-translate-y-1 hover:border-cyan-400/35">
                 <div className="relative h-48 overflow-hidden bg-[radial-gradient(circle_at_center,rgba(0,174,255,.19),transparent_55%),#061019]">
                   {event.image_url ? <Image src={event.image_url} alt={event.title} fill sizes="(max-width: 1024px) 100vw, 50vw" unoptimized className="object-cover transition duration-500 group-hover:scale-105" /> : <Image src="/brand/omcite-hero.jpg" alt="" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover opacity-35 transition duration-500 group-hover:scale-105" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#071019] via-[#071019]/20 to-transparent" />
@@ -165,16 +158,17 @@ export default function TournamentsPage() {
                   <h2 className="text-2xl font-black transition group-hover:text-cyan-300">{event.title}</h2>
                   <p className="mt-2 line-clamp-2 min-h-10 text-sm text-slate-400">{event.description || t("tournaments.noDescription")}</p>
                   <div className="mt-5 grid gap-3 rounded-xl border border-white/10 bg-white/[.025] p-4 sm:grid-cols-2">
-                    <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-cyan-300" /><div><p className="text-xs text-slate-500">{t("tournaments.nextSession")}</p><p className="text-sm font-semibold">{nextSession ? formatDate(nextSession.start_time, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : t("tournaments.pending")}</p></div></div>
+                    <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-cyan-300" /><div><p className="text-xs text-slate-500">{t("tournaments.nextSession")}</p><p className="text-sm font-semibold">{nextSession ? formatDate(nextSession.start_time, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone:"Europe/Moscow" }) : t("tournaments.pending")}</p></div></div>
                     <div className="flex items-center gap-3"><UsersRound className="h-5 w-5 text-cyan-300" /><div><p className="text-xs text-slate-500">{t("tournaments.sessionCount", { count: event.sessions.length })}</p><p className={status === "open" ? "text-sm font-semibold text-emerald-300" : "text-sm font-semibold text-slate-300"}>{registrationLabel}</p></div></div>
                   </div>
+                  {view==="archive"&&<div className="mt-3 text-sm">{event.archivedSessionId&&<p>{competitionText(locale,"session")} {nextSession?.public_number} · МСК</p>}{nextSession?.published?<p>{nextSession.summary?.map(s=>`${s.place}. ${s.name}`).join(" · ")}</p>:<p className="text-amber-300">{competitionText(locale,"waiting")}</p>}</div>}
                   {event.organizer && <p className="mt-4 text-xs text-slate-500">{t("tournaments.organizer", { name: event.organizer })}</p>}
                 </div>
               </Link>
             );
           })}
         </div>
-        {view === "archive" && archiveLimit < archiveEvents.length && <button type="button" className="btn-secondary mx-auto mt-6 flex" onClick={() => setArchiveLimit((current) => current + 10)}>Показать ещё</button>}
+        {view === "archive" && archiveLimit < archiveEvents.length && <button type="button" className="btn-secondary mx-auto mt-6 flex" onClick={() => setArchiveLimit((current) => current + 10)}>{competitionText(locale,"more")}</button>}
         </>
       )}
     </div>

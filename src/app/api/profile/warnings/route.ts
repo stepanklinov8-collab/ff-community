@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const { data: activeWarnings, error: warnError } = await supabaseAdmin
     .from("warnings")
     .select("id, level, reason, created_at, expires_at")
+    .eq("update2",false)
     .eq("target_type", "player")
     .eq("target_id", targetUserId)
     .or(`expires_at.is.null,expires_at.gt.NOW()`);
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
   const { data: history, error: historyError } = await supabaseAdmin
     .from("warnings")
     .select("id, level, reason, created_at, expires_at")
+    .eq("update2",false)
     .eq("target_type", "player")
     .eq("target_id", targetUserId)
     .order("created_at", { ascending: false })

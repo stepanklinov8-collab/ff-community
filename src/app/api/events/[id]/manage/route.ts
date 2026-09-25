@@ -20,7 +20,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       .eq("id", id)
       .single();
     if (eventError) throw eventError;
-    if (!auth.roles.length && event.organizer_user_id !== auth.user.id) {
+    if (!auth.roles.some(role=>role==="admin"||role==="superadmin") && event.organizer_user_id !== auth.user.id) {
       throw new ApiAuthError("Управлять мероприятием может организатор или администратор", 403);
     }
 

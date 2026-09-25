@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import {useLanguage} from "@/components/LanguageProvider";
+import PublicClanWarResults from "@/components/PublicClanWarResults";
 import { useParams } from "next/navigation";
 import { Check, Clock3, MessageCircle, Send, ShieldCheck, Swords, UsersRound, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -68,12 +70,14 @@ interface Comment {
 }
 
 interface DetailsPayload {
+  room:{room_code:string|null;room_password:string|null;room_note:string}|null;commentsOpen:boolean;
   clanWar: ClanWar;
   responses: ClanWarResponse[];
   rosters: Roster[];
   comments: Comment[];
   managedOrganizations: ManagedOrganization[];
   permissions: {
+    canEdit:boolean;
     canManageCreator: boolean;
     canManageOpponent: boolean;
     canRespond: boolean;
@@ -99,6 +103,7 @@ const responseLabels: Record<ClanWarResponse["status"], string> = {
 };
 
 export default function ClanWarDetailsPage() {
+  const {locale}=useLanguage();const tr=(ru:string,kk:string,ky:string)=>locale==="kk"?kk:locale==="ky"?ky:ru;
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
@@ -110,7 +115,7 @@ export default function ClanWarDetailsPage() {
   const [responseMessage, setResponseMessage] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [rosterSelections, setRosterSelections] = useState<Record<string, string[]>>({});
-  const [result, setResult] = useState({ creatorScore: "7", opponentScore: "0", creatorKills: "0", opponentKills: "0" });
+
 
   const loadDetails = useCallback(async () => {
     const { data } = await supabase.auth.getUser();
@@ -254,11 +259,14 @@ export default function ClanWarDetailsPage() {
 
         <div className="mt-6 flex flex-wrap gap-2">
           {clanWar.challenge_kind === "direct" && clanWar.status === "pending" && permissions.canManageOpponent && <><button type="button" disabled={busy} onClick={() => runAction({ action: "accept_direct" }, "Вызов принят")} className="btn-primary"><Check size={17} /> Принять вызов</button><button type="button" disabled={busy} onClick={() => runAction({ action: "decline_direct" }, "Вызов отклонён")} className="btn-secondary text-red-200"><X size={17} /> Отклонить</button></>}
-          {permissions.canComplete && <div className="w-full rounded-xl border border-emerald-600/25 bg-emerald-950/10 p-4"><p className="mb-3 font-semibold">Итог КВ · до 7 выигранных раундов</p><div className="grid gap-2 sm:grid-cols-4"><label className="text-xs text-slate-400">Раунды {clanWar.creator_team.name}<input type="number" min={0} max={7} value={result.creatorScore} onChange={(event) => setResult((current) => ({ ...current, creatorScore: event.target.value }))} /></label><label className="text-xs text-slate-400">Раунды {clanWar.opponent_team?.name}<input type="number" min={0} max={7} value={result.opponentScore} onChange={(event) => setResult((current) => ({ ...current, opponentScore: event.target.value }))} /></label><label className="text-xs text-slate-400">Убийства {clanWar.creator_team.name}<input type="number" min={0} value={result.creatorKills} onChange={(event) => setResult((current) => ({ ...current, creatorKills: event.target.value }))} /></label><label className="text-xs text-slate-400">Убийства {clanWar.opponent_team?.name}<input type="number" min={0} value={result.opponentKills} onChange={(event) => setResult((current) => ({ ...current, opponentKills: event.target.value }))} /></label></div><button type="button" disabled={busy} onClick={() => runAction({ action: "complete", creatorScore: Number(result.creatorScore), opponentScore: Number(result.opponentScore), creatorKills: Number(result.creatorKills), opponentKills: Number(result.opponentKills) }, "КВ завершено, результат сохранён")} className="btn-primary mt-3"><ShieldCheck size={17} /> Подтвердить результат</button></div>}
+          {permissions.canEdit&&<Link className="btn-secondary" href={`/clan-wars/${clanWar.id}/edit`}>{tr("Изменить КВ и комнату","КВ мен бөлмені өзгерту","КВ жана бөлмөнү өзгөртүү")}</Link>}
+          {permissions.canComplete && <Link className="btn-primary" href={`/clan-wars/${clanWar.id}/results`}>Результаты серии и подтверждение сторон</Link>}
           {permissions.canCancel && <button type="button" disabled={busy} onClick={() => { const reason = window.prompt("Причина отмены (необязательно)") ?? undefined; if (reason !== undefined) void runAction({ action: "cancel", reason }, "КВ отменено"); }} className="btn-secondary text-red-200">Отменить КВ</button>}
         </div>
       </section>
 
+      {details.room&&<section className="cyber-card my-5 space-y-2 p-5"><h2 className="font-bold">{tr("Комната КВ","КВ бөлмесі","КВ бөлмөсү")}</h2><p>{tr("Комната","Бөлме","Бөлмө")}: {details.room.room_code||"—"}</p><p>{tr("Пароль","Құпиясөз","Сырсөз")}: {details.room.room_password||"—"}</p><p>{details.room.room_note}</p></section>}
+      <PublicClanWarResults id={clanWar.id}/>
       {clanWar.status === "open" && permissions.canRespond && eligibleResponseOrganizations.length > 0 && (
         <section className="panel mt-6 p-6">
           <p className="eyebrow">Открытый вызов</p><h2 className="mt-1 text-2xl font-black">Откликнуться</h2>
@@ -303,7 +311,7 @@ export default function ClanWarDetailsPage() {
       </section>
 
       <section className="panel mt-6 p-6">
-        <div className="flex items-center gap-3"><MessageCircle className="text-cyan-300" /><div><p className="eyebrow">Переговоры</p><h2 className="text-2xl font-black">Комментарии · {details.comments.length}</h2></div></div>
+        <div>{!details.commentsOpen&&<p className="text-amber-300">{tr("Обсуждение закрыто","Талқылау жабылды","Талкуу жабылды")}</p>}</div><div className="flex items-center gap-3"><MessageCircle className="text-cyan-300" /><div><p className="eyebrow">Переговоры</p><h2 className="text-2xl font-black">Комментарии · {details.comments.length}</h2></div></div>
         {permissions.canComment && <div className="mt-5 flex items-end gap-2"><textarea className="field min-h-20" maxLength={2000} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="Согласуйте время, правила, карты и другие условия" /><button type="button" disabled={busy || !commentBody.trim()} onClick={sendComment} className="btn-primary shrink-0" aria-label="Отправить"><Send size={18} /></button></div>}
         {!user && <p className="mt-4 text-sm text-slate-500">Войдите, чтобы участвовать в переговорах.</p>}
         {user && !permissions.canComment && <p className="mt-4 text-sm text-slate-500">Писать могут руководители сторон и коллективов, отправивших отклик.</p>}

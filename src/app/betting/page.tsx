@@ -5,10 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { useLanguage } from "@/components/LanguageProvider";
 
-type Mode = "tournament" | "training" | "bo" | "kv";
+type Mode = "tournament" | "training" | "solo" | "bo" | "kv";
 type MarketType = "kills_over" | "kills_under" | "exact_place" | "win" | "loss" | "exact_score";
-type Game = { id: string; session_id: string; game_number: number; map_name: string };
-type Team = { id: string; name: string; main_rating: number; sessionIds?: string[] };
+type Game = { id: string; session_id: string; game_number: number; map_name: string; publicId: string; locksAt: string };
+type Team = { id: string; name: string; main_rating: number; gameIds: string[] };
 type Source = { id: string; title: string; mode: Mode; locksAt: string; games: Game[]; teams: Team[] };
 type Preview = {
   sourceId: string;
@@ -60,7 +60,7 @@ const initialData: PageData = {
 };
 
 export default function BettingPage() {
-  const { t, formatDate } = useLanguage();
+  const { t, formatDate, locale } = useLanguage();
   const [data, setData] = useState<PageData>(initialData);
   const [sourceId, setSourceId] = useState("");
   const [gameId, setGameId] = useState("");
@@ -109,14 +109,14 @@ export default function BettingPage() {
   const availableTeams = useMemo(() => {
     if (!selectedSource) return [];
     if (!selectedGame) return selectedSource.teams;
-    return selectedSource.teams.filter((team) => !team.sessionIds || team.sessionIds.includes(selectedGame.session_id));
+    return selectedSource.teams.filter((team) => team.gameIds.includes(selectedGame.id));
   }, [selectedGame, selectedSource]);
-  const isClassic = selectedSource?.mode === "tournament" || selectedSource?.mode === "training";
+  const isClassic = selectedSource?.mode === "tournament" || selectedSource?.mode === "training" || selectedSource?.mode === "solo";
   const marketLabels: Record<MarketType, string> = {
     kills_over: t("betting.killsOver"), kills_under: t("betting.killsUnder"), exact_place: t("betting.exactPlace"),
     win: t("betting.win"), loss: t("betting.loss"), exact_score: t("betting.exactScore"),
   };
-  const modeLabels: Record<Mode, string> = { tournament: t("event.tournament"), training: t("event.training"), bo: "БО", kv: "КВ" };
+  const modeLabels: Record<Mode, string> = { tournament: t("event.tournament"), training: t("event.training"), solo: t("event.solo"), bo: "БО", kv: "КВ" };
   const marketOptions: [MarketType, string][] = isClassic
     ? [["exact_place", marketLabels.exact_place], ["kills_over", marketLabels.kills_over], ["kills_under", marketLabels.kills_under]]
     : [["win", marketLabels.win], ["loss", marketLabels.loss], ["kills_over", marketLabels.kills_over], ["kills_under", marketLabels.kills_under], ["exact_score", marketLabels.exact_score]];
@@ -130,18 +130,18 @@ export default function BettingPage() {
     const source = data.sources.find((item) => item.id === nextSourceId);
     const firstGame = source?.games[0];
     const firstTeam = firstGame
-      ? source?.teams.find((team) => !team.sessionIds || team.sessionIds.includes(firstGame.session_id))
+      ? source?.teams.find((team) => team.gameIds.includes(firstGame.id))
       : source?.teams[0];
     setSourceId(nextSourceId);
     setGameId(firstGame?.id ?? "");
     setTeamId(firstTeam?.id ?? "");
-    setMarketType(source?.mode === "tournament" || source?.mode === "training" ? "exact_place" : "win");
-    setSelectionValue(source?.mode === "tournament" || source?.mode === "training" ? "1" : "win");
+    setMarketType(source?.mode === "tournament" || source?.mode === "training" || source?.mode === "solo" ? "exact_place" : "win");
+    setSelectionValue(source?.mode === "tournament" || source?.mode === "training" || source?.mode === "solo" ? "1" : "win");
     resetQuote();
   };
 
   const requestQuote = async () => {
-    if (!sourceId || !teamId || (isClassic && !gameId)) {
+    if (!sourceId || !teamId || !gameId) {
       setMessage(t("betting.selectRequired"));
       return;
     }
@@ -154,7 +154,7 @@ export default function BettingPage() {
         body: JSON.stringify({
           action: "quote",
           sourceId,
-          gameId: isClassic ? gameId : null,
+          gameId,
           teamId,
           marketType,
           selectionValue: marketType === "exact_place" || marketType === "exact_score" ? selectionValue : marketType,
@@ -269,7 +269,7 @@ export default function BettingPage() {
           <h2 className="mb-5 text-xl font-bold">{t("betting.chooseOutcome")}</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className="text-sm text-slate-400">{t("betting.event")}<select className="mt-1" value={sourceId} onChange={(event) => changeSource(event.target.value)}><option value="">{t("common.choose")}</option>{data.sources.map((source) => <option key={source.id} value={source.id}>{modeLabels[source.mode]} · {source.title}</option>)}</select></label>
-            {isClassic && <label className="text-sm text-slate-400">{t("betting.gameMap")}<select className="mt-1" value={gameId} onChange={(event) => { const nextGame = selectedSource?.games.find((game) => game.id === event.target.value); setGameId(event.target.value); setTeamId(selectedSource?.teams.find((team) => !nextGame || !team.sessionIds || team.sessionIds.includes(nextGame.session_id))?.id ?? ""); resetQuote(); }}><option value="">{t("common.choose")}</option>{selectedSource?.games.map((game) => <option key={game.id} value={game.id}>{t("betting.game", { number: game.game_number })} · {mapLabels[game.map_name] ?? game.map_name}</option>)}</select></label>}
+            {selectedSource && <label className="text-sm text-slate-400">{t("betting.gameMap")}<select className="mt-1" value={gameId} onChange={(event) => { const nextGame = selectedSource?.games.find((game) => game.id === event.target.value); setGameId(event.target.value); setTeamId(selectedSource?.teams.find((team) => !nextGame || team.gameIds.includes(nextGame.id))?.id ?? ""); resetQuote(); }}><option value="">{t("common.choose")}</option>{selectedSource?.games.map((game) => <option key={game.id} value={game.id}>{game.publicId} · {formatDate(game.locksAt,{timeZone:"Europe/Moscow"})} МСК · {mapLabels[game.map_name] ?? game.map_name}</option>)}</select></label>}
             <label className="text-sm text-slate-400">{t("common.team")}<select className="mt-1" value={teamId} onChange={(event) => { setTeamId(event.target.value); resetQuote(); }}><option value="">{t("common.choose")}</option>{availableTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
             <label className="text-sm text-slate-400">{t("betting.outcome")}<select className="mt-1" value={marketType} onChange={(event) => { const next = event.target.value as MarketType; setMarketType(next); setSelectionValue(next === "exact_place" ? "1" : next === "exact_score" ? "7:3" : next); resetQuote(); }}>{marketOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             {marketType.startsWith("kills_") && <label className="text-sm text-slate-400">{t("betting.killsLine")}<input className="mt-1" type="number" min="0.5" step="1" value={line} onChange={(event) => { setLine(event.target.value); resetQuote(); }} /><span className="mt-1 block text-xs text-slate-600">{t("betting.lineHint")}</span></label>}
@@ -277,7 +277,8 @@ export default function BettingPage() {
             {marketType === "exact_score" && <label className="text-sm text-slate-400">{t("betting.score")}<select className="mt-1" value={selectionValue} onChange={(event) => { setSelectionValue(event.target.value); resetQuote(); }}>{Array.from({ length: 14 }, (_, index) => index < 7 ? `7:${index}` : `${index - 7}:7`).map((score) => <option key={score}>{score}</option>)}</select></label>}
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button className="primary-button" type="button" disabled={busy || !sourceId || !teamId || Boolean(isClassic && !gameId)} onClick={() => void requestQuote()}>{t("betting.calculate")}</button>
+            {selectedSource?.mode==="solo"&&<p className="text-sm text-slate-400">{locale==="ru"?"При равных местах 1, 1, 3 обе ставки на первое место выигрывают. Второе место не присваивается; выплата не делится.":locale==="kk"?"1, 1, 3 тең орындарында бірінші орынға екі бәс те ұтады. Екінші орын берілмейді; төлем бөлінбейді.":"1, 1, 3 тең орундарында биринчи орунга эки коюм тең утат. Экинчи орун берилбейт; төлөм бөлүнбөйт."}</p>}
+            <button className="primary-button" type="button" disabled={busy || !sourceId || !teamId || !gameId} onClick={() => void requestQuote()}>{t("betting.calculate")}</button>
             <button className="secondary-button" type="button" onClick={() => { resetQuote(); setStake(""); setMessage(t("betting.choiceCancelled")); }}>{t("betting.cancelChoice")}</button>
           </div>
 

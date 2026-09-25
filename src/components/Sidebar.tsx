@@ -29,6 +29,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { localeNames, locales } from "@/i18n/messages";
+import {competitionText} from "@/i18n/competition";
 import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Sidebar() {
@@ -84,6 +85,8 @@ export default function Sidebar() {
     { href: "/knowledge", label: t("knowledge"), icon: BookOpen },
     { href: "/messages", label: t("messages"), icon: Mail, auth: true },
     { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
+    { href:"/appeals", label:competitionText(locale,"appeals"), icon:ShieldCheck, auth:true },
+    { href:"/organizer", label:competitionText(locale,"organizer"), icon:Trophy, auth:true },
     { href: "/profile", label: t("profile"), icon: UserRound, auth: true },
     { href: "/support", label: "Поддержка", icon: Contact },
     { href: "/contacts", label: t("contacts"), icon: Contact },

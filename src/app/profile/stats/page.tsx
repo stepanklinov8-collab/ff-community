@@ -1,5 +1,6 @@
 "use client";
 
+import CompetitionStatistics from "@/components/CompetitionStatistics";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -23,6 +24,7 @@ const statusMeta = {
 } as const;
 
 export default function MyStatsPage() {
+  const [userId, setUserId] = useState<string | null>(null);
   const [stats, setStats] = useState<PlayerStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,6 +35,7 @@ export default function MyStatsPage() {
         const response = await authFetch("/api/profile/stats");
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Не удалось загрузить статистику");
+        setUserId(payload.userId);
         setStats((payload.stats ?? []) as PlayerStat[]);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить статистику");
@@ -54,9 +57,8 @@ export default function MyStatsPage() {
         <Link href="/tournaments" className="btn-primary">Выбрать мероприятие</Link>
       </div>
 
-      <div className="panel mb-6 p-5 text-sm text-slate-400">
-        Статистика отправляется со страницы конкретного мероприятия после начала сессии. Можно приложить до пяти скриншотов JPEG, PNG или WebP по 5 МБ.
-      </div>
+      {userId && <CompetitionStatistics id={userId}/>}
+      <h2 className="mb-4 text-xl font-bold">Ранее отправленные заявки</h2>
 
       {loading ? <p className="text-slate-400">Загрузка…</p> : error ? (
         <div className="panel border-red-500/30 p-5 text-red-200">{error}</div>

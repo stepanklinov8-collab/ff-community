@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {useRouter} from "next/navigation";
 import { authFetch } from "@/utils/api/auth-fetch";
 
 interface Team {
@@ -17,6 +18,7 @@ interface Team {
 }
 
 export default function AdminPage() {
+  const router=useRouter();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -231,7 +233,7 @@ export default function AdminPage() {
                 )}
                 <button
                   onClick={() => {
-                    setShowTeamWarning(true);
+                    router.push(`/admin/competition-moderation?targetType=team&targetId=${selectedTeam.id}`);
                     setTeamWarnReason("");
                     setTeamWarnLevel(1);
                     setTeamWarnExpires("week");

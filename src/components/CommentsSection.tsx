@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Flag, MessageCircle, Pencil, Send, Trash2, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
@@ -9,6 +9,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 interface CommentRow {
   id: string;
+  session_id: string | null;
   author_id: string;
   body: string;
   is_edited: boolean;
@@ -17,9 +18,11 @@ interface CommentRow {
   avatar_url: string | null;
 }
 
-export default function CommentsSection({ eventId }: { eventId: string }) {
+export default function CommentsSection({ eventId,sessionId }: { eventId: string;sessionId?:string }) {
   const supabase = useMemo(() => createClient(), []);
-  const { t, formatDate } = useLanguage();
+  const { t, locale, formatDate } = useLanguage();
+  const loadVersion=useRef(0);
+  const [commentsOpen,setCommentsOpen]=useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [body, setBody] = useState("");
@@ -28,30 +31,41 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(()=>{
+    let active=true;
+    const check=async()=>{if(!sessionId)return;try{const r=await fetch(`/api/events/${eventId}/session-control?sessionId=${sessionId}`),d=await r.json();if(active)setCommentsOpen(r.ok&&d.commentsOpen);}catch{if(active)setCommentsOpen(false);}};
+    void check();const timer=window.setInterval(()=>void check(),60000);const changed=()=>void check();window.addEventListener("competition-comments-changed",changed);
+    return()=>{active=false;window.clearInterval(timer);window.removeEventListener("competition-comments-changed",changed);};
+  },[eventId,sessionId]);
   const loadComments = useCallback(async () => {
-    const { data: rows } = await supabase
+    const version=++loadVersion.current;
+    let commentsQuery = supabase
       .from("comments")
-      .select("id, author_id, body, is_edited, created_at")
+      .select("id, session_id, author_id, body, is_edited, created_at")
       .eq("event_id", eventId)
       .eq("is_deleted", false)
       .order("created_at", { ascending: true });
+    commentsQuery = sessionId ? commentsQuery.or(`session_id.eq.${sessionId},session_id.is.null`) : commentsQuery.is("session_id",null);
+    const {data: rows} = await commentsQuery;
     const authorIds = [...new Set((rows ?? []).map((row) => row.author_id))];
     const { data: profiles } = authorIds.length
       ? await supabase.from("profiles").select("id, nickname, avatar_url").in("id", authorIds)
       : { data: [] };
     const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+    if(version!==loadVersion.current)return;
     setComments((rows ?? []).map((row) => ({
       ...row,
       nickname: profilesById.get(row.author_id)?.nickname ?? t("comments.player"),
       avatar_url: profilesById.get(row.author_id)?.avatar_url ?? null,
     })));
-  }, [eventId, supabase, t]);
+  }, [eventId, sessionId, supabase, t]);
 
   useEffect(() => {
+    const versionRef=loadVersion;
     let active = true;
     supabase.auth.getUser().then(({ data }) => { if (active) setUser(data.user); });
     const timer = window.setTimeout(() => { void loadComments(); }, 0);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; ++versionRef.current; window.clearTimeout(timer); };
   }, [loadComments, supabase]);
 
   async function submitComment() {
@@ -61,6 +75,7 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
     setBusy(true);
     const { error } = await supabase.from("comments").insert({
       event_id: eventId,
+      session_id: sessionId??null,
       author_id: user.id,
       body: cleanBody,
     });
@@ -109,10 +124,12 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
 
   return (
     <section className="cyber-card mt-6 p-5 md:p-7">
+      {!commentsOpen&&<p className="text-sm text-amber-300">{locale==="ru"?"Обсуждение закрыто":locale==="kk"?"Талқылау жабылды":"Талкуу жабылды"}</p>}
       <div className="flex items-center gap-3 mb-5">
         <MessageCircle className="text-cyan-300" />
         <div><span className="section-kicker">{t("comments.eyebrow")}</span><h2 className="text-xl font-bold">{t("comments.title", { count: comments.length })}</h2></div>
       </div>
+
 
       <div className="flex gap-2 items-end mb-6">
         <textarea
@@ -123,7 +140,7 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
           placeholder={user ? t("comments.placeholder") : t("comments.signInPlaceholder")}
           disabled={!user || busy}
         />
-        <button type="button" onClick={submitComment} disabled={!user || busy || !body.trim()} className="icon-button shrink-0 disabled:opacity-40" aria-label={t("comments.send")}>
+        <button type="button" onClick={submitComment} disabled={!user || busy || !body.trim() || !commentsOpen} className="icon-button shrink-0 disabled:opacity-40" aria-label={t("comments.send")}>
           <Send size={18} />
         </button>
       </div>
@@ -134,11 +151,13 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
         {comments.map((comment) => (
           <article key={comment.id} className="rounded-xl border border-sky-900/20 bg-slate-950/35 p-4">
             <header className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2">
+
+      <div className="flex items-center gap-2">
                 <span className="grid size-8 place-items-center rounded-lg bg-cyan-950 text-cyan-200 font-bold">{comment.nickname[0]?.toUpperCase()}</span>
                 <div><strong className="text-sm">{comment.nickname}</strong><p className="text-xs text-slate-500">{formatDate(comment.created_at, { dateStyle: "short", timeStyle: "short" })}{comment.is_edited ? ` · ${t("comments.edited")}` : ""}</p></div>
               </div>
-              <div className="flex items-center gap-1">
+
+      <div className="flex items-center gap-1">
                 {user?.id === comment.author_id && (
                   <>
                     <button type="button" onClick={() => { setEditingId(comment.id); setEditingBody(comment.body); }} className="p-2 text-slate-500 hover:text-cyan-300" aria-label={t("comments.edit")}><Pencil size={15} /></button>
@@ -151,7 +170,8 @@ export default function CommentsSection({ eventId }: { eventId: string }) {
               </div>
             </header>
             {editingId === comment.id ? (
-              <div className="flex gap-2 items-end">
+
+      <div className="flex gap-2 items-end">
                 <textarea rows={2} value={editingBody} onChange={(event) => setEditingBody(event.target.value)} />
                 <button type="button" onClick={() => saveEdit(comment.id)} className="icon-button"><Send size={16} /></button>
                 <button type="button" onClick={() => setEditingId(null)} className="icon-button"><X size={16} /></button>

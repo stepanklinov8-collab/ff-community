@@ -2,6 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import {getPublicStatistics} from "@/lib/competition/public-statistics";
+import CompetitionStatistics from "@/components/CompetitionStatistics";
+import PublicWarningHistory from "@/components/PublicWarningHistory";
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -118,19 +121,17 @@ export default function ProfilePage() {
         locale: currentUser.user_metadata?.locale === "kk" || currentUser.user_metadata?.locale === "ky" ? currentUser.user_metadata.locale : "ru",
       }));
 
-      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
-      const mainEventIds = (mainEvents ?? []).map((event) => event.id);
       const [profileResult, roleResult, statsResult, membershipsResult, bloggerResult] = await Promise.all([
         supabase.from("profiles").select("avatar_url").eq("id", currentUser.id).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", currentUser.id).maybeSingle(),
-        supabase.from("player_stats").select("kills, matches_played").eq("user_id", currentUser.id).eq("status", "approved").in("event_id", mainEventIds.length ? mainEventIds : ["00000000-0000-0000-0000-000000000000"]),
+        getPublicStatistics(currentUser.id),
         supabase.from("team_members").select("role_in_team, teams(id, name, type, verified)").eq("user_id", currentUser.id),
         supabase.from("profile_badges").select("badge").eq("user_id", currentUser.id).eq("badge", "blogger").maybeSingle(),
       ]);
 
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
-      const kills = statsResult.data?.reduce((sum, stat) => sum + (stat.kills || 0), 0) ?? 0;
-      const matches = statsResult.data?.reduce((sum, stat) => sum + (stat.matches_played || 0), 0) ?? 0;
+      const mainStats = statsResult.summaries.find(row => row.mode === "main");
+      const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
       setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0 });
 
       const memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
@@ -331,6 +332,9 @@ export default function ProfilePage() {
         <p className="text-sm text-slate-400">Результат вносится со страницы завершившейся сессии — так статистика всегда связана с конкретным мероприятием и составом.</p>
       </section>
 
+      <div className="flex flex-wrap gap-3"><Link href="/organizer" className="btn-primary">Кабинет организатора</Link><Link href="/appeals" className="btn-secondary">Обжалования</Link></div>
+      <CompetitionStatistics type="player" id={user.id}/>
+      <PublicWarningHistory type="player" id={user.id}/>
       <section className="panel p-5 sm:p-6">
         <h2 className="section-title mb-4">Предупреждения <span className="text-slate-500">({warnings.warningCount})</span></h2>
         {warnings.activeBan && <div className="mb-4 rounded-xl border border-red-500/40 bg-red-950/40 p-4"><p className="font-bold text-red-200">Аккаунт заблокирован</p><p className="mt-1 text-sm text-red-300">{warnings.activeBan.reason}</p></div>}

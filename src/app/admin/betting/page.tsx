@@ -39,7 +39,7 @@ type PageData = {
 const emptyData: PageData = { markets: [], events: [], wars: [], sources: [], settings: null, isOwner: false };
 
 export default function AdminBettingPage() {
-  const { t, formatDate } = useLanguage();
+  const { t, locale, formatDate } = useLanguage();
   const [data, setData] = useState<PageData>(emptyData);
   const [message, setMessage] = useState("");
   const [busyKey, setBusyKey] = useState("");
@@ -73,19 +73,6 @@ export default function AdminBettingPage() {
     setMessage(response.ok
       ? enabled ? t("adminBetting.enabled") : t("adminBetting.disabled")
       : payload.error || t("adminBetting.changeError"));
-    if (response.ok) await load();
-  };
-
-  const refund = async (marketId: string) => {
-    setBusyKey(`market:${marketId}`);
-    const response = await authFetch("/api/admin/betting", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "settle", marketId, outcome: "void" }),
-    });
-    const payload = await response.json();
-    setBusyKey("");
-    setMessage(response.ok ? t("adminBetting.refundSuccess") : payload.error || t("adminBetting.refundError"));
     if (response.ok) await load();
   };
 
@@ -184,10 +171,10 @@ export default function AdminBettingPage() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-xl font-bold">{t("adminBetting.marketsTitle")}</h2>
-        <p className="mb-4 text-xs text-slate-500">{t("adminBetting.marketsNote")}</p>
+        <p className="mb-4 text-xs text-slate-500">{locale === "ru" ? "Ставки рассчитываются при публикации результатов. Возврат выполняется при отмене игры или мероприятия." : locale === "kk" ? "Ставкалар нәтижелер жарияланғанда есептеледі. Ойын не іс-шара тоқтатылса, қаражат қайтарылады." : "Коюмдар жыйынтыктар жарыяланганда эсептелет. Оюн же иш-чара жокко чыгарылса, каражат кайтарылат."}</p>
         <div className="space-y-2">{data.markets.map((market) => <article key={market.id} className="cyber-card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
           <div><strong>{market.subject_team_name || t("adminBetting.outcome")}</strong><p className="text-slate-400">{market.mode} · {market.market_type} · {market.line ?? market.selection_value} · ×{Number(market.odds).toFixed(2)} · {market.status}</p></div>
-          {!["settled", "void"].includes(market.status) && <button className="rounded bg-slate-700 px-3 py-1 disabled:opacity-50" disabled={busyKey === `market:${market.id}`} onClick={() => void refund(market.id)}>{t("adminBetting.refund")}</button>}
+
         </article>)}</div>
       </section>
       <Link href="/admin" className="mt-6 inline-flex text-cyan-300 hover:underline">{t("adminBetting.back")}</Link>

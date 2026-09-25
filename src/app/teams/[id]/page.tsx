@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import CompetitionStatistics from "@/components/CompetitionStatistics";
+import PublicWarningHistory from "@/components/PublicWarningHistory";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -477,7 +479,7 @@ export default function TeamPage() {
               </div>
             </div>
             <p className="text-gray-300 mb-4">{team.description || "Нет описания"}</p>
-            <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {Number(team.main_rating ?? 1).toFixed(0)}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
+            <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {Number(team.main_rating ?? 1).toFixed(1)}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
             {team.social_link && <a href={team.social_link} target="_blank" className="text-blue-400 block mb-4">Сообщество →</a>}
             {isLeader && (
               <div className="flex gap-2 flex-wrap">
@@ -609,6 +611,8 @@ export default function TeamPage() {
       )}
 
       {/* Заявки */}
+      <CompetitionStatistics type="team" id={team.id}/>
+      <PublicWarningHistory type="team" id={team.id}/>
       {canManage && joinRequests.length > 0 && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h3 className="text-lg font-semibold mb-3">Заявки на вступление</h3>

@@ -1,5 +1,8 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendPushToUsers } from "@/lib/firebase/admin";
+import { allRows } from "@/lib/competition/server";
+
+export const maxDuration = 300;
 
 interface EventRow {
   id: string;
@@ -29,19 +32,25 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminClient();
+  for(const action of ["u2_expire_moderation","u2_publish_scheduled","u2_flush_notifications"]){
+    const {error}=await supabase.rpc(action);if(error){console.error("Competition maintenance",action,error);return Response.json({error:"Не удалось завершить обработку мероприятий"},{status:500});}
+  }
+  const {data:cleanup}=await supabase.from("competition_storage_cleanup").select("storage_path").order("created_at").limit(100);
+  if(cleanup?.length){const paths=cleanup.map(row=>row.storage_path);const {error}=await supabase.storage.from("competition-evidence").remove(paths);if(!error)await supabase.from("competition_storage_cleanup").delete().in("storage_path",paths);}
   const now = new Date();
   const horizon = new Date(now.getTime() + 25 * 60 * 60_000).toISOString();
-  const { data: subscriptions } = await supabase
+  const subscriptions = await allRows((from, to) => supabase
     .from("push_subscriptions")
     .select("user_id")
-    .eq("is_active", true);
+    .eq("is_active", true).order("id").range(from, to));
   const allUserIds = [...new Set((subscriptions ?? []).map((row) => row.user_id))];
   let deliveries = 0;
 
-  const { data: events } = await supabase
+  const events = await allRows((from, to) => supabase
     .from("events")
     .select("id, title, publish_at, created_at")
-    .eq("is_published", true);
+    .eq("is_published", true).eq("moderation_status","approved").is("cancelled_at",null).is("frozen_at",null)
+    .order("id").range(from, to));
 
   for (const event of (events ?? []) as EventRow[]) {
     const publishedAt = new Date(event.publish_at ?? event.created_at);
@@ -66,11 +75,12 @@ export async function GET(request: Request) {
     deliveries += 1;
   }
 
-  const { data: sessions } = await supabase
+  const sessions = await allRows((from, to) => supabase
     .from("event_sessions")
-    .select("id, event_id, start_time, registration_open_time, reminder_minutes, events(title)")
+    .select("id, event_id, start_time, registration_open_time, reminder_minutes, events!inner(title)")
+    .eq("events.is_published",true).eq("events.moderation_status","approved").is("events.cancelled_at",null).is("events.frozen_at",null).neq("status","cancelled")
     .gte("start_time", now.toISOString())
-    .lte("start_time", horizon);
+    .lte("start_time", horizon).order("id").range(from, to));
 
   for (const session of (sessions ?? []) as unknown as SessionRow[]) {
     if (session.registration_open_time && new Date(session.registration_open_time) <= now) {
@@ -108,20 +118,23 @@ export async function GET(request: Request) {
         .maybeSingle();
       if (existing) continue;
 
-      const { data: registrations } = await supabase
+      const registrations = await allRows((from, to) => supabase
         .from("event_registrations")
-        .select("roster_json, team_id")
+        .select("roster_json, team_id, participant_user_id")
         .eq("session_id", session.id)
-        .eq("status", "confirmed");
+        .eq("status", "confirmed").order("id").range(from, to));
       const rosterIds = (registrations ?? []).flatMap((row) =>
-        Array.isArray(row.roster_json) ? row.roster_json as string[] : [],
+        [...(Array.isArray(row.roster_json) ? row.roster_json as string[] : []), ...(row.participant_user_id ? [row.participant_user_id] : [])],
       );
       const teamIds = [...new Set((registrations ?? [])
         .map((row) => row.team_id)
         .filter((id): id is string => Boolean(id)))];
-      const { data: leaders } = teamIds.length
-        ? await supabase.from("team_members").select("user_id").in("team_id", teamIds).in("role_in_team", ["leader", "senior_deputy", "deputy"])
-        : { data: [] };
+      const leaders: Array<{ user_id: string }> = [];
+      for (let offset = 0; offset < teamIds.length; offset += 100) {
+        leaders.push(...await allRows((from, to) => supabase.from("team_members").select("user_id")
+          .in("team_id", teamIds.slice(offset, offset + 100)).in("role_in_team", ["leader", "senior_deputy", "deputy"])
+          .order("team_id").order("user_id").range(from, to)));
+      }
       const recipientIds = [...new Set([...rosterIds, ...(leaders ?? []).map((row) => row.user_id)])];
       const result = await sendPushToUsers(recipientIds, {
         title: "Скоро начало",

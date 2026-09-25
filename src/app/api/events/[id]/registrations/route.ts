@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { ApiAuthError, authErrorResponse, requireUser, type AuthContext } from "@/utils/supabase/server-auth";
+import {allRows} from "@/lib/competition/server";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -29,7 +30,7 @@ export async function GET(request: Request, context: RouteContext) {
     const supabase = createAdminClient();
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, show_registrations, organizer_user_id")
+      .select("id, show_registrations, organizer_user_id,is_published,moderation_status")
       .eq("id", eventId)
       .single();
     if (eventError) throw eventError;
@@ -41,35 +42,24 @@ export async function GET(request: Request, context: RouteContext) {
         event.organizer_user_id === auth.user.id
       ),
     );
+    const {data: assignedSessions} = auth ? await supabase.from("event_sessions").select("id").eq("event_id",eventId).eq("responsible_user_id",auth.user.id) : {data: []};
+    const assignedIds = new Set((assignedSessions ?? []).map(row => row.id));
+    if ((!event.is_published || event.moderation_status !== "approved") && !isPrivileged && !assignedIds.size) return Response.json({error:"Мероприятие не найдено"},{status:404});
     const { data: memberships } = auth
       ? await supabase.from("team_members").select("team_id").eq("user_id", auth.user.id)
       : { data: [] };
     const ownTeamIds = new Set((memberships ?? []).map((row) => row.team_id));
 
-    const normalizedRows = await supabase
+    const rows = await allRows((a,b)=>supabase
       .from("event_registrations")
-      .select("id, session_id, team_id, participant_user_id, status, is_winner, created_at, roster, roster_json, team_name_override")
+      .select("id, session_id, team_id, participant_user_id, status, is_winner, created_at, roster, roster_json, roster_snapshot, name_snapshot, team_name_override")
       .eq("event_id", eventId)
-      .order("created_at", { ascending: true });
-    const legacyRows = normalizedRows.error
-      ? await supabase
-          .from("event_registrations")
-          .select("id, team_id, status, is_winner, created_at, roster, team_name_override")
-          .eq("event_id", eventId)
-          .order("created_at", { ascending: true })
-      : null;
-    if (legacyRows?.error) throw legacyRows.error;
-    const rows = normalizedRows.data ?? (legacyRows?.data ?? []).map((row) => ({
-      ...row,
-      session_id: null,
-      participant_user_id: null,
-      roster_json: null,
-    }));
+      .order("created_at", { ascending: true }).order("id").range(a,b));
 
     const visibleRows = event.show_registrations || isPrivileged
       ? rows ?? []
       : (rows ?? []).filter((row) =>
-          (row.team_id && ownTeamIds.has(row.team_id)) || row.participant_user_id === auth?.user.id,
+          assignedIds.has(row.session_id) || (row.team_id && ownTeamIds.has(row.team_id)) || row.participant_user_id === auth?.user.id,
         );
 
     const teamIds = [...new Set(visibleRows.map((row) => row.team_id).filter((id): id is string => Boolean(id)))];
@@ -77,18 +67,16 @@ export async function GET(request: Request, context: RouteContext) {
       .map((row) => row.participant_user_id)
       .filter((id): id is string => Boolean(id)))];
     const rosterIds = [...new Set(visibleRows.flatMap((row) => parseRoster(row.roster_json, row.roster)))];
-    const { data: teams } = teamIds.length
-      ? await supabase.from("teams").select("id, name, avatar_url, main_rating").in("id", teamIds)
-      : { data: [] };
+    const teams: Array<{id:string;name:string;avatar_url:string|null;main_rating:number}> = [];
+    for(let i=0;i<teamIds.length;i+=100){const {data,error}=await supabase.from("teams").select("id, name, avatar_url, main_rating").in("id",teamIds.slice(i,i+100));if(error)throw error;teams.push(...(data??[]));}
     const profileIds = [...new Set([...participantIds, ...rosterIds])];
-    const { data: participants } = profileIds.length
-      ? await supabase.from("profiles").select("id, nickname, avatar_url, main_rating").in("id", profileIds)
-      : { data: [] };
+    const participants: Array<{id:string;nickname:string;avatar_url:string|null;main_rating:number}> = [];
+    for(let i=0;i<profileIds.length;i+=100){const {data,error}=await supabase.from("profiles").select("id, nickname, avatar_url, main_rating").in("id",profileIds.slice(i,i+100));if(error)throw error;participants.push(...(data??[]));}
     const teamById = new Map((teams ?? []).map((team) => [team.id, team]));
     const participantById = new Map((participants ?? []).map((profile) => [profile.id, profile]));
 
     const registrations = visibleRows.map((row) => {
-      const maySeeRoster = isPrivileged ||
+      const maySeeRoster = isPrivileged || assignedIds.has(row.session_id) ||
         (row.team_id && ownTeamIds.has(row.team_id)) ||
         row.participant_user_id === auth?.user.id ||
         event.show_registrations;
@@ -102,7 +90,7 @@ export async function GET(request: Request, context: RouteContext) {
         session_id: row.session_id,
         team_id: row.team_id,
         participant_user_id: row.participant_user_id,
-        team_name: row.team_name_override || participantName || team?.name || "Участник",
+        team_name: row.name_snapshot || row.team_name_override || participantName || team?.name || "Участник",
         team_avatar_url: team?.avatar_url || (row.participant_user_id ? participantById.get(row.participant_user_id)?.avatar_url : null) || null,
         team_rating: Number(team?.main_rating ?? (row.participant_user_id ? participantById.get(row.participant_user_id)?.main_rating : 1) ?? 1),
         registration_kind: row.participant_user_id ? "individual" : "team",
@@ -110,7 +98,11 @@ export async function GET(request: Request, context: RouteContext) {
         is_winner: row.is_winner,
         created_at: row.created_at,
         roster,
-        roster_players: roster.map((userId) => participantById.get(userId)).filter(Boolean),
+        roster_players: roster.map((userId) => {
+          const current = participantById.get(userId);
+          const snapshot = (Array.isArray(row.roster_snapshot) ? row.roster_snapshot : []).find((entry:{id:string})=>entry.id===userId);
+          return current ? {...current,nickname:snapshot?.nickname??current.nickname} : snapshot ? {id:userId,nickname:snapshot.nickname,avatar_url:null,main_rating:null} : null;
+        }).filter(Boolean),
       };
     });
 

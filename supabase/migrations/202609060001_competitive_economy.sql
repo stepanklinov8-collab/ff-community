@@ -45,9 +45,9 @@ update public.profiles set profile_level=100 where id=(
   and email_confirmed_at is not null limit 1
 );
 
-create or replace function public.is_owner(check_user_id uuid default auth.uid())
+create or replace function public.is_owner(p_user uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public,auth as $$
- select exists(select 1 from auth.users where id=check_user_id
+ select exists(select 1 from auth.users where id=p_user
    and lower(email)='stepanklinov8@gmail.com' and email_confirmed_at is not null)
 $$;
 
@@ -68,9 +68,9 @@ returns boolean language sql stable security definer set search_path=public as $
  select exists(select 1 from public.user_roles where user_id=check_user_id
    and role in ('moderator','admin','superadmin'))
 $$;
-create or replace function public.is_full_admin(check_user_id uuid default auth.uid())
+create or replace function public.is_full_admin(p_user uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public as $$
- select exists(select 1 from public.user_roles where user_id=check_user_id
+ select exists(select 1 from public.user_roles where user_id=p_user
    and role in ('admin','superadmin'))
 $$;
 

@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import {getPublicStatistics} from "@/lib/competition/public-statistics";
+import CompetitionStatistics from "@/components/CompetitionStatistics";
+import PublicWarningHistory from "@/components/PublicWarningHistory";
 import Image from "next/image";
 import { authFetch } from "@/utils/api/auth-fetch";
 
@@ -93,17 +96,10 @@ export default function PublicProfilePage() {
       });
 
       // Статистика
-      const { data: mainEvents } = await supabase.from("events").select("id").in("type", ["tournament", "training", "solo"]);
-      const { data: statsData } = await supabase
-        .from("player_stats")
-        .select("kills, matches_played")
-        .eq("user_id", id)
-        .eq("status", "approved")
-        .in("event_id", (mainEvents ?? []).map((event) => event.id).length ? (mainEvents ?? []).map((event) => event.id) : ["00000000-0000-0000-0000-000000000000"]);
-
-      const kills = statsData?.reduce((sum, s) => sum + (s.kills || 0), 0) || 0;
-      const matches = statsData?.reduce((sum, s) => sum + (s.matches_played || 0), 0) || 0;
-      const ratio = matches > 0 ? +(kills / matches).toFixed(2) : 0;
+      const statistics = await getPublicStatistics(id);
+      const mainStats = statistics.summaries.find(row => row.mode === "main");
+      const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
+      const ratio = matches > 0 ? Number((kills / matches).toFixed(2)) : 0;
       setStats({ kills, matches, ratio });
 
       // Команда игрока
@@ -249,7 +245,7 @@ export default function PublicProfilePage() {
             <p className="text-gray-400 text-sm">Уровень</p><p className="text-xl font-bold">{profile.profile_level}</p>
           </div>
           <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Рейтинг</p><p className="text-xl font-bold">{profile.main_rating.toFixed(0)}</p>
+            <p className="text-gray-400 text-sm">Рейтинг</p><p className="text-xl font-bold">{profile.main_rating.toFixed(1)}</p>
           </div>
           <div className="bg-gray-700 p-3 rounded text-center">
             <p className="text-gray-400 text-sm">Репутация</p><p className="text-xl font-bold">{profile.reputation_events_count < 3 ? "Новый" : profile.reputation_score.toFixed(0)}</p>
@@ -277,6 +273,8 @@ export default function PublicProfilePage() {
         )}
       </div>
 
+      <CompetitionStatistics type="player" id={id}/>
+      <PublicWarningHistory type="player" id={id}/>
       {canReviewProfile && (
         <section className="mt-6 rounded bg-gray-800 p-4">
           <h2 className="text-xl font-semibold">Отзыв о репутации</h2>

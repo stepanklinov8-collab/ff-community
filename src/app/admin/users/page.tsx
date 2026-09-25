@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {useRouter} from "next/navigation";
 import { authFetch } from "@/utils/api/auth-fetch";
 
 interface User {
@@ -17,6 +18,7 @@ interface User {
 }
 
 export default function AdminUsersPage() {
+  const router=useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [canDeleteUsers, setCanDeleteUsers] = useState(false);
   const [canManageAdmins, setCanManageAdmins] = useState(false);
@@ -111,6 +113,7 @@ export default function AdminUsersPage() {
   };
 
   const openModal = (user: User, type: "message" | "warning" | "ban" | "roles" | "delete") => {
+    if(type==="warning"){router.push(`/admin/competition-moderation?targetType=player&targetId=${user.id}`);return;}
     setSelectedUser(user);
     setModalType(type);
     setMsgSubject("");

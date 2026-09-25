@@ -57,60 +57,7 @@ export async function POST(request: Request) {
       return Response.json({ success: true });
     }
 
-    const { error } = await supabase.from("warnings").insert({
-      target_type: payload.targetType,
-      target_id: payload.targetId,
-      level: payload.level ?? 1,
-      reason: payload.reason,
-      expires_at: payload.expiresAt ?? null,
-      event_id: payload.eventId ?? null,
-      created_by: auth.user.id,
-    });
-    if (error) throw error;
-    await notifyTarget(supabase, payload.targetType, payload.targetId, "Новое предупреждение", payload.reason);
-
-    const { data: activeWarnings, error: countError } = await supabase
-      .from("warnings")
-      .select("id")
-      .eq("target_type", payload.targetType)
-      .eq("target_id", payload.targetId)
-      .or("expires_at.is.null,expires_at.gt.now()");
-    if (countError) throw countError;
-
-    const activeCount = activeWarnings?.length ?? 0;
-    const shouldBan =
-      (payload.targetType === "player" && activeCount >= 5) ||
-      (payload.targetType === "team" && activeCount >= 3);
-
-    if (shouldBan) {
-      const { data: existingBan } = await supabase
-        .from("bans")
-        .select("id")
-        .eq("target_type", payload.targetType)
-        .eq("target_id", payload.targetId)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (!existingBan) {
-        const { error: banError } = await supabase.from("bans").insert({
-          target_type: payload.targetType,
-          target_id: payload.targetId,
-          reason: "Автоматическая блокировка: превышен лимит предупреждений",
-          is_active: true,
-          created_by: auth.user.id,
-        });
-        if (banError) throw banError;
-        await notifyTarget(
-          supabase,
-          payload.targetType,
-          payload.targetId,
-          "Автоматическая блокировка",
-          "Превышен лимит активных предупреждений",
-        );
-      }
-    }
-
-    return Response.json({ success: true, activeCount, autoBanned: shouldBan });
+    return Response.json({error:"Для предупреждения укажите категорию, срок и снижение репутации в новом разделе модерации.",url:"/admin/competition-moderation"},{status:410});
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Некорректные данные предупреждения" }, { status: 400 });
