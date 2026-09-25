@@ -189,7 +189,6 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
       warningSources.add(warning.targetId);
     }
   }
-  for (const teamId of noShows) if (!warningSources.has(teamId)) addIssue("missing_no_show_warning", "Выберите срок и снижение репутации единственного предупреждения за неявку");
   if (issues.length) throw new CompetitionError(issues);
   const standings = rankStandings(context, rows, draft.manualOrder, allowManualOrder);
   return { rows, standings, rules: context.rules, mvps: roundMode ? selectMvps(rows) : [] };

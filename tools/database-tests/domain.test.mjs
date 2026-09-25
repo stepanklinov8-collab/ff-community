@@ -91,9 +91,9 @@ test('K12: solo absence contributes group N+1 to comparison but no sporting plac
  const results=publishResults(context,draft,true),standing=results.standings.find(s=>s.userId===context.entrants[0].userId);
  assert.equal(standing.placeSum,5);assert.equal(standing.gamesPlayed,1);assert.equal(results.rows.find(r=>r.gameId===row.gameId&&r.registrationId===row.registrationId).place,null);
 });
-test('K13: one no-show warning per team/session, blank penalty stays a draft only',()=>{
+test('K13: no-show may publish without a warning; an optional warning remains unique and complete',()=>{
  const {context,draft}=fixture({count:2});for(const row of draft.rows)if(row.registrationId===context.entrants[1].id)row.played=false;
- assert.throws(()=>publishResults(context,draft,true),/предупреждения за неявку/);
+ assert.equal(publishResults(context,draft,true).standings[1].gamesPlayed,0);
  const warning={id:id(4000),targetType:'team',targetId:context.entrants[1].teamId,source:'no_show',gameId:null,reason:'Неявка',duration:null,penalty:null};draft.warnings.push(warning);
  assert.ok(draftSchema.safeParse(draft).success);assert.throws(()=>publishResults(context,draft,true),/причину, срок/);
  warning.duration='week';warning.penalty=4;assert.equal(publishResults(context,draft,true).standings[1].gamesPlayed,0);
