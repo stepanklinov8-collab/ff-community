@@ -19,6 +19,7 @@ interface TeamRow {
 
 interface Team extends TeamRow {
   membersCount: number;
+  cost: number;
 }
 
 interface TeamQueryRow extends TeamRow {
@@ -44,12 +45,15 @@ export default function TeamsPage() {
 
   useEffect(() => {
     const fetchTeams = async () => {
-      const { data, error: teamsError } = await supabase
-        .from("teams")
-        .select("id, name, description, type, created_at, avatar_url, main_rating, team_members(count)")
-        .eq("verified", true)
-        .is("dissolved_at", null)
-        .order("created_at", { ascending: false });
+      const [{ data, error: teamsError }, leaderboardResponse] = await Promise.all([
+        supabase
+          .from("teams")
+          .select("id, name, description, type, created_at, avatar_url, main_rating, team_members(count)")
+          .eq("verified", true)
+          .is("dissolved_at", null)
+          .order("created_at", { ascending: false }),
+        fetch("/api/competition/leaderboard?mode=main&type=team&sort=rating&offset=0&limit=100", { cache: "no-store" }).catch(() => null),
+      ]);
 
       if (teamsError) {
         setError(t("teams.loadError"));
@@ -58,7 +62,9 @@ export default function TeamsPage() {
       }
 
       const rows = (data ?? []) as TeamQueryRow[];
-      setTeams(rows.map((team) => ({ ...team, membersCount: Number(team.team_members?.[0]?.count ?? 0) })));
+      const leaderboard = leaderboardResponse?.ok ? await leaderboardResponse.json() as {items?: Array<{id: string; cost?: number; kills: number; games: number}>} : {items: []};
+      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? Math.round(Number(item.kills ?? 0) * 10 + Number(item.games ?? 0) * 5))]));
+      setTeams(rows.map((team) => ({ ...team, membersCount: Number(team.team_members?.[0]?.count ?? 0), cost: costById.get(team.id) ?? 0 })));
       setLoading(false);
     };
     void fetchTeams();
@@ -153,7 +159,7 @@ export default function TeamsPage() {
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
                   <div><strong className="block text-white">{team.membersCount}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.roster")}</span></div>
                   <div><strong className="block text-cyan-300">{formatNumber(Number(team.main_rating ?? 1), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
-                  <div><strong className="block text-amber-300">0 ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
+                  <div><strong className="block text-amber-300">{formatNumber(team.cost)} ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
                 </div>
               </div>
             </Link>

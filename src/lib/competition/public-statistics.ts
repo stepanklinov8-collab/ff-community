@@ -1,6 +1,6 @@
 export type CompetitionMode = "main" | "solo" | "bo" | "kv";
 export interface StatisticsSummary {
-  mode: CompetitionMode; rating: number; games: number; kills: number; wins: number;
+  mode: CompetitionMode; rating: number; games: number; kills: number; wins: number; cost?: number;
   series: number; deaths: number | null; assists: number | null; legacyRows: number; ranked: boolean;
 }
 export interface HistoryItem {

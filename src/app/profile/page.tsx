@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
+import { competitionCost } from "@/lib/competition/cost";
 
 interface Team {
   id: string;
@@ -97,7 +98,7 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", locale: "ru" });
   const [badges, setBadges] = useState<string[]>([]);
-  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0 });
+  const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
   const [profileMeta, setProfileMeta] = useState({ level: 1, reputation: 50, reputationEvents: 0, rating: 1, balance: 0 });
   const [warnings, setWarnings] = useState<WarningsPayload>({
     activeWarnings: [], warningCount: 0, history: [], activeBan: null,
@@ -132,7 +133,7 @@ export default function ProfilePage() {
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
       const mainStats = statsResult.summaries.find(row => row.mode === "main");
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
-      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0 });
+      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost(kills, matches)) });
 
       const memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
       const currentTeams = memberships.flatMap((membership) => {
@@ -296,7 +297,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
+        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${stats.cost} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>

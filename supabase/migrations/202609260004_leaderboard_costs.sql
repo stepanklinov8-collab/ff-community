@@ -1,0 +1,31 @@
+begin;
+
+-- Return the legacy value formula with every leaderboard entry. For an
+-- organization, value is the sum of its current members' main statistics,
+-- matching the former team statistics page.
+create or replace function public.u2_leaderboard(p_mode text,p_target_type text,p_query text default '',p_limit integer default 50,p_offset integer default 0,p_sort text default 'rating',p_kind text default null)
+returns jsonb language sql stable security definer set search_path=public as $$
+with totals as(select target_id,coalesce(sum(kills),0)::integer kills,coalesce(sum(games),0)::integer games,coalesce(sum(wins),0)::integer wins,coalesce(sum(deaths),0)::integer deaths,coalesce(sum(assists),0)::integer assists
+ from public.competition_public_history where target_type=p_target_type and source<>'legacy_unassigned' and case when p_mode='main' then mode in('tournament','training') else mode=p_mode end group by target_id),
+player_totals as(select target_id,coalesce(sum(kills),0)::integer kills,coalesce(sum(games),0)::integer games
+ from public.competition_public_history where target_type='player' and source<>'legacy_unassigned' and case when p_mode='main' then mode in('tournament','training') else mode=p_mode end group by target_id),
+organization_costs as(select tm.team_id target_id,coalesce(sum(pt.kills),0)::integer kills,coalesce(sum(pt.games),0)::integer games
+ from public.team_members tm left join player_totals pt on pt.target_id=tm.user_id group by tm.team_id),
+entities as(select p.id,p.nickname name,to_jsonb(p)->>'avatar_url' avatar_url,'player'::text kind,p.main_rating fallback_rating from public.profiles p where p_target_type='player'
+ union all select t.id,t.name,to_jsonb(t)->>'avatar_url',t.type,t.main_rating from public.teams t where p_target_type='team' and to_jsonb(t)->>'dissolved_at' is null and coalesce((to_jsonb(t)->>'verified')::boolean,true) and (p_kind is null or t.type=p_kind)),
+values_table as(select e.id,e.name,e.avatar_url,e.kind,coalesce(r.exact_rating,case when p_mode='main' then e.fallback_rating when p_mode in('bo','kv') then 50 else 1 end) exact_rating,
+ case when p_target_type='team' then coalesce(oc.kills,0) else coalesce(t.kills,0) end cost_kills,case when p_target_type='team' then coalesce(oc.games,0) else coalesce(t.games,0) end cost_games,
+ case when p_mode in('bo','kv') then coalesce(d.wins,r.wins,0) else coalesce(t.wins,r.wins,0) end wins,coalesce(t.games,r.games,0) games,coalesce(t.kills,r.kills,0) kills,coalesce(d.series,r.series,0) series,
+ coalesce(t.deaths,r.deaths,0) deaths,coalesce(t.assists,r.assists,0) assists
+ from entities e left join public.competition_ratings r on r.target_id=e.id and r.target_type=p_target_type and r.mode=p_mode left join totals t on t.target_id=e.id left join organization_costs oc on oc.target_id=e.id left join public.competition_duel_totals d on d.target_type=p_target_type and d.target_id=e.id and d.mode=p_mode
+ where p_mode in('main','solo') or coalesce(d.series,r.series,0)>0),
+ranked as(select *,rank() over(order by case p_sort when 'kills' then kills when 'games' then games when 'ratio' then kills::numeric/greatest(1,games) else exact_rating end desc,
+ case when p_sort='rating' then wins else 0 end desc,case when p_sort='rating' then games else 0 end desc) position from values_table),
+page as(select *,case when p_target_type='team' then round(exact_rating,2) else round(exact_rating,1) end rating,(cost_kills*10+cost_games*5)::integer cost from ranked where name ilike '%'||left(p_query,100)||'%' order by position,id limit greatest(1,least(100,p_limit))+1 offset greatest(0,p_offset)),
+visible as(select * from page order by position,id limit greatest(1,least(100,p_limit)))
+select jsonb_build_object('items',coalesce((select jsonb_agg(to_jsonb(v)-'exact_rating'-'cost_kills'-'cost_games' order by position,id) from visible v),'[]'),'hasMore',(select count(*) from page)>greatest(1,least(100,p_limit)))
+$$;
+revoke all on function public.u2_leaderboard(text,text,text,integer,integer,text,text) from public,anon,authenticated;
+grant execute on function public.u2_leaderboard(text,text,text,integer,integer,text,text) to service_role;
+
+commit;
