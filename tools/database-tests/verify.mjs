@@ -33,7 +33,7 @@ try {
   await db.exec(`create trigger ${triggerName} ${event} on public.${table} for each row execute function public.${functionName}()`);
  }
 
- for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('20260922')).sort()){
+ for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('202609')).sort()){
   const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}

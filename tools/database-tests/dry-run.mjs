@@ -48,7 +48,7 @@ try{
  for(const [name,table,event] of [['refresh_player_rating_from_stats','player_stats','after insert or update or delete'],['refresh_organization_rating_from_player','profiles','after update of main_rating'],['refresh_organization_rating_from_history','organization_participation_history','after insert or update or delete']]){
   await db.exec(functionSQL(name));await db.exec(`create trigger ${name}_fixture ${event} on public.${table} for each row execute function public.${name}()`);
  }
- for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('20260922')).sort()){
+ for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('202609')).sort()){
   try{await db.exec(await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8'));applied.push(name);console.log('Migration OK:',name);}
   catch(error){throw new Error(`${name}: ${error.message}; ${error.where??''}`);}
  }

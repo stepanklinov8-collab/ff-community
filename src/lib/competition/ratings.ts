@@ -1,6 +1,7 @@
 // Server domain only. Never import numeric rating weights into a client component.
 export const clamp = (value: number) => Math.max(1, Math.min(100, value));
 export const displayRating = (value: number) => Math.round((value+Number.EPSILON)*10)/10;
+export const displayOrganizationRating = (value: number) => Math.round((value+Number.EPSILON)*100)/100;
 export function reputation(base: number, penalties: number[]) { return Math.round(clamp(base-penalties.reduce((a,b)=>a+b,0))); }
 export function withReputation(gameRating: number, rep: number) {
   const p=clamp(rep), q=p<=50?(p-50)/49:(p-50)/50;
@@ -22,7 +23,7 @@ export function organizationRating(players:number[], results:number, achievement
   const best=[...players].sort((a,b)=>b-a).slice(0,4);
   const strength=0.6*(best.length?best.reduce((a,b)=>a+b,0)/best.length:1)+0.3*results+0.1*achievements;
   const exact=clamp(0.98*strength+0.02*rep);
-  return {exact,display:displayRating(exact)};
+  return {exact,display:displayOrganizationRating(exact)};
 }
 export function soloRating(nominations:Array<{place:number;participants:number;weight:number}>) {
   const valid=nominations.filter(n=>n.participants>=2 && n.weight>0 && n.place>=1 && n.place<=n.participants);

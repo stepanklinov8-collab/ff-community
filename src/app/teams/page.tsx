@@ -32,7 +32,7 @@ const PAGE_SIZE = 12;
 
 export default function TeamsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { t } = useLanguage();
+  const { t, formatNumber } = useLanguage();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -152,7 +152,7 @@ export default function TeamsPage() {
                 <p className="mt-2 min-h-10 line-clamp-2 text-sm text-slate-400">{team.description || t("teams.noDescription")}</p>
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
                   <div><strong className="block text-white">{team.membersCount}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.roster")}</span></div>
-                  <div><strong className="block text-cyan-300">{Number(team.main_rating ?? 1).toFixed(0)}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
+                  <div><strong className="block text-cyan-300">{formatNumber(Number(team.main_rating ?? 1), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
                   <div><strong className="block text-amber-300">0 ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
                 </div>
               </div>

@@ -5,7 +5,7 @@ const token = (await readFile("C:/Users/Lenovo/.supabase/access-token", "utf8"))
 const projectRef = "ojtqdfdqicozzqlgjtnm";
 const endpoint = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
 const files = (await (await import("node:fs/promises")).readdir(resolve("supabase/migrations")))
-  .filter((file) => /^20260922\d{4}_.+\.sql$/.test(file))
+  .filter((file) => /^202609\d{6}_.+\.sql$/.test(file))
   .sort();
 
 async function query(sql) {

@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
+import { useLanguage } from "@/components/LanguageProvider";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -81,6 +82,7 @@ interface TeamWarnings {
 
 export default function TeamPage() {
   const { id } = useParams<{ id: string }>();
+  const { formatNumber } = useLanguage();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [team, setTeam] = useState<Team | null>(null);
@@ -479,7 +481,7 @@ export default function TeamPage() {
               </div>
             </div>
             <p className="text-gray-300 mb-4">{team.description || "Нет описания"}</p>
-            <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {Number(team.main_rating ?? 1).toFixed(1)}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
+            <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {formatNumber(Number(team.main_rating ?? 1), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
             {team.social_link && <a href={team.social_link} target="_blank" className="text-blue-400 block mb-4">Сообщество →</a>}
             {isLeader && (
               <div className="flex gap-2 flex-wrap">

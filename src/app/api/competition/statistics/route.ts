@@ -10,7 +10,7 @@ export async function GET(request:Request){try{
  const summaries=["main","solo","bo","kv"].filter(m=>type==="player"||m!=="solo").map(m=>{
   const rows=summaryRows.filter(r=>r.source!=="legacy_unassigned").filter(r=>m==="main"?["training","tournament"].includes(r.mode):r.mode===m),rating=ratings?.find(r=>r.mode===m),duel=duels?.find(r=>r.mode===m);
   const sum=(key:"kills"|"games"|"wins"|"deaths"|"assists")=>rows.reduce((s,r)=>s+Number(r[key]??0),0);
-  return {mode:m,rating:rating?Number(rating.display_rating):m==="bo"||m==="kv"?50:m==="main"?Number(Number(entity.main_rating??1).toFixed(1)):1,games:sum("games"),kills:sum("kills"),wins:m==="bo"||m==="kv"?duel?.wins??rating?.wins??0:sum("wins"),series:duel?.series??rating?.series??0,
+  return {mode:m,rating:rating?Number(rating.display_rating):m==="bo"||m==="kv"?50:m==="main"?Number(Number(entity.main_rating??1).toFixed(type==="team"?2:1)):1,games:sum("games"),kills:sum("kills"),wins:m==="bo"||m==="kv"?duel?.wins??rating?.wins??0:sum("wins"),series:duel?.series??rating?.series??0,
   deaths:rows.some(r=>r.deaths!==null)?sum("deaths"):null,assists:rows.some(r=>r.assists!==null)?sum("assists"):null,legacyRows:rows.filter(r=>r.source==="legacy").length,ranked:m!=="bo"&&m!=="kv"||Number(duel?.series??rating?.series)>0};
  });
  let query=db.from("competition_public_history").select("id,mode,event_id,session_id,clan_war_id,title,occurred_at,name_snapshot,kills,games,place,wins,deaths,assists,source").eq("target_type",type).eq("target_id",id);

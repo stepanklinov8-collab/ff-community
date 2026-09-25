@@ -101,7 +101,7 @@ function registrationErrorMessage(errorMessage: string) {
 }
 
 export default function EventPage() {
-  const {locale} = useLanguage();
+  const {locale, formatNumber} = useLanguage();
   const [clockNow,setClockNow] = useState(() => Date.now());
   useEffect(() => {const timer=setInterval(()=>setClockNow(Date.now()),30000);return()=>clearInterval(timer);}, []);
   const { id } = useParams<{ id: string }>();
@@ -817,7 +817,7 @@ export default function EventPage() {
                   <button onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)} className="text-blue-400 hover:underline">
                     {r.team_name_override || r.team_name}
                   </button>
-                  <p className="text-xs text-slate-400">Рейтинг {Number(r.team_rating ?? 1).toFixed(0)} · вероятность победы {Math.round((Number(r.team_rating ?? 1) / Math.max(1, confirmed.reduce((sum, item) => sum + Number(item.team_rating ?? 1), 0))) * 100)}%</p>
+                  <p className="text-xs text-slate-400">Рейтинг {formatNumber(Number(r.team_rating ?? 1), {minimumFractionDigits: 2, maximumFractionDigits: 2})} · вероятность победы {Math.round((Number(r.team_rating ?? 1) / Math.max(1, confirmed.reduce((sum, item) => sum + Number(item.team_rating ?? 1), 0))) * 100)}%</p>
                   {r.is_winner && <span className="ml-2 text-yellow-400">🏆 Победитель</span>}
                   </div>
                 </div>
