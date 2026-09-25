@@ -55,7 +55,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         games:games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,publicId:`${prefix}-${String(groups.find(gr=>gr.id===g.group_id)?.public_number).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`}))});
     }
     const publicData={event:{id:event.id,title:event.title,type:event.type},sessions:publicSessions};
-    if(publicSessions.some(s=>s.results))return Response.json({...publicData,results:[]},{headers:{"Cache-Control":"no-store"}});
+    if(publicSessions.length>0)return Response.json({...publicData,results:[]},{headers:{"Cache-Control":"no-store"}});
     const normalized = await supabase
       .from("event_team_results")
       .select("id, event_id, team_id, score, is_winner, mvp_user_id")
