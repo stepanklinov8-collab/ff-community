@@ -37,6 +37,11 @@ test('K1–K2: missing rows and blank kills block full publication; explicit zer
  const missing=structuredClone(draft);missing.rows.pop();assert.throws(()=>publishResults(context,missing,true),/заполните игру/);
  draft.rows[0].players[0].kills=null;assert.throws(()=>publishResults(context,draft,true),/Заполните показатели/);
 });
+test('configured group capacity accepts a recorded place beyond confirmed registrations',()=>{
+ const {context,draft}=fixture({count:2,games:1});context.groupCapacities={[context.entrants[0].groupId]:10};
+ draft.rows[0].place=10;draft.rows[1].place=1;
+ const results=publishResults(context,draft,true);assert.equal(results.rows[0].fieldSize,10);assert.equal(results.rows[0].place,10);
+});
 
 test('K2/K53: one, three and five games; full validation includes the 1024th participant',()=>{
  for(const games of [1,3,5]){const {context,draft}=fixture({games});assert.equal(publishResults(context,draft,true).rows.length,3*games);}

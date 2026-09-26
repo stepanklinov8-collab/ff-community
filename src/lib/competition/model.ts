@@ -44,7 +44,7 @@ export interface Rules {
   nominations: Array<"points" | "kills" | "places">;
   ratingEnabled: boolean; winsRequired: number;
 }
-export interface CompetitionContext { entrants: Entrant[]; games: Game[]; rules: Rules }
+export interface CompetitionContext { entrants: Entrant[]; games: Game[]; rules: Rules; groupCapacities?: Record<string, number> }
 export interface PlayerResult extends PlayerInput { nickname: string }
 export interface GameResult extends Omit<ResultInput, "players" | "played" | "kills"> {
   played: boolean; kills: number; points: number; fieldSize: number;
@@ -107,7 +107,7 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
         continue;
       }
       if (!row || row.played === null) { addIssue("missing_result", `${entrant.name}: заполните игру ${game.number}`, { registrationId: entrant.id, gameId: game.id }); continue; }
-      const fieldSize = groupEntrants.length;
+      const fieldSize = Math.max(groupEntrants.length, Number(context.groupCapacities?.[entrant.groupId] ?? 0));
       const roster = new Map(entrant.roster.map(player => [player.id, player]));
       const players: PlayerResult[] = [];
       let kills = row.kills ?? 0;
@@ -166,7 +166,7 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
         } else if (row.played && other?.played === false && other.reason === "no_show") seriesWon = context.rules.winsRequired;
         else if (!row.played && row.reason === "no_show" && other?.played) seriesLost = context.rules.winsRequired;
       }
-      const actualFieldSize = groupEntrants.filter(item => inputs.get(`${game.id}:${item.id}`)?.played).length;
+      const actualFieldSize = Math.max(fieldSize, groupEntrants.filter(item => inputs.get(`${game.id}:${item.id}`)?.played).length);
       rows.push({ ...row, played: row.played, place: row.played ? roundMode ? (technicalWin||row.rounds === 7 ? 1 : 2) : row.place : null,
         rounds: row.played && !technicalWin ? row.rounds : null, kills, players, fieldSize: actualFieldSize,
         points: row.played && !roundMode ? kills * context.rules.killPoints + (context.rules.placePoints[(row.place ?? 1)-1] ?? 0) : 0,

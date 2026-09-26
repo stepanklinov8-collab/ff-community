@@ -66,7 +66,8 @@ export async function loadSession(supabase:Database,sessionId:string,auth?:AuthC
   const groupNumbers=new Map(groups.map(g=>[g.id,g.public_number]));
   const prefix=`${event.public_number}-${String(session.public_number).padStart(2,"0")}`;
   const context:CompetitionContext={rules,entrants,games:games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,
-    publicId:`${prefix}-${String(groupNumbers.get(g.group_id)).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`}))};
+    publicId:`${prefix}-${String(groupNumbers.get(g.group_id)).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`})),
+    groupCapacities:Object.fromEntries(groups.map(g=>[g.id,Number(g.capacity??0)]))};
   return {event,session,publication,context,groups,role,publicId:prefix};
 }
 export function publicResults(value:unknown) {
