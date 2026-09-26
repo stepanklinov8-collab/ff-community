@@ -6,6 +6,7 @@ import { Search, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
+import { competitionCost } from "@/lib/competition/cost";
 
 interface TeamRow {
   id: string;
@@ -63,7 +64,7 @@ export default function TeamsPage() {
 
       const rows = (data ?? []) as TeamQueryRow[];
       const leaderboard = leaderboardResponse?.ok ? await leaderboardResponse.json() as {items?: Array<{id: string; cost?: number; kills: number; games: number}>} : {items: []};
-      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? Math.round(Number(item.kills ?? 0) * 10 + Number(item.games ?? 0) * 5))]));
+      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? competitionCost({kills: item.kills, games: item.games, wins: 0, rating: 1, reputation: 50}))]));
       setTeams(rows.map((team) => ({ ...team, membersCount: Number(team.team_members?.[0]?.count ?? 0), cost: costById.get(team.id) ?? 0 })));
       setLoading(false);
     };
