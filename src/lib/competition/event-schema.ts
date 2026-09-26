@@ -1,6 +1,9 @@
 import {z} from "zod";
 import {defaultPlacePoints,maps} from "./model";
-const date=z.string().datetime();
+// Supabase can return timestamptz values as `YYYY-MM-DD HH:mm:ss+00` while
+// newly entered values use the browser's ISO form. Accept both representations
+// and normalize them before the configuration reaches the database.
+const date=z.string().refine(value=>Number.isFinite(Date.parse(value)),"invalid ISO datetime").transform(value=>new Date(value).toISOString());
 const game=z.object({id:z.string().uuid().optional(),map:z.enum(maps)});
 const group=z.object({id:z.string().uuid().optional(),name:z.string().trim().max(100).default(""),capacity:z.number().int().min(2).max(60),roomId:z.string().max(100).default(""),roomPassword:z.string().max(100).default(""),roomNote:z.string().max(2000).default(""),games:z.array(game).min(1)});
 export const sessionConfiguration=z.object({id:z.string().uuid().optional(),startTime:date,endTime:date,

@@ -167,6 +167,12 @@ test('event schema rejects duplicate session identifiers before database write',
  const config={title:'Test',type:'training',cost:0,organizer:'',organizerUserId:null,description:'',streamUrl:'',paymentUrl:'',maxTeams:12,minPlayers:4,publishAt:null,commentsEnabled:true,allowIndividualRegistration:false,rules:fixture().context.rules,sessions:[session,structuredClone(session)]};config.rules.mode='training';
  assert.equal(eventConfiguration.safeParse(config).success,false);
 });
+test('event schema normalizes Supabase timestamp format before saving',()=>{
+ const session={id:id(8001),startTime:'2026-10-01 12:00:00+00',endTime:'2026-10-01 13:00:00+00',registrationOpenTime:null,registrationCloseTime:null,maxTeams:12,groups:[{capacity:12,name:'A',games:[{map:'bermuda'}]}]};
+ const config={title:'Test',type:'training',cost:0,organizer:'',organizerUserId:null,description:'',streamUrl:'',paymentUrl:'',maxTeams:12,minPlayers:4,publishAt:'2026-09-21 06:00:00+00',commentsEnabled:true,allowIndividualRegistration:false,rules:fixture().context.rules,sessions:[session]};config.rules.mode='training';
+ const parsed=eventConfiguration.parse(config);
+ assert.equal(parsed.publishAt,'2026-09-21T06:00:00.000Z');assert.equal(parsed.sessions[0].startTime,'2026-10-01T12:00:00.000Z');
+});
 test('K25: elapsed sessions archive separately then collapse without requiring results',()=>{
  const sessions=[{id:id(9100),start_time:'2026-09-20T12:00:00Z',end_time:'2026-09-20T13:00:00Z'},{id:id(9101),start_time:'2026-09-25T12:00:00Z',end_time:'2026-09-25T13:00:00Z'}];
  const events=[{id:id(9000),sessions}];const middle=archiveCards(events,Date.parse('2026-09-22T12:00:00Z'));
