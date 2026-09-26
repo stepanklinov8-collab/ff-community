@@ -133,7 +133,7 @@ export default function ProfilePage() {
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
       const mainStats = statsResult.summaries.find(row => row.mode === "main");
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
-      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost(kills, matches)) });
+      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost({kills, deaths: mainStats?.deaths, games: matches, wins: mainStats?.wins ?? 0, rating: 50, reputation: 50})) });
 
       const memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
       const currentTeams = memberships.flatMap((membership) => {
