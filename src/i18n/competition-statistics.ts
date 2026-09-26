@@ -1,7 +1,7 @@
 import type {Locale} from "./messages";
 const ru = {
   title: "Рейтинг", statistics: "Статистика", main: "Основной", solo: "Соло", bo: "БО", kv: "КВ",
-  player: "Игроки", team: "Команды", guild: "Гильдии", search: "Поиск по имени", rating: "Рейтинг",
+  player: "Игроки", allOrganizations: "Все команды и гильдии", team: "Команды", guild: "Гильдии", search: "Поиск по имени", rating: "Рейтинг",
   kills: "Убийства", games: "Игры", ratio: "Убийств за игру", wins: "Победы", series: "Серии", cost: "Стоимость",
   name: "Участник", position: "Место", history: "История результатов", more: "Показать ещё", loading: "Загрузка…",
   empty: "Результатов пока нет", retry: "Повторить", error: "Не удалось загрузить данные", deaths: "Смерти", assists: "Помощь",
@@ -11,7 +11,7 @@ const ru = {
 };
 const kk: typeof ru = {
   title: "Рейтинг", statistics: "Статистика", main: "Негізгі", solo: "Соло", bo: "БО", kv: "КВ",
-  player: "Ойыншылар", team: "Командалар", guild: "Гильдиялар", search: "Аты бойынша іздеу", rating: "Рейтинг",
+  player: "Ойыншылар", allOrganizations: "Барлық командалар мен гильдиялар", team: "Командалар", guild: "Гильдиялар", search: "Аты бойынша іздеу", rating: "Рейтинг",
   kills: "Өлтірулер", games: "Ойындар", ratio: "Бір ойындағы өлтіру", wins: "Жеңістер", series: "Сериялар", cost: "Құны",
   name: "Қатысушы", position: "Орын", history: "Нәтижелер тарихы", more: "Тағы көрсету", loading: "Жүктелуде…",
   empty: "Нәтижелер әлі жоқ", retry: "Қайталау", error: "Деректер жүктелмеді", deaths: "Өлімдер", assists: "Көмек",
@@ -21,7 +21,7 @@ const kk: typeof ru = {
 };
 const ky: typeof ru = {
   title: "Рейтинг", statistics: "Статистика", main: "Негизги", solo: "Соло", bo: "БО", kv: "КВ",
-  player: "Оюнчулар", team: "Командалар", guild: "Гильдиялар", search: "Аты боюнча издөө", rating: "Рейтинг",
+  player: "Оюнчулар", allOrganizations: "Бардык командалар жана гильдиялар", team: "Командалар", guild: "Гильдиялар", search: "Аты боюнча издөө", rating: "Рейтинг",
   kills: "Өлтүрүүлөр", games: "Оюндар", ratio: "Бир оюндагы өлтүрүү", wins: "Жеңиштер", series: "Сериялар", cost: "Баасы",
   name: "Катышуучу", position: "Орун", history: "Натыйжалар тарыхы", more: "Дагы көрсөтүү", loading: "Жүктөлүүдө…",
   empty: "Азырынча натыйжалар жок", retry: "Кайталоо", error: "Маалымат жүктөлгөн жок", deaths: "Өлүмдөр", assists: "Жардам",

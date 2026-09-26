@@ -8,29 +8,30 @@ import type {CompetitionMode} from "@/lib/competition/public-statistics";
 import {competitionCost} from "@/lib/competition/cost";
 
 interface Entry {id: string; name: string; avatar_url: string | null; position: number; rating: number; wins: number; games: number; kills: number; deaths: number | null; cost?: number; series: number}
-export default function CompetitionLeaderboard({initialKind = "player"}: {initialKind?: "player" | "team"}) {
+type LeaderboardKind = "player" | "all" | "team" | "guild";
+export default function CompetitionLeaderboard({initialKind = "player"}: {initialKind?: LeaderboardKind}) {
   const {locale} = useLanguage(), t = statisticsText(locale);
   const [mode, setMode] = useState<CompetitionMode>("main");
-  const [kind, setKind] = useState<"player" | "team" | "guild">(initialKind);
+  const [kind, setKind] = useState<LeaderboardKind>(initialKind);
   const [sort, setSort] = useState("rating"), [query, setQuery] = useState(""), [search, setSearch] = useState("");
   useEffect(() => {const timer = setTimeout(() => setSearch(query.trim()), 300); return () => clearTimeout(timer);}, [query]);
   const selectKind = (value: typeof kind) => {setKind(value); if (value !== "player" && mode === "solo") setMode("main");};
   return <main className="page-shell space-y-6">
     <div><p className="eyebrow">{t.allTime}</p><h1 className="mt-2 text-3xl font-black">{t.title}</h1></div>
-    <div className="flex flex-wrap gap-2" aria-label={t.name}>{(["player", "team", "guild"] as const).map(item => <button key={item} className={kind === item ? "btn-primary" : "btn-secondary"} aria-pressed={kind === item} onClick={() => selectKind(item)}>{t[item]}</button>)}</div>
+    <div className="flex flex-wrap gap-2" aria-label={t.name}>{(["player", "all", "team", "guild"] as const).map(item => <button key={item} className={kind === item ? "btn-primary" : "btn-secondary"} aria-pressed={kind === item} onClick={() => selectKind(item)}>{item === "all" ? t.allOrganizations : t[item]}</button>)}</div>
     <div className="flex flex-wrap gap-2" aria-label={t.title}>{(["main", "solo", "bo", "kv"] as const).filter(item => kind === "player" || item !== "solo").map(item => <button key={item} className={mode === item ? "btn-primary" : "btn-secondary"} aria-pressed={mode === item} onClick={() => setMode(item)}>{t[item]}</button>)}</div>
-    <div className="flex flex-wrap gap-3"><input className="input-field flex-1" aria-label={t.search} placeholder={t.search} maxLength={100} value={query} onChange={e => setQuery(e.target.value)}/><select className="input-field" aria-label={t.title} value={sort} onChange={e => setSort(e.target.value)}>{(["rating", "kills", "games", "ratio"] as const).map(item => <option key={item} value={item}>{t[item]}</option>)}</select></div>
+    <div className="flex flex-wrap gap-3"><input className="input-field flex-1" aria-label={t.search} placeholder={t.search} maxLength={100} value={query} onChange={e => setQuery(e.target.value)}/><select className="input-field" aria-label={t.title} value={sort} onChange={e => setSort(e.target.value)}>{(["rating", "cost", "kills", "games", "ratio"] as const).map(item => <option key={item} value={item}>{t[item]}</option>)}</select></div>
     <LeaderboardRows key={`${kind}:${mode}:${sort}:${search}`} kind={kind} mode={mode} sort={sort} search={search}/>
   </main>;
 }
-function LeaderboardRows({kind, mode, sort, search}: {kind: "player" | "team" | "guild"; mode: CompetitionMode; sort: string; search: string}) {
+function LeaderboardRows({kind, mode, sort, search}: {kind: LeaderboardKind; mode: CompetitionMode; sort: string; search: string}) {
   const {locale, formatNumber} = useLanguage(), t = statisticsText(locale);
   const [items, setItems] = useState<Entry[]>([]), [hasMore, setHasMore] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [offset, setOffset] = useState(0), [retry, setRetry] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({mode, type: kind === "player" ? "player" : "team", sort, q: search, offset: String(offset)});
-    if (kind !== "player") params.set("kind", kind);
+    if (kind === "team" || kind === "guild") params.set("kind", kind);
     void fetch(`/api/competition/leaderboard?${params}`, {signal: controller.signal}).then(async response => {
       const body = await response.json(); if (!response.ok) throw new Error(body.error || t.error);
       if (!controller.signal.aborted) {setItems(previous => offset === 0 ? body.items : [...previous, ...body.items.filter((row: Entry) => !previous.some(p => p.id === row.id))]); setHasMore(body.hasMore); setError("");}

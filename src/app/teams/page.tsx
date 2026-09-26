@@ -27,7 +27,7 @@ interface TeamQueryRow extends TeamRow {
 }
 
 type TypeFilter = "all" | "team" | "guild";
-type SortMode = "newest" | "name" | "members";
+type SortMode = "newest" | "name" | "members" | "cost";
 
 const PAGE_SIZE = 12;
 
@@ -78,6 +78,7 @@ export default function TeamsPage() {
       .sort((left, right) => {
         if (sortMode === "name") return left.name.localeCompare(right.name, "ru");
         if (sortMode === "members") return right.membersCount - left.membersCount;
+        if (sortMode === "cost") return right.cost - left.cost;
         return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
       });
   }, [query, sortMode, teams, typeFilter]);
@@ -130,6 +131,7 @@ export default function TeamsPage() {
           <option value="newest">{t("teams.newest")}</option>
           <option value="name">{t("teams.byName")}</option>
           <option value="members">{t("teams.byRoster")}</option>
+          <option value="cost">{t("teams.byCost")}</option>
         </select>
       </section>
 
