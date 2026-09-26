@@ -85,7 +85,7 @@ function roleLabel(role: string, type: Team["type"]) {
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
-  const { setLocale } = useLanguage();
+  const { setLocale, formatNumber } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -297,7 +297,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${stats.cost} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
+        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${formatNumber(stats.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>

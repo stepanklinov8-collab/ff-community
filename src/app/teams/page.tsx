@@ -162,7 +162,7 @@ export default function TeamsPage() {
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
                   <div><strong className="block text-white">{team.membersCount}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.roster")}</span></div>
                   <div><strong className="block text-cyan-300">{formatNumber(Number(team.main_rating ?? 1), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
-                  <div><strong className="block text-amber-300">{formatNumber(team.cost)} ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
+                  <div><strong className="block text-amber-300">{formatNumber(team.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
                 </div>
               </div>
             </Link>

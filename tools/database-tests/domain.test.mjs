@@ -174,11 +174,12 @@ test('event schema normalizes Supabase timestamp format before saving',()=>{
  const parsed=eventConfiguration.parse(config);
  assert.equal(parsed.publishAt,'2026-09-21T06:00:00.000Z');assert.equal(parsed.sessions[0].startTime,'2026-10-01T12:00:00.000Z');
 });
-test('competition cost uses useful utility, diminishing confidence, and no hard ceiling',()=>{
+test('competition cost uses useful utility, diminishing confidence, and hundredth-ruble scale',()=>{
  const one=competitionCost({kills:24,deaths:12,games:3,wins:1,rating:60,reputation:50,utility:.8,weightedSessions:1});
  const three=competitionCost({kills:24,deaths:12,games:9,wins:3,rating:60,reputation:50,utility:.8,weightedSessions:3});
  const many=competitionCost({kills:240,deaths:120,games:30,wins:10,rating:60,reputation:50,utility:.8,weightedSessions:30});
- assert.ok(one>0&&three>one&&many>1000);assert.ok(three<one*3);
+ assert.ok(one>0&&three>one&&many>three);assert.ok(three<one*3&&many<100);
+ assert.equal(competitionCost({kills:0,games:0,wins:0,rating:80,reputation:80}),0);
 });
 test('organization cost adds roster and organization merits above member value',()=>{
  const player=competitionCost({kills:24,deaths:12,games:3,wins:1,rating:60,reputation:50,utility:.8,weightedSessions:2});

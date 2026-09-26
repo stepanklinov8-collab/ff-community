@@ -27,10 +27,10 @@ const bounded = (value: number, min = 0, max = 100) => Math.max(min, Math.min(ma
 const bounded01 = (value: number) => Math.max(0, Math.min(1, value));
 
 /**
- * Calculates a public value. Games and kills describe utility but do not form
- * an ever-growing price base; confidence grows by weighted sessions with
- * diminishing returns and a small logarithmic experience premium has no hard
- * upper ceiling. The database uses the same coefficients per session.
+ * Calculates a public value in rubles. Games and kills describe utility but do
+ * not form an ever-growing price base; confidence grows by weighted sessions
+ * with diminishing returns and a small logarithmic experience premium has no
+ * hard upper ceiling. The database uses the same coefficients per session.
  */
 export function competitionCost(input: CompetitionCostInput) {
   const kills = Math.max(0, Number(input.kills ?? 0));
@@ -50,7 +50,7 @@ export function competitionCost(input: CompetitionCostInput) {
   const confidence = 1 - Math.exp(-weightedSessions / 3.5);
   const score = (0.70 * utility + 0.20 * ratingScore + 0.10 * reputationScore) * confidence;
   const experiencePremium = 1 + 0.25 * Math.log1p(weightedSessions);
-  return Math.max(0, Math.round(1000 * score * experiencePremium));
+  return Math.max(0, Math.round(1000 * score * experiencePremium) / 100);
 }
 
 export function competitionOrganizationCost(input: CompetitionOrganizationCostInput) {
@@ -77,5 +77,5 @@ export function competitionOrganizationCost(input: CompetitionOrganizationCostIn
   const confidence = 1 - Math.exp(-weightedSessions / 4.5);
   const organizationPremium = 1500 * (0.50 + quality) * (0.60 + 0.40 * confidence) * (1 + 0.20 * Math.log1p(weightedSessions));
   const rosterMultiplier = 1.75 + 0.60 * quality + 0.20 * memberCountFactor;
-  return Math.max(0, Math.round(memberCost * rosterMultiplier + organizationPremium));
+  return Math.max(0, Math.round((memberCost * rosterMultiplier + organizationPremium) * 100) / 100);
 }
