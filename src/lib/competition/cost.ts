@@ -11,13 +11,26 @@ export interface CompetitionCostInput {
   weightedSessions?: number | null;
 }
 
+export interface CompetitionOrganizationCostInput {
+  memberCosts: number[];
+  rating: number | null | undefined;
+  results: number | null | undefined;
+  achievements: number | null | undefined;
+  reputation: number | null | undefined;
+  memberRatings?: number[];
+  memberReputations?: number[];
+  weightedSessions?: number | null;
+  winRate?: number | null;
+}
+
 const bounded = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 const bounded01 = (value: number) => Math.max(0, Math.min(1, value));
 
 /**
- * Calculates a bounded public value. Games and kills describe utility but do
- * not form an ever-growing base; confidence grows by weighted sessions with
- * diminishing returns. The database uses the same coefficients per session.
+ * Calculates a public value. Games and kills describe utility but do not form
+ * an ever-growing price base; confidence grows by weighted sessions with
+ * diminishing returns and a small logarithmic experience premium has no hard
+ * upper ceiling. The database uses the same coefficients per session.
  */
 export function competitionCost(input: CompetitionCostInput) {
   const kills = Math.max(0, Number(input.kills ?? 0));
@@ -36,5 +49,33 @@ export function competitionCost(input: CompetitionCostInput) {
   const weightedSessions = Math.max(0, Number(input.weightedSessions ?? (games > 0 ? 1 : 0)));
   const confidence = 1 - Math.exp(-weightedSessions / 3.5);
   const score = (0.70 * utility + 0.20 * ratingScore + 0.10 * reputationScore) * confidence;
-  return Math.max(0, Math.min(1000, Math.round(1000 * score)));
+  const experiencePremium = 1 + 0.25 * Math.log1p(weightedSessions);
+  return Math.max(0, Math.round(1000 * score * experiencePremium));
+}
+
+export function competitionOrganizationCost(input: CompetitionOrganizationCostInput) {
+  const normalized = (value: number | null | undefined, fallback: number) => bounded01(Number(value ?? fallback) / 100);
+  const memberCosts = input.memberCosts.map((value) => Math.max(0, Number(value) || 0));
+  const memberCost = memberCosts.reduce((sum, value) => sum + value, 0);
+  const memberCountFactor = bounded01(memberCosts.length / 4);
+  const memberRating = (input.memberRatings ?? []).length
+    ? (input.memberRatings ?? []).reduce((sum, value) => sum + normalized(value, 1), 0) / (input.memberRatings ?? []).length
+    : 0;
+  const memberReputation = (input.memberReputations ?? []).length
+    ? (input.memberReputations ?? []).reduce((sum, value) => sum + normalized(value, 50), 0) / (input.memberReputations ?? []).length
+    : 0;
+  const quality = bounded01(
+    0.25 * normalized(input.rating, 1)
+    + 0.15 * normalized(input.results, 1)
+    + 0.15 * normalized(input.achievements, 1)
+    + 0.15 * normalized(input.reputation, 50)
+    + 0.15 * memberRating
+    + 0.10 * memberReputation
+    + 0.10 * bounded01(Number(input.winRate ?? 0)),
+  );
+  const weightedSessions = Math.max(0, Number(input.weightedSessions ?? 0));
+  const confidence = 1 - Math.exp(-weightedSessions / 4.5);
+  const organizationPremium = 1500 * (0.50 + quality) * (0.60 + 0.40 * confidence) * (1 + 0.20 * Math.log1p(weightedSessions));
+  const rosterMultiplier = 1.75 + 0.60 * quality + 0.20 * memberCountFactor;
+  return Math.max(0, Math.round(memberCost * rosterMultiplier + organizationPremium));
 }
