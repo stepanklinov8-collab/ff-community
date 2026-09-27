@@ -20,6 +20,7 @@ interface Event {
   organizer: string;
   organizer_user_id: string | null;
   description: string;
+  rules_text: string;
   image_url: string;
   stream_url: string;
   is_published: boolean;
@@ -175,7 +176,7 @@ export default function EventPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: ev } = await supabase.from("events").select("id,title,type,cost,organizer,organizer_user_id,description,image_url,stream_url,is_published,max_teams,show_registrations,roster_lock_minutes,min_players,comments_enabled,payment_url,allow_individual_registration").eq("id", id).single();
+      const { data: ev } = await supabase.from("events").select("id,title,type,cost,organizer,organizer_user_id,description,rules_text,image_url,stream_url,is_published,max_teams,show_registrations,roster_lock_minutes,min_players,comments_enabled,payment_url,allow_individual_registration").eq("id", id).single();
       if (ev) setEvent(ev);
 
       const publicSessions = await supabase
@@ -499,6 +500,13 @@ export default function EventPage() {
         {event.description
           ? <TranslatedText sourceType="event" sourceId={event.id} sourceField="description" original={event.description} className="mt-4" textClassName="text-gray-300 whitespace-pre-wrap" />
           : <p className="text-gray-300 mt-4">Нет описания</p>}
+
+        <section className="mt-6 rounded-lg border border-white/10 bg-gray-900/50 p-4">
+          <h2 className="text-xl font-semibold">Правила мероприятия</h2>
+          {event.rules_text
+            ? <TranslatedText sourceType="event" sourceId={event.id} sourceField="rules_text" original={event.rules_text} className="mt-3" textClassName="whitespace-pre-wrap text-gray-300" />
+            : <p className="mt-3 text-gray-400">Правила пока не добавлены.</p>}
+        </section>
 
         {event.stream_url && (
           <a href={event.stream_url} target="_blank" className="inline-block mt-3 px-4 py-2 bg-red-600 rounded hover:bg-red-700">

@@ -20,11 +20,11 @@ async function readSourceText(
   userId: string,
 ) {
   if (sourceType === "event") {
-    if (!["description"].includes(sourceField)) throw new Error("Unsupported translation field");
-    const { data, error } = await supabase.from("events").select("description,is_published").eq("id", sourceId).maybeSingle();
+    if (!["description", "rules_text"].includes(sourceField)) throw new Error("Unsupported translation field");
+    const { data, error } = await supabase.from("events").select("description,rules_text,is_published").eq("id", sourceId).maybeSingle();
     if (error) throw error;
     if (!data?.is_published) return null;
-    return data.description;
+    return data[sourceField as "description" | "rules_text"] ?? null;
   }
   if (sourceType === "comment") {
     if (sourceField !== "body") throw new Error("Unsupported translation field");
