@@ -496,8 +496,8 @@ export default function EventPage() {
   const collectiveLabel = myTeam?.type === "guild" ? "Гильдия" : "Команда";
   const selectedCount = registrationCounts[selectedSessionId];
   const registrationSummary = selectedSession && (
-    <p className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-950/40 p-3 font-semibold text-cyan-200" aria-live="polite">
-      {allowsIndividualRegistration ? "Зарегистрировано участников" : "Зарегистрировано команд и гильдий"}: {selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "Загрузка…"}
+    <p className="mb-3 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200" aria-live="polite">
+      <span className="sr-only">Зарегистрировано / всего мест: </span>{selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "…"}
     </p>
   );
   return (
@@ -583,7 +583,7 @@ export default function EventPage() {
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
               {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
-              {registrationCount && <p className="mt-2 text-sm text-cyan-200">Зарегистрировано: {registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
+              {registrationCount && <p className="mt-2 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200"><span className="sr-only">Зарегистрировано / всего мест: </span>{registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
               {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {gameMapLabels[game.map_name] ?? game.map_name}</span>)}</div>}
 
               <div className="my-3 flex gap-3"><Link className="text-cyan-300" href={`/tournaments/${id}/results?sessionId=${s.id}`}>Итоги сессии</Link>{(isResponsible||isAdmin||isOrganizer)&&<Link className="text-emerald-300" href={`/tournaments/${id}/manage-results?sessionId=${s.id}`}>Ввести результаты</Link>}</div>
