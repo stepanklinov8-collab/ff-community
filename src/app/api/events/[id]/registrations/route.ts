@@ -30,7 +30,7 @@ export async function GET(request: Request, context: RouteContext) {
     const supabase = createAdminClient();
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, show_registrations, organizer_user_id,is_published,moderation_status")
+      .select("id, show_registrations, organizer_user_id,is_published,moderation_status,max_teams")
       .eq("id", eventId)
       .single();
     if (eventError) throw eventError;
@@ -55,6 +55,24 @@ export async function GET(request: Request, context: RouteContext) {
       .select("id, session_id, team_id, participant_user_id, status, is_winner, created_at, roster, roster_json, roster_snapshot, name_snapshot, team_name_override")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true }).order("id").range(a,b));
+
+    const sessions = await allRows((a, b) => supabase
+      .from("event_sessions")
+      .select("id, max_teams")
+      .eq("event_id", eventId)
+      .order("id")
+      .range(a, b));
+    const activeCounts = new Map<string, number>();
+    for (const row of rows ?? []) {
+      if (row.session_id && (row.status === "confirmed" || row.status === "waiting")) {
+        activeCounts.set(row.session_id, (activeCounts.get(row.session_id) ?? 0) + 1);
+      }
+    }
+    const registrationCounts = (sessions ?? []).map((session) => ({
+      session_id: session.id,
+      registered: activeCounts.get(session.id) ?? 0,
+      capacity: session.max_teams ?? event.max_teams ?? null,
+    }));
 
     const visibleRows = event.show_registrations || isPrivileged
       ? rows ?? []
@@ -108,6 +126,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     return Response.json({
       registrations,
+      registrationCounts,
       visibility: event.show_registrations ? "public" : isPrivileged ? "privileged" : "own",
     });
   } catch (error) {

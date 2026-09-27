@@ -39,6 +39,7 @@ interface Session {
   end_time: string;
   registration_open_time: string;
   registration_close_time: string | null;
+  max_teams: number | null;
   room_code?: string;
   room_password?: string;
   room_note?: string;
@@ -61,6 +62,12 @@ interface Registration {
   team_avatar_url?: string | null;
   team_rating?: number;
   roster_players?: { id: string; nickname: string; avatar_url?: string | null; main_rating?: number }[];
+}
+
+interface RegistrationCount {
+  session_id: string;
+  registered: number;
+  capacity: number | null;
 }
 
 interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
@@ -111,6 +118,7 @@ export default function EventPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<EventGame[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [registrationCounts, setRegistrationCounts] = useState<Record<string, RegistrationCount>>({});
   const [myTeam, setMyTeam] = useState<ManagedOrganization | null>(null);
   const [managedOrganizations, setManagedOrganizations] = useState<ManagedOrganization[]>([]);
   const [canManageTeam, setCanManageTeam] = useState(false);
@@ -137,9 +145,10 @@ export default function EventPage() {
       ? await authFetch(`/api/events/${id}/registrations`)
       : await fetch(`/api/events/${id}/registrations`);
     if (!response.ok) return [] as Registration[];
-    const payload = await response.json() as { registrations?: Registration[] };
+    const payload = await response.json() as { registrations?: Registration[]; registrationCounts?: RegistrationCount[] };
     const rows = payload.registrations ?? [];
     setRegistrations(rows);
+    setRegistrationCounts(Object.fromEntries((payload.registrationCounts ?? []).map((count) => [count.session_id, count])));
     return rows;
   }, [id]);
 
@@ -563,10 +572,12 @@ export default function EventPage() {
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
         {sessions.map((s) => {
           const isResponsible = s.responsible_user_id === currentUser?.id;
+          const registrationCount = registrationCounts[s.id];
           return (
             <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
               {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
+              {registrationCount && <p className="mt-2 text-sm text-cyan-200">Зарегистрировано: {registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
               {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {gameMapLabels[game.map_name] ?? game.map_name}</span>)}</div>}
 
               <div className="my-3 flex gap-3"><Link className="text-cyan-300" href={`/tournaments/${id}/results?sessionId=${s.id}`}>Итоги сессии</Link>{(isResponsible||isAdmin||isOrganizer)&&<Link className="text-emerald-300" href={`/tournaments/${id}/manage-results?sessionId=${s.id}`}>Ввести результаты</Link>}</div>
