@@ -494,6 +494,12 @@ export default function EventPage() {
   const allowsIndividualRegistration = event.type === "solo" || Boolean(event.allow_individual_registration);
   const allowsCollectiveRegistration = event.type !== "solo";
   const collectiveLabel = myTeam?.type === "guild" ? "Гильдия" : "Команда";
+  const selectedCount = registrationCounts[selectedSessionId];
+  const registrationSummary = selectedSession && (
+    <p className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-950/40 p-3 font-semibold text-cyan-200" aria-live="polite">
+      {allowsIndividualRegistration ? "Зарегистрировано участников" : "Зарегистрировано команд и гильдий"}: {selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "Загрузка…"}
+    </p>
+  );
   return (
     <div className="min-h-screen p-6">
       <Link href="/tournaments" className="text-blue-400 hover:underline">← К турнирам</Link>
@@ -658,6 +664,7 @@ export default function EventPage() {
           </div>
 
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
+          {registrationSummary}
           <button onClick={registerTeam} disabled={!registrationIsOpen || !canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
             {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}` : "Состав заблокирован"}
           </button>
@@ -678,6 +685,7 @@ export default function EventPage() {
             </select>
           </div>
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
+          {registrationSummary}
           <button onClick={registerPlayer} disabled={!registrationIsOpen} className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50">
             {registrationIsOpen ? "Записаться лично" : "Регистрация недоступна"}
           </button>
@@ -688,6 +696,7 @@ export default function EventPage() {
       {currentUser && allowsCollectiveRegistration && !allowsIndividualRegistration && !alreadyRegistered && (!myTeam || !canManageTeam) && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <h2 className="text-lg font-semibold">Командная регистрация</h2>
+          {registrationSummary}
           <p className="mt-1 text-sm text-gray-300">
             На это мероприятие заявку подаёт руководитель верифицированной команды или гильдии.
           </p>
@@ -697,6 +706,7 @@ export default function EventPage() {
 
       {!currentUser && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
+          {registrationSummary}
           <p className="text-sm text-gray-300">{registrationHint}</p>
           <p className="mt-2 text-sm text-gray-300">
             {allowsIndividualRegistration
@@ -719,6 +729,7 @@ export default function EventPage() {
               <option key={session.id} value={session.id}>{new Date(session.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</option>
             ))}
           </select>
+          {registrationSummary}
           <p className="mb-2">
             {selectedRegistration?.participant_user_id ? "Личная заявка: " : "Заявка команды: "}
             {registrationStatus === "confirmed" ? "✅ участие подтверждено" : "⏳ лист ожидания"}
@@ -825,6 +836,7 @@ export default function EventPage() {
       {(event.show_registrations || isAdmin || isOrganizer) && (
         <div className="mt-6">
           <h2 className="text-xl font-semibold mb-4">Заявки</h2>
+          {registrationSummary}
           {confirmed.map((r) => (
             <div key={r.id} className="bg-gray-800 p-3 rounded mb-2">
               <div className="flex justify-between items-center">
