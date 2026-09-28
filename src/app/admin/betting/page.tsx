@@ -7,7 +7,8 @@ import { useLanguage } from "@/components/LanguageProvider";
 import { isEventEffectivelyPublished } from "@/lib/event-publication";
 
 type Source = { id: string; event_id: string | null; clan_war_id: string | null; enabled: boolean };
-type EventItem = { id: string; title: string; type: string; is_published: boolean; publish_at: string | null; locks_at: string | null };
+type EventItem = { id: string; title: string; type: string; is_published: boolean; publish_at: string | null; moderation_status: string; frozen_at: string | null; cancelled_at: string | null;
+  sessions: Array<{id:string;public_number:number;start_time:string;status:string;betting_enabled:boolean;results_published:boolean}> };
 type WarItem = { id: string; title: string; status: string; scheduled_at: string | null; opponent_team_id: string | null };
 type Market = {
   id: string;
@@ -43,6 +44,8 @@ export default function AdminBettingPage() {
   const [data, setData] = useState<PageData>(emptyData);
   const [message, setMessage] = useState("");
   const [busyKey, setBusyKey] = useState("");
+  const [now, setNow] = useState(()=>Date.now());
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),15000);return()=>window.clearInterval(timer);},[]);
 
   const load = useCallback(async () => {
     const response = await authFetch("/api/admin/betting");
@@ -56,17 +59,16 @@ export default function AdminBettingPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const enabledEvents = useMemo(() => new Map(data.sources.filter((source) => source.event_id).map((source) => [source.event_id, source.enabled])), [data.sources]);
   const enabledWars = useMemo(() => new Map(data.sources.filter((source) => source.clan_war_id).map((source) => [source.clan_war_id, source.enabled])), [data.sources]);
 
-  const toggle = async (sourceKind: "event" | "war", sourceId: string, enabled: boolean) => {
-    const key = `${sourceKind}:${sourceId}`;
+  const toggle = async (sourceKind: "event" | "war", sourceId: string, enabled: boolean, sessionId?:string) => {
+    const key = `${sourceKind}:${sessionId ?? sourceId}`;
     setBusyKey(key);
     setMessage(enabled ? t("adminBetting.enabling") : t("adminBetting.disabling"));
     const response = await authFetch("/api/admin/betting", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggle", sourceKind, sourceId, enabled }),
+      body: JSON.stringify({ action: "toggle", sourceKind, sourceId, sessionId, enabled }),
     });
     const payload = await response.json();
     setBusyKey("");
@@ -122,28 +124,32 @@ export default function AdminBettingPage() {
           <h2 className="mb-4 text-xl font-bold">{t("adminBetting.eventsTitle")}</h2>
           <div className="space-y-3">
             {data.events.length === 0 && <p className="text-sm text-slate-500">{t("adminBetting.eventsEmpty")}</p>}
-            {data.events.map((event) => {
-              const enabled = enabledEvents.get(event.id) ?? false;
-              const published = isEventEffectivelyPublished(event);
-              const hasStartTime = Boolean(event.locks_at);
-              const startIsFuture = Boolean(event.locks_at && new Date(event.locks_at) > new Date());
-              const unavailable = !published || !hasStartTime || !startIsFuture;
-              const unavailableMessage = !published
-                ? t("adminBetting.eventNotPublished")
-                : !hasStartTime
-                  ? t("adminBetting.eventNoStart")
-                  : t("adminBetting.eventStarted");
-              const key = `event:${event.id}`;
-              return <article key={event.id} className="rounded-xl border border-white/10 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div><strong>{event.title}</strong><p className="mt-1 text-xs text-slate-500">{event.type} · {event.locks_at ? formatDate(event.locks_at, { dateStyle: "short", timeStyle: "short" }) : t("adminBetting.unknownTime")}</p></div>
-                  <button type="button" className={enabled ? "rounded bg-red-900 px-3 py-2 text-xs" : "rounded bg-emerald-700 px-3 py-2 text-xs"} disabled={busyKey === key || (!enabled && unavailable)} onClick={() => void toggle("event", event.id, !enabled)}>
-                    {enabled ? t("adminBetting.disable") : t("adminBetting.enable")}
-                  </button>
-                </div>
-                {unavailable && !enabled && <p className="mt-2 text-xs text-amber-300">{unavailableMessage}</p>}
-              </article>;
-            })}
+            {data.events.map((event) => <article key={event.id} className="rounded-xl border border-white/10 p-4">
+              <strong>{event.title}</strong>
+              {!event.sessions.length && <p className="mt-2 text-xs text-slate-500">{t("adminBetting.eventNoStart")}</p>}
+              <div className="mt-3 space-y-3">{event.sessions.map(session=>{
+                const ended=Date.parse(session.start_time)<=now||["cancelled","completed"].includes(session.status)||session.results_published;
+                const eventAvailable=isEventEffectivelyPublished(event)&&event.moderation_status==="approved"&&!event.frozen_at&&!event.cancelled_at;
+                const unavailable=ended||!eventAvailable;
+                const enabled=session.betting_enabled;
+                return <div key={session.id} className="rounded-lg border border-white/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><p className="text-sm font-semibold">{locale==="ru"?"Сессия":locale==="kk"?"Сессия":"Сессия"} {session.public_number}</p>
+                      <p className="text-xs text-slate-400">{formatDate(session.start_time,{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Moscow"})} МСК</p>
+                    </div>
+                    <button type="button" className={enabled?"rounded bg-red-900 px-3 py-2 text-xs disabled:opacity-50":"rounded bg-emerald-700 px-3 py-2 text-xs disabled:opacity-50"}
+                      disabled={!!busyKey||(!enabled&&unavailable)} onClick={()=>void toggle("event",event.id,!enabled,session.id)}>
+                      {enabled?t("adminBetting.disable"):t("adminBetting.enable")}
+                    </button>
+                  </div>
+                  <p className={`mt-2 text-xs ${unavailable?"text-amber-300":enabled?"text-emerald-300":"text-slate-400"}`}>
+                    {ended ? (locale==="ru"?"Приём ставок закрыт для этой сессии":locale==="kk"?"Осы сессияға ставкалар жабық":"Бул сессияга коюмдар жабык")
+                      : !eventAvailable ? t("adminBetting.eventNotPublished")
+                      : enabled?t("adminBetting.enabled"):t("adminBetting.disabled")}
+                  </p>
+                </div>;
+              })}</div>
+            </article>)}
           </div>
         </div>
 

@@ -33,7 +33,8 @@ try {
   await db.exec(`create trigger ${triggerName} ${event} on public.${table} for each row execute function public.${functionName}()`);
  }
 
- for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('202609')).sort()){
+ // baseline.sql already represents the pre-update schema; replay only update 2 and later migrations.
+ for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('202609')&&n>='202609220001').sort()){
   const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}
@@ -146,7 +147,9 @@ try {
  await verifyStatistics(db,id);
  await verifyLifecycle(db,id,config);
  await verifyBetting(db,id,config);
- await verifyContinuity(db,id,config);
- await verifyLegacyRegistration(db,id,config);
- await verifyAcceptance(db,id,config);
+ if(!process.argv.includes('--betting')) {
+  await verifyContinuity(db,id,config);
+  await verifyLegacyRegistration(db,id,config);
+  await verifyAcceptance(db,id,config);
+ }
 } catch(error){console.error('FAILED:',error.message,error.where??'',error.detail??'');process.exitCode=1;} finally {await db.close();}

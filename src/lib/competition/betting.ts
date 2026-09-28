@@ -11,7 +11,7 @@ export async function loadBettingSources(db:Database,sourceId?:string):Promise<B
    const {data:event,error}=await db.from("events").select("id,title,type,public_number,is_published,publish_at,moderation_status,frozen_at,cancelled_at").eq("id",source.event_id).single();if(error)throw error;
    if(!event.is_published||event.moderation_status!=="approved"||event.frozen_at||event.cancelled_at||event.publish_at&&Date.parse(event.publish_at)>now)continue;
    const [sessions,groups,games,registrations,publications]=await Promise.all([
-    allRows((a,b)=>db.from("event_sessions").select("id,start_time,public_number").eq("event_id",event.id).neq("status","cancelled").gt("start_time",new Date(now).toISOString()).order("start_time").order("id").range(a,b)),
+    allRows((a,b)=>db.from("event_sessions").select("id,start_time,public_number").eq("event_id",event.id).eq("betting_enabled",true).not("status","in","(cancelled,completed)").gt("start_time",new Date(now).toISOString()).order("start_time").order("id").range(a,b)),
     allRows((a,b)=>db.from("event_groups").select("id,session_id,public_number,event_sessions!inner(event_id)").eq("event_sessions.event_id",event.id).eq("is_active",true).order("id").range(a,b)),
     allRows((a,b)=>db.from("event_games").select("id,session_id,group_id,game_number,map_name,public_number").eq("event_id",event.id).eq("status","scheduled").order("game_number").order("id").range(a,b)),
     allRows((a,b)=>db.from("event_registrations").select("team_id,participant_user_id,group_id,name_snapshot").eq("event_id",event.id).eq("status","confirmed").order("id").range(a,b)),

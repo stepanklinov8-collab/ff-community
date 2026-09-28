@@ -1,12 +1,13 @@
 import { z } from "zod";
-import { isEventEffectivelyPublished } from "@/lib/event-publication";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
+import { allRows } from "@/lib/competition/server";
 
 const toggleSchema = z.object({
   action: z.literal("toggle"),
   sourceKind: z.enum(["event", "war"]),
   sourceId: z.string().uuid(),
+  sessionId: z.string().uuid().optional(),
   enabled: z.boolean(),
 });
 
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     const [{ data: markets, error: marketsError }, { data: events, error: eventsError }, { data: wars, error: warsError }, { data: sources, error: sourcesError }, { data: settings }] =
       await Promise.all([
         supabase.from("betting_markets").select("id,event_id,game_id,clan_war_id,subject_team_name,mode,market_type,selection_value,line,odds,status,locks_at,outcome,created_at").order("created_at", { ascending: false }).limit(300),
-        supabase.from("events").select("id,title,type,is_published,publish_at").in("type", ["tournament", "training", "solo", "bo", "kv"]).order("created_at", { ascending: false }).limit(200),
+        supabase.from("events").select("id,title,type,is_published,publish_at,moderation_status,frozen_at,cancelled_at").in("type", ["tournament", "training", "solo", "bo", "kv"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("clan_wars").select("id,title,creator_team_id,opponent_team_id,status,scheduled_at").in("status", ["agreed", "completed", "cancelled"]).order("created_at", { ascending: false }).limit(200),
         supabase.from("betting_sources").select("id,event_id,clan_war_id,enabled,updated_at"),
         auth.roles.includes("superadmin")
@@ -45,18 +46,18 @@ export async function GET(request: Request) {
       throw marketsError ?? eventsError ?? warsError ?? sourcesError;
     }
     const eventIds = (events ?? []).map((event) => event.id);
-    const { data: sessions, error: sessionsError } = eventIds.length
-      ? await supabase.from("event_sessions").select("event_id,start_time").in("event_id", eventIds).order("start_time")
-      : { data: [], error: null };
-    if (sessionsError) throw sessionsError;
-    const firstStartByEvent = new Map<string, string>();
-    for (const session of sessions ?? []) {
-      if (!firstStartByEvent.has(session.event_id)) firstStartByEvent.set(session.event_id, session.start_time);
-    }
+    const sessions = eventIds.length ? await allRows((a,b) => supabase.from("event_sessions")
+      .select("id,event_id,public_number,start_time,status,betting_enabled")
+      .in("event_id",eventIds).order("start_time").order("id").range(a,b)) : [];
+    const publications = eventIds.length ? await allRows((a,b) => supabase.from("competition_publications")
+      .select("session_id,event_sessions!inner(event_id)").in("event_sessions.event_id",eventIds)
+      .not("first_published_at","is",null).order("session_id").range(a,b)) : [];
+    const publishedSessions = new Set(publications.map(row=>row.session_id));
     return Response.json({
       markets: markets ?? [],
       sources: sources ?? [],
-      events: (events ?? []).map((event) => ({ ...event, locks_at: firstStartByEvent.get(event.id) ?? null })),
+      events: (events ?? []).map((event) => ({ ...event, sessions: sessions.filter(session=>session.event_id===event.id)
+        .map(session=>({...session,results_published:publishedSessions.has(session.id)})) })),
       wars: wars ?? [],
       settings: settings ?? null,
       isOwner: auth.roles.includes("superadmin"),
@@ -91,43 +92,34 @@ export async function POST(request: Request) {
       return Response.json({ success: true });
     }
 
-    let eventId: string | null = null;
-    let clanWarId: string | null = null;
-    let locksAt: string | null = null;
     if (payload.sourceKind === "event") {
-      const [{ data: event, error: eventError }, { data: session, error: sessionError }] = await Promise.all([
-        supabase.from("events").select("id,type,is_published,publish_at,moderation_status,frozen_at,cancelled_at").eq("id", payload.sourceId).maybeSingle(),
-        supabase.from("event_sessions").select("start_time").eq("event_id", payload.sourceId).neq("status","cancelled").gt("start_time",new Date().toISOString()).order("start_time").limit(1).maybeSingle(),
-      ]);
-      if (eventError || sessionError) throw eventError ?? sessionError;
-      if (!event || !["tournament", "training", "solo", "bo", "kv"].includes(event.type)) {
-        return Response.json({ error: "Этот тип мероприятия не поддерживает ставки" }, { status: 400 });
-      }
-      if (!isEventEffectivelyPublished(event)||event.moderation_status!=="approved"||event.frozen_at||event.cancelled_at) return Response.json({ error: "Сначала опубликуйте мероприятие" }, { status: 400 });
-      eventId = event.id;
-      locksAt = session?.start_time ?? null;
-    } else {
-      const { data: war, error: warError } = await supabase.from("clan_wars")
-        .select("id,status,scheduled_at,opponent_team_id").eq("id", payload.sourceId).maybeSingle();
-      if (warError) throw warError;
-      if (!war || war.status !== "agreed" || !war.opponent_team_id) {
-        return Response.json({ error: "Можно включить только согласованное КВ с соперником" }, { status: 400 });
-      }
-      clanWarId = war.id;
-      locksAt = war.scheduled_at;
+      if (!payload.sessionId) return Response.json({error:"Выберите конкретную сессию"},{status:400});
+      const { error } = await supabase.rpc("u2_set_session_betting",{
+        p_actor:auth.user.id,p_event:payload.sourceId,p_session:payload.sessionId,p_enabled:payload.enabled,
+      });
+      if (error) return Response.json({error:error.message},{status:400});
+      return Response.json({success:true,enabled:payload.enabled});
     }
+
+    const { data: war, error: warError } = await supabase.from("clan_wars")
+      .select("id,status,scheduled_at,opponent_team_id").eq("id", payload.sourceId).maybeSingle();
+    if (warError) throw warError;
+    if (!war || war.status !== "agreed" || !war.opponent_team_id) {
+      return Response.json({ error: "Можно включить только согласованное КВ с соперником" }, { status: 400 });
+    }
+    const locksAt = war.scheduled_at;
     if (payload.enabled && (!locksAt || new Date(locksAt) <= new Date())) {
       return Response.json({ error: "Для ставок требуется будущее время начала" }, { status: 400 });
     }
 
     const existingQuery = supabase.from("betting_sources").select("id")
-      .eq(payload.sourceKind === "event" ? "event_id" : "clan_war_id", payload.sourceId)
+      .eq("clan_war_id", payload.sourceId)
       .maybeSingle();
     const { data: existing, error: existingError } = await existingQuery;
     if (existingError) throw existingError;
     const sourceValues = {
-      event_id: eventId,
-      clan_war_id: clanWarId,
+      event_id: null,
+      clan_war_id: war.id,
       enabled: payload.enabled,
       enabled_by: auth.user.id,
       updated_at: new Date().toISOString(),
@@ -138,10 +130,7 @@ export async function POST(request: Request) {
     if (saveError) throw saveError;
 
     if (!payload.enabled) {
-      let marketsQuery = supabase.from("betting_markets").update({ status: "locked", updated_at: new Date().toISOString() }).eq("status", "open");
-      marketsQuery = payload.sourceKind === "event"
-        ? marketsQuery.eq("event_id", payload.sourceId)
-        : marketsQuery.eq("clan_war_id", payload.sourceId);
+      const marketsQuery = supabase.from("betting_markets").update({ status: "locked", updated_at: new Date().toISOString() }).eq("status", "open").eq("clan_war_id",payload.sourceId);
       const { error: lockError } = await marketsQuery;
       if (lockError) throw lockError;
     }
