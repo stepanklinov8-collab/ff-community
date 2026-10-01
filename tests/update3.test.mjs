@@ -6,9 +6,9 @@ import { playerRoleIds } from "../src/lib/profile/roles.ts";
 
 test("map statistics use played games, first places and only recorded landing locations", () => {
   const rows = [
-    { map: "bermuda", played: true, place: 1, landingLocation: "Peak", teamId: "team" },
-    { map: "bermuda", played: true, place: 4, landingLocation: "Peak", teamId: "team" },
-    { map: "bermuda", played: true, place: 6, landingLocation: "Factory", teamId: "team" },
+    { map: "bermuda", played: true, place: 1, landingLocation: "peak", teamId: "team" },
+    { map: "bermuda", played: true, place: 4, landingLocation: "peak", teamId: "team" },
+    { map: "bermuda", played: true, place: 6, landingLocation: "factory", teamId: "team" },
     { map: "bermuda", played: false, place: null, landingLocation: null, teamId: "team" },
   ];
   const [stat] = calculateMapStatistics(rows);
@@ -16,14 +16,16 @@ test("map statistics use played games, first places and only recorded landing lo
   assert.equal(stat.firstPlaces, 1);
   assert.equal(stat.winPercent, 33.33);
   assert.equal(stat.averagePlace, 3.67);
-  assert.deepEqual(stat.favoriteLocations, [{ location: "Peak", games: 2, percent: 66.67 }]);
+  assert.deepEqual(stat.favoriteLocations, [{ location: "peak", games: 2, percent: 66.67 }]);
 });
 
 test("landing locations are restricted to the selected map and roles remain a finite allowlist", () => {
-  assert.ok(locationsForMap("bermuda").includes("Peak"));
-  assert.equal(isKnownLandingLocation("bermuda", "Peak"), true);
-  assert.equal(isKnownLandingLocation("bermuda", "Stadium"), false);
+  assert.equal(locationsForMap("bermuda").find(item => item.id === "peak")?.title, "Пик");
+  assert.equal(isKnownLandingLocation("bermuda", "peak"), true);
+  assert.equal(isKnownLandingLocation("bermuda", "Пик"), true);
+  assert.equal(isKnownLandingLocation("bermuda", "stadium"), false);
   assert.equal(isKnownLandingLocation("bermuda", null), true);
+  assert.ok(locationsForMap("solara").length >= 14);
   assert.equal(playerRoleIds.has("healer"), true);
   assert.equal(playerRoleIds.has("captain"), false);
 });

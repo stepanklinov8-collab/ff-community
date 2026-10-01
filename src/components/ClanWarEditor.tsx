@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {maps as availableMaps} from "@/lib/competition/model";
+import {mapTitle} from "@/lib/competition/map-catalog";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Swords } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -138,7 +139,7 @@ export default function ClanWarEditor({warId}:{warId?:string}) {
               </label>
               <label className="field-label">{tr("Побед в серии","Сериядағы жеңістер","Сериядагы жеңиштер")}<input type="number" disabled={structureLocked} min={1} max={5000} value={winsRequired} onChange={e=>{const value=Math.max(1,Number(e.target.value));setWinsRequired(value);if(gameCount<2*value-1){setGameCount(2*value-1);setGameMaps(m=>Array.from({length:2*value-1},(_,i)=>m[i]??"bermuda"));}}}/></label>
               <label className="field-label">{tr("Количество игр","Ойын саны","Оюндардын саны")}<input type="number" disabled={structureLocked} min={2*winsRequired-1} max={10000} value={gameCount} onChange={e=>{const value=Math.max(1,Number(e.target.value));setGameCount(value);setGameMaps(m=>Array.from({length:value},(_,i)=>m[i]??"bermuda"));}}/></label>
-              <div className="space-y-2">{gameMaps.map((map,i)=><label className="block" key={i}>{tr("Игра","Ойын","Оюн")} {i+1}<select disabled={structureLocked} value={map} onChange={e=>setGameMaps(m=>m.map((v,n)=>n===i?e.target.value:v))}>{availableMaps.map(m=><option key={m} value={m}>{m}</option>)}</select></label>)}</div>
+              <div className="space-y-2">{gameMaps.map((map,i)=><label className="block" key={i}>{tr("Игра","Ойын","Оюн")} {i+1}<select disabled={structureLocked} value={map} onChange={e=>setGameMaps(m=>m.map((v,n)=>n===i?e.target.value:v))}>{availableMaps.map(m=><option key={m} value={m}>{mapTitle(m)}</option>)}</select></label>)}</div>
               <label className="field-label">{t("clanWars.proposedTime")} (МСК)<input className="field mt-2" disabled={structureLocked} type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
             </div>
             <label className="field-label">{t("clanWars.descriptionLabel")}<textarea className="field mt-2 min-h-28" maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("clanWars.descriptionPlaceholder")} /></label>

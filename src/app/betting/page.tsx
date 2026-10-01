@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { useLanguage } from "@/components/LanguageProvider";
+import { mapTitle } from "@/lib/competition/map-catalog";
 
 type Mode = "tournament" | "training" | "solo" | "bo" | "kv";
 type MarketType = "kills_over" | "kills_under" | "exact_place" | "win" | "loss" | "exact_score";
@@ -43,10 +44,6 @@ type PageData = {
   sources: Source[];
   previews: Preview[];
   bets: Bet[];
-};
-
-const mapLabels: Record<string, string> = {
-  bermuda: "Бермуды", nexterra: "Некстера", solara: "Солара", purgatory: "Чистилище", kalahari: "Калахари",
 };
 
 const initialData: PageData = {
@@ -269,7 +266,7 @@ export default function BettingPage() {
           <h2 className="mb-5 text-xl font-bold">{t("betting.chooseOutcome")}</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className="text-sm text-slate-400">{t("betting.event")}<select className="mt-1" value={sourceId} onChange={(event) => changeSource(event.target.value)}><option value="">{t("common.choose")}</option>{data.sources.map((source) => <option key={source.id} value={source.id}>{modeLabels[source.mode]} · {source.title}</option>)}</select></label>
-            {selectedSource && <label className="text-sm text-slate-400">{t("betting.gameMap")}<select className="mt-1" value={gameId} onChange={(event) => { const nextGame = selectedSource?.games.find((game) => game.id === event.target.value); setGameId(event.target.value); setTeamId(selectedSource?.teams.find((team) => !nextGame || team.gameIds.includes(nextGame.id))?.id ?? ""); resetQuote(); }}><option value="">{t("common.choose")}</option>{selectedSource?.games.map((game) => <option key={game.id} value={game.id}>{game.publicId} · {formatDate(game.locksAt,{timeZone:"Europe/Moscow"})} МСК · {mapLabels[game.map_name] ?? game.map_name}</option>)}</select></label>}
+            {selectedSource && <label className="text-sm text-slate-400">{t("betting.gameMap")}<select className="mt-1" value={gameId} onChange={(event) => { const nextGame = selectedSource?.games.find((game) => game.id === event.target.value); setGameId(event.target.value); setTeamId(selectedSource?.teams.find((team) => !nextGame || team.gameIds.includes(nextGame.id))?.id ?? ""); resetQuote(); }}><option value="">{t("common.choose")}</option>{selectedSource?.games.map((game) => <option key={game.id} value={game.id}>{game.publicId} · {formatDate(game.locksAt,{timeZone:"Europe/Moscow"})} МСК · {mapTitle(game.map_name)}</option>)}</select></label>}
             <label className="text-sm text-slate-400">{t("common.team")}<select className="mt-1" value={teamId} onChange={(event) => { setTeamId(event.target.value); resetQuote(); }}><option value="">{t("common.choose")}</option>{availableTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
             <label className="text-sm text-slate-400">{t("betting.outcome")}<select className="mt-1" value={marketType} onChange={(event) => { const next = event.target.value as MarketType; setMarketType(next); setSelectionValue(next === "exact_place" ? "1" : next === "exact_score" ? "7:3" : next); resetQuote(); }}>{marketOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             {marketType.startsWith("kills_") && <label className="text-sm text-slate-400">{t("betting.killsLine")}<input className="mt-1" type="number" min="0.5" step="1" value={line} onChange={(event) => { setLine(event.target.value); resetQuote(); }} /><span className="mt-1 block text-xs text-slate-600">{t("betting.lineHint")}</span></label>}

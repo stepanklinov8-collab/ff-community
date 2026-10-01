@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isKnownLandingLocation } from "./map-catalog";
 
-export const maps = ["bermuda", "nexterra", "solara", "purgatory", "kalahari"] as const;
+export const maps = ["bermuda", "bermuda_remastered", "nexterra", "alpine", "solara", "purgatory", "kalahari"] as const;
 export const defaultPlacePoints = [12, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 const count = z.number().int().nonnegative().max(1_000_000);
 export const playerInputSchema = z.object({

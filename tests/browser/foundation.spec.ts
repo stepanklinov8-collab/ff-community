@@ -43,5 +43,5 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "База знаний" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Бермуды" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Peak" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Пик/ })).toBeVisible();
 });
