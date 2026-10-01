@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { mapCatalog } from "@/lib/competition/map-catalog";
 import { type KnowledgeCategoryId } from "@/lib/knowledge/catalog";
-import { knowledgeCharacters, knowledgeGuide, knowledgePets, knowledgeUpdates, knowledgeWeapons, type KnowledgeCatalogEntry } from "@/lib/knowledge/game-catalog";
+import { knowledgeCharacters, knowledgeGuide, knowledgeMedia, knowledgePets, knowledgeSupport, knowledgeUniverse, knowledgeUpdates, knowledgeWeapons, type KnowledgeCatalogEntry } from "@/lib/knowledge/game-catalog";
 
 const categories: Array<{ id: KnowledgeCategoryId; title: string; text: string }> = [
   { id: "maps", title: "Карты и локации", text: "Русские названия карт и всех доступных точек высадки." },
   { id: "weapons", title: "Оружие", text: "Типы оружия, характеристики и изменения баланса, собранные в базе." },
   { id: "characters", title: "Персонажи", text: "Персонажи, способности, пресеты и изменения навыков." },
   { id: "pets", title: "Питомцы", text: "Питомцы, навыки и правила их использования." },
-  { id: "updates", title: "Обновления", text: "Новости, изменения игрового процесса и история обновлений." },
+  { id: "updates", title: "Новости", text: "Новости, изменения игрового процесса и история обновлений." },
+  { id: "media", title: "Медиа", text: "Видео, иллюстрации и материалы для участников и организаторов." },
+  { id: "support", title: "Поддержка", text: "Ответы по профилю, мероприятиям, результатам и безопасности." },
+  { id: "universe", title: "Вселенная", text: "Режимы, роли, карты и соревновательная история проекта." },
   { id: "omcite", title: "Руководство", text: "Регистрация, команды, результаты и правила мероприятий." },
 ];
 
@@ -54,7 +57,13 @@ function GarenaMapViewer({ currentMap, selectedLocation, onMapChange, onLocation
   return <div className="garena-map-page">
     <header className="garena-map-nav">
       <Link className="garena-map-logo" href="/" aria-label="OMCITE">OMCITE</Link>
-      <nav className="garena-map-links" aria-label="Разделы базы знаний">{categories.map(category => <button key={category.id} type="button" className={category.id === "maps" ? "is-active" : ""} onClick={() => onSectionChange(category.id)}>{category.title}</button>)}</nav>
+      <nav className="garena-map-links" aria-label="Разделы базы знаний">
+        <details className="knowledge-nav-dropdown" open>
+          <summary>Игры</summary>
+          <div className="knowledge-nav-dropdown-panel">{categories.filter(category => ["maps", "weapons", "characters", "pets", "omcite"].includes(category.id)).map(category => <button key={category.id} type="button" className={category.id === "maps" ? "is-active" : ""} onClick={() => onSectionChange(category.id)}>{category.title}</button>)}</div>
+        </details>
+        {categories.filter(category => ["updates", "media", "support", "universe"].includes(category.id)).map(category => <button key={category.id} type="button" onClick={() => onSectionChange(category.id)}>{category.title}</button>)}
+      </nav>
       <div className="garena-map-actions"><span aria-hidden="true">◉</span><span aria-hidden="true">◎</span><Link href="/">На главную</Link></div>
     </header>
     <section className="garena-map-stage" aria-label={`Карта ${currentMap.title}`}>
@@ -72,6 +81,9 @@ const catalogBySection: Record<Exclude<KnowledgeCategoryId, "maps">, readonly Kn
   characters: knowledgeCharacters,
   pets: knowledgePets,
   updates: knowledgeUpdates,
+  media: knowledgeMedia,
+  support: knowledgeSupport,
+  universe: knowledgeUniverse,
   omcite: knowledgeGuide,
 };
 
@@ -91,6 +103,9 @@ function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: E
     characters: "Персонажи, их роли и описания особых способностей на русском языке.",
     pets: "Питомцы и навыки, которые помогают команде в бою, разведке и высадке.",
     updates: "Хронология обновлений, карт, режима, оружия, персонажей и игровых событий.",
+    media: "Видео, изображения и материалы для подготовки к матчам и публикации мероприятий.",
+    support: "Пошаговые ответы по профилю, регистрации, результатам и безопасности данных.",
+    universe: "Справочник режимов, ролей, карт и соревновательной истории проекта.",
     omcite: "Локальное руководство по использованию базы знаний и функций OMCITE.",
   };
   return <section className="knowledge-catalog-section panel space-y-5 p-5 sm:p-7">

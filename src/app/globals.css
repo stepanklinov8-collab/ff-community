@@ -238,6 +238,49 @@ body.knowledge-garena-mode .app-main {
   border: 0;
 }
 
+.knowledge-nav-dropdown {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.knowledge-nav-dropdown summary {
+  cursor: pointer;
+  color: #d7d7d7;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.knowledge-nav-dropdown summary::-webkit-details-marker { display: none; }
+.knowledge-nav-dropdown summary::after { content: "⌄"; margin-left: 6px; color: #ffca05; }
+.knowledge-nav-dropdown[open] summary { color: #ffca05; }
+
+.knowledge-nav-dropdown-panel {
+  position: absolute;
+  top: 63px;
+  left: -18px;
+  display: grid;
+  min-width: 205px;
+  gap: 0;
+  padding: 9px;
+  background: rgba(5, 5, 5, 0.98);
+  border: 1px solid rgba(255, 202, 5, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+.knowledge-nav-dropdown-panel button {
+  padding: 10px 11px;
+  text-align: left;
+}
+
+.knowledge-nav-dropdown-panel button:hover,
+.knowledge-nav-dropdown-panel button.is-active { background: rgba(255, 202, 5, 0.1); }
+
 .garena-map-links a:hover,
 .garena-map-links button:hover,
 .garena-map-links button.is-active,

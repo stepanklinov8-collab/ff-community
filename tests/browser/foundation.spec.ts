@@ -55,6 +55,12 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await expect(page.getByRole("heading", { name: "Рэй", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Питомцы", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Клык", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Обновления", exact: true }).first().click();
+  await page.getByRole("button", { name: "Новости", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Солара: новая карта", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Медиа", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Видео матчей", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Поддержка", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Аккаунт и профиль", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Вселенная", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Игровые режимы", exact: true })).toBeVisible();
 });

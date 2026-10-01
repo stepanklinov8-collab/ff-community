@@ -1,4 +1,4 @@
-export type KnowledgeCategoryId = "maps" | "weapons" | "characters" | "pets" | "updates" | "omcite";
+export type KnowledgeCategoryId = "maps" | "weapons" | "characters" | "pets" | "updates" | "media" | "support" | "universe" | "omcite";
 
 export type OfficialKnowledgeItem = {
   id: string;
