@@ -6,6 +6,7 @@ type MapCatalogItem = {
   officialUrl: string;
   description: string;
   imageUrl: string;
+  thumbnailUrl: string;
   gallery: readonly string[];
   locations: readonly MapLocation[];
 };
@@ -18,7 +19,8 @@ export const mapCatalog = [
     title: "Бермуды",
     officialUrl: "https://ff.garena.com/en/maps/1",
     description: "Классическая тропическая карта Free Fire с побережьем, городскими районами и большими открытыми пространствами между ключевыми точками высадки.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5d5657e3de320057f9ae1db2f322778f.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20246/651fdcfddfb2f946f0d86df3e657bf52.jpeg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20238/6e9a0754dc2c3177c19deb2f890b0152.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/719e90d835b1c7104bb0c551d514b37a.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/74270d241f3a6dee440b3712eac97d84.jpg",
@@ -38,7 +40,8 @@ export const mapCatalog = [
     title: "Бермуды: обновлённая версия",
     officialUrl: "https://ff.garena.com/en/maps/4",
     description: "Обновлённая версия Бермуд с переработанными районами, маршрутами и знакомыми точками, которые получили новое устройство.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/76627b0f7681f28ef397a492721e32df.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/18dc6bf0bd596759987b6855f2e96f87.jpg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/36a1171ae258d3bc2e428132093e51f4.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/875f278c61ca6bb57aa961359eba1b6d.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c4db9a7de897068c68975f81da8d0b9f.jpg",
@@ -57,7 +60,8 @@ export const mapCatalog = [
     title: "Нэкст Терра",
     officialUrl: "https://ff.garena.com/en/maps/11",
     description: "Футуристическая карта с технологичными объектами, вертикальными маршрутами и зонами, рассчитанными на быстрые переходы между укрытиями.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f72d0b2882b01925bd0dedaa23ac2ef4.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/359580945665659e78eea0e1aa103c60.png",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/db588e1948c88c726487ab35119dd0a6.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a9fa7c410992baa132137948e949dccb.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/60379338656f4409b3b4d58b930ac62f.jpg",
@@ -75,7 +79,8 @@ export const mapCatalog = [
     title: "Альпийские горы",
     officialUrl: "https://ff.garena.com/en/maps/2",
     description: "Снежная карта с горными районами, железной дорогой и длинными линиями обзора, где важны укрытия и контроль высоты.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/fac60ddb902924cc172f999e220449d4.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/01619af902dfaf762f816ed1028f5bbe.jpg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4b2b2f15b2070502a542e2e3e0be176d.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/6b77c606787d00ac9e49bf9beaab4659.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e06acf0f1587dfc49f7ebd61452530c3.jpg",
@@ -94,6 +99,7 @@ export const mapCatalog = [
     officialUrl: "https://ff.garena.com/en/maps/",
     description: "Портовый город с извилистой береговой линией и системой слайдов, которая соединяет районы карты. На официальной странице также описаны интерактивные зоны и динамическая погода.",
     imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/0f7e4acbb96c021bb8a72338c29bf39c.jpg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/913b56c52164b5c09ff50974647b0b5d.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/17a4afa7367f9520fb97aa24b964e450.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2ba345de8135924fcfbc1543695d8452.jpg",
@@ -111,7 +117,8 @@ export const mapCatalog = [
     title: "Чистилище",
     officialUrl: "https://ff.garena.com/en/maps/10",
     description: "Большая карта с равнинами, лесными районами, промышленными объектами и перепадами высоты между центральными и окраинными зонами.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/38d2a5b7165fb6cc3682dd66212494b8.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/697b5606cd8a99afd33697c1f6cde233.jpg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/17a873147c13e75eadbfc5c8585303b9.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f82dd19851a69b1bed40fb04098404d1.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/84abdc1183b36fc78cccbc0057073fba.jpg",
@@ -129,7 +136,8 @@ export const mapCatalog = [
     title: "Калахари",
     officialUrl: "https://ff.garena.com/en/maps/3",
     description: "Пустынная карта с открытыми пространствами, каменными возвышенностями и промышленными районами, где особенно важны укрытия и дальние дистанции.",
-    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8fc4c725fc2645d254e886f321866431.jpg",
+    imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4735b868bcfea9d613720bfd1e4ee95a.jpg",
+    thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/bbc0eb5b89e365e139b04d220a8188fc.jpg",
     gallery: [
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/01bb144b2e410615e5378d0d1621ffcc.jpg",
       "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8e96e17c24404f7469950b9af0d003a2.jpg",

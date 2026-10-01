@@ -36,6 +36,7 @@ test("every official map has a Russian catalog entry, map image and source galle
     assert.ok(map.title.length > 0);
     assert.match(map.officialUrl, /^https:\/\/ff\.garena\.com\/en\/maps\//);
     assert.match(map.imageUrl, /^https:\/\/cdn\.wildflamestudio\.com\//);
+    assert.match(map.thumbnailUrl, /^https:\/\/cdn\.wildflamestudio\.com\//);
     assert.equal(map.gallery.length, 3);
     assert.ok(map.gallery.every(image => image.startsWith("https://cdn.wildflamestudio.com/")));
   }
