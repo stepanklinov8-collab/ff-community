@@ -34,7 +34,7 @@ try {
  }
 
  // baseline.sql already represents the pre-update schema; replay only update 2 and later migrations.
- for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>n.startsWith('202609')&&n>='202609220001').sort()){
+ for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>/^\d{12}_.+\.sql$/.test(n)&&n>='202609220001').sort()){
   const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}

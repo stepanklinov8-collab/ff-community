@@ -1,5 +1,16 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+
+// Production changes are a separate release operation, never part of local verification.
+const backupFile = process.argv.find(arg => arg.startsWith("--restored-backup="))?.slice("--restored-backup=".length);
+if (!process.argv.includes("--production") || !process.argv.includes("--project=ojtqdfdqicozzqlgjtnm") || !backupFile) {
+  throw new Error("Production migration requires explicit project and a verified restore manifest.");
+}
+const backupProof = JSON.parse(readFileSync(backupFile, "utf8"));
+if (backupProof.sourceProject !== "ojtqdfdqicozzqlgjtnm" || !backupProof.restoredAt || !backupProof.sha256 || backupProof.verified !== true) {
+  throw new Error("Backup restore has not been verified");
+}
 
 const token = (await readFile("C:/Users/Lenovo/.supabase/access-token", "utf8")).trim();
 const projectRef = "ojtqdfdqicozzqlgjtnm";

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { allowExternalEffects } from "@/platform/server-environment";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 
@@ -64,6 +65,7 @@ async function readSourceText(
 }
 
 async function translateWithProvider(text: string, targetLocale: "kk" | "ky") {
+  if (!allowExternalEffects()) return null;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const model = process.env.OPENAI_TRANSLATION_MODEL ?? "gpt-5-mini";

@@ -4,6 +4,7 @@ import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { deliverPushTokens } from "./delivery";
+import { allowExternalEffects } from "@/platform/server-environment";
 
 interface PushPayload {
   title: string;
@@ -34,6 +35,7 @@ function getFirebaseAdminApp() {
 }
 
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
+  if (!allowExternalEffects()) return { successCount: 0, failureCount: 0 };
   if (!userIds.length) return { successCount: 0, failureCount: 0 };
   const supabase = createAdminClient();
   const users = [...new Set(userIds)], tokens: string[] = [];

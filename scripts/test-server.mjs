@@ -1,0 +1,10 @@
+import { spawn } from "node:child_process";
+import { safeTestEnv } from "./safe-test-env.mjs";
+const mode = process.argv[2] || "public";
+if (!["public", "off", "preview"].includes(mode)) throw new Error("Unknown test server mode");
+const port = { public: "3103", off: "3104", preview: "3105" }[mode];
+const env = { ...safeTestEnv(), OMCITE_MODULES: "foundation-demo=" + mode };
+const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", port, "-H", "127.0.0.1"], { env, stdio: "inherit", windowsHide: true });
+child.on("error", error => { console.error(error.message); process.exitCode = 1; });
+child.on("exit", code => { process.exitCode = code ?? 1; });
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));

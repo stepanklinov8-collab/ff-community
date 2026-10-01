@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/safe-dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "verify": "node scripts/verify.mjs",
+    "build:test": "node scripts/safe-build.mjs",
+    "test:foundation": "node --test tests/foundation.test.mjs",
+    "test:database": "node tools/database-tests/verify.mjs",
+    "test:browser": "playwright test",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "module:create": "node scripts/create-module.mjs",
     "test:odds": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-betting-odds.mjs",
     "env:prepare": "node scripts/prepare-local-env.mjs",
     "env:firebase-admin": "node scripts/import-firebase-service-account.mjs"
@@ -34,9 +41,13 @@
     "zod": "^4.5.4"
   },
   "overrides": {
-    "exceljs": { "uuid": "11.1.1" }
+    "@grpc/grpc-js": "1.14.5",
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

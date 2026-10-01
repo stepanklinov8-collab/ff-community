@@ -1,9 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { assertTestDatabaseTarget } from "../../src/platform/environment.ts";
 
 const root = resolve(".");
 const token = (await readFile("C:/Users/Lenovo/.supabase/access-token", "utf8")).trim();
 const staging = JSON.parse(await readFile("tools/database-tests/artifacts/staging-private.json", "utf8"));
+assertTestDatabaseTarget(`https://${staging.project.ref}.supabase.co`);
 const files = (await import("node:fs/promises")).readdir(resolve(root, "supabase/migrations"));
 const migrations = (await files).filter((file) => file.endsWith(".sql")).sort();
 const previous = JSON.parse(await readFile("tools/database-tests/artifacts/staging-migrations.json", "utf8").catch(() => "{}"));

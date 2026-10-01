@@ -31,6 +31,7 @@ import { authFetch } from "@/utils/api/auth-fetch";
 import { localeNames, locales } from "@/i18n/messages";
 import {competitionText} from "@/i18n/competition";
 import { useLanguage } from "@/components/LanguageProvider";
+import ModuleNavigation from "@/components/ModuleNavigation";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -157,6 +158,7 @@ export default function Sidebar() {
                 );
               })}
 
+              <ModuleNavigation userId={user?.id} onNavigate={() => setOpen(false)} />
               {isAdmin && (
                 <Link href="/admin" onClick={() => setOpen(false)} className={pathname.startsWith("/admin") ? "nav-item admin active" : "nav-item admin"}>
                   <ShieldCheck size={19} />
