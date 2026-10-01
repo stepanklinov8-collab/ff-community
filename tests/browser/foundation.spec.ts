@@ -44,8 +44,17 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await expect(page.getByRole("heading", { name: "База знаний" })).toBeVisible();
   await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Солара");
   await expect(page.getByRole("button", { name: /Хаб/ })).toBeVisible();
+  expect(await page.getByRole("button", { name: /^\d+\./ }).count()).toBe(0);
   expect(await page.evaluate(() => Array.from(document.querySelectorAll("a")).map(link => new URL(link.href).hostname).filter(host => !["127.0.0.1", "localhost"].includes(host)))).toEqual([]);
   expect(await page.locator("body").innerText()).not.toContain("Garena");
   await page.getByRole("tab", { name: "Бермуды", exact: true }).click();
   await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Бермуды");
+  await page.getByRole("button", { name: "Оружие", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Лазерная лечащая пушка", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Персонажи", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Рэй", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Питомцы", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Клык", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Обновления", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Солара: новая карта", exact: true })).toBeVisible();
 });

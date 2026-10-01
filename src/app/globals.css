@@ -305,25 +305,6 @@ body.knowledge-garena-mode .app-main {
   transform: translate(-50%, -50%);
 }
 
-.garena-map-marker-number {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  color: #111;
-  font-size: 11px;
-  font-weight: 900;
-  background: #f7c900;
-  border-radius: 4px;
-  place-items: center;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 45%);
-  transform: rotate(45deg);
-}
-
-.garena-map-marker-number::first-letter {
-  display: inline-block;
-  transform: rotate(-45deg);
-}
-
 .garena-map-marker-name {
   position: absolute;
   top: -14px;
@@ -524,6 +505,147 @@ body.knowledge-garena-mode .app-main {
   border-radius: 999px;
 }
 
+.knowledge-catalog-section {
+  background: linear-gradient(145deg, rgb(8 22 31 / 94%), rgb(4 11 17 / 96%));
+}
+
+.knowledge-catalog-count {
+  padding: 7px 12px;
+  color: #9bdcf4;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgb(21 73 96 / 40%);
+  border: 1px solid rgb(92 186 230 / 24%);
+  border-radius: 999px;
+}
+
+.knowledge-catalog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.knowledge-catalog-filters button {
+  padding: 8px 12px;
+  color: #8eabb8;
+  cursor: pointer;
+  background: rgb(5 18 26 / 75%);
+  border: 1px solid rgb(92 186 230 / 20%);
+  border-radius: 999px;
+  transition: 160ms ease;
+}
+
+.knowledge-catalog-filters button:hover,
+.knowledge-catalog-filters button.is-active {
+  color: #e8fbff;
+  background: rgb(13 83 108 / 65%);
+  border-color: rgb(92 210 245 / 70%);
+}
+
+.knowledge-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.knowledge-catalog-card {
+  overflow: hidden;
+  background: rgb(5 14 21 / 88%);
+  border: 1px solid rgb(92 186 230 / 18%);
+  border-radius: 16px;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 18%);
+  transition: 180ms ease;
+}
+
+.knowledge-catalog-card:hover {
+  border-color: rgb(92 210 245 / 62%);
+  transform: translateY(-2px);
+}
+
+.knowledge-catalog-card-image {
+  position: relative;
+  display: grid;
+  height: 168px;
+  overflow: hidden;
+  color: #84d7f2;
+  font-size: 42px;
+  font-weight: 900;
+  background: radial-gradient(circle at 30% 20%, rgb(35 141 178 / 35%), transparent 50%), #081b25;
+  place-items: center;
+}
+
+.knowledge-catalog-card-image img {
+  object-fit: cover;
+}
+
+.knowledge-catalog-card-image::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(180deg, transparent 45%, rgb(2 8 13 / 88%));
+}
+
+.knowledge-catalog-card-image small {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  z-index: 1;
+  overflow: hidden;
+  color: #e9fbff;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-catalog-card-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.knowledge-catalog-card-body h3 {
+  margin: 0;
+  color: #f4fbff;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.knowledge-catalog-card-body p {
+  min-height: 60px;
+  margin: 0;
+  color: #9fb4bf;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.knowledge-catalog-value {
+  color: #ffd45a;
+  font-size: 18px;
+}
+
+.knowledge-catalog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.knowledge-catalog-tags span {
+  padding: 4px 7px;
+  color: #8edaf2;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgb(19 69 91 / 35%);
+  border: 1px solid rgb(92 186 230 / 18%);
+  border-radius: 5px;
+}
+
 @media (max-width: 850px) {
   .garena-map-links { display: none; }
   .garena-map-nav { justify-content: space-between; }
@@ -537,6 +659,12 @@ body.knowledge-garena-mode .app-main {
   .garena-map-marker-name { font-size: 12px; }
   .garena-map-footer { align-items: flex-start; flex-direction: column; padding: 24px 20px; }
   .garena-section-switcher { flex-wrap: wrap; }
+  .knowledge-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .knowledge-catalog-grid { grid-template-columns: 1fr; }
+  .knowledge-catalog-card-image { height: 190px; }
 }
 
 .icon-button {
