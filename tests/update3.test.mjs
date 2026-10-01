@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateMapStatistics } from "../src/lib/competition/map-statistics.ts";
-import { isKnownLandingLocation, locationsForMap } from "../src/lib/competition/map-catalog.ts";
+import { isKnownLandingLocation, locationsForMap, mapCatalog } from "../src/lib/competition/map-catalog.ts";
 import { playerRoleIds } from "../src/lib/profile/roles.ts";
 
 test("map statistics use played games, first places and only recorded landing locations", () => {
@@ -28,4 +28,15 @@ test("landing locations are restricted to the selected map and roles remain a fi
   assert.ok(locationsForMap("solara").length >= 14);
   assert.equal(playerRoleIds.has("healer"), true);
   assert.equal(playerRoleIds.has("captain"), false);
+});
+
+test("every official map has a Russian catalog entry, map image and source gallery", () => {
+  assert.equal(mapCatalog.length, 7);
+  for (const map of mapCatalog) {
+    assert.ok(map.title.length > 0);
+    assert.match(map.officialUrl, /^https:\/\/ff\.garena\.com\/en\/maps\//);
+    assert.match(map.imageUrl, /^https:\/\/cdn\.wildflamestudio\.com\//);
+    assert.equal(map.gallery.length, 3);
+    assert.ok(map.gallery.every(image => image.startsWith("https://cdn.wildflamestudio.com/")));
+  }
 });

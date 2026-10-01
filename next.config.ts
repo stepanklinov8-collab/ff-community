@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   agentRules: false,
   poweredByHeader: false,
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "cdn.wildflamestudio.com" }],
+  },
   env: { NEXT_PUBLIC_DEPLOYMENT_ENV: environment },
 };
 

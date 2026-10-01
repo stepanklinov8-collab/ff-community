@@ -43,5 +43,10 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "База знаний" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Бермуды" })).toBeVisible();
+  await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Бермуды");
   await expect(page.getByRole("button", { name: /Пик/ })).toBeVisible();
+  await page.getByRole("tab", { name: "Солара", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Солара" })).toBeVisible();
+  await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Солара");
+  await expect(page.getByRole("link", { name: /Открыть официальный сайт: Солара/ })).toHaveAttribute("href", "https://ff.garena.com/en/maps/");
 });
