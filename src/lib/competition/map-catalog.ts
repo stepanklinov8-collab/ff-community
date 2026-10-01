@@ -18,7 +18,7 @@ export const mapCatalog = [
     id: "bermuda",
     title: "Бермуды",
     officialUrl: "https://ff.garena.com/en/maps/1",
-    description: "Классическая тропическая карта Free Fire с побережьем, городскими районами и большими открытыми пространствами между ключевыми точками высадки.",
+    description: "Классическая тропическая карта игры с побережьем, городскими районами и большими открытыми пространствами между ключевыми точками высадки.",
     imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20246/651fdcfddfb2f946f0d86df3e657bf52.jpeg",
     thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20238/6e9a0754dc2c3177c19deb2f890b0152.jpg",
     gallery: [
@@ -97,7 +97,7 @@ export const mapCatalog = [
     id: "solara",
     title: "Солара",
     officialUrl: "https://ff.garena.com/en/maps/",
-    description: "Портовый город с извилистой береговой линией и системой слайдов, которая соединяет районы карты. На официальной странице также описаны интерактивные зоны и динамическая погода.",
+    description: "Портовый город с извилистой береговой линией и системой слайдов, которая соединяет районы карты. Здесь есть интерактивные зоны и динамическая погода.",
     imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/0f7e4acbb96c021bb8a72338c29bf39c.jpg",
     thumbnailUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/913b56c52164b5c09ff50974647b0b5d.jpg",
     gallery: [

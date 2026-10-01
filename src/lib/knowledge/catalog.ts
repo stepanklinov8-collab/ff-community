@@ -9,11 +9,11 @@ export type OfficialKnowledgeItem = {
 };
 
 export const officialKnowledgeItems: readonly OfficialKnowledgeItem[] = [
-  { id: "maps", category: "maps", title: "Карты и точки интереса", description: "Официальный каталог карт Free Fire с описаниями и точками интереса.", href: "https://ff.garena.com/en/maps/" },
-  { id: "weapons", category: "weapons", title: "Оружие и характеристики", description: "Официальный каталог оружия, типов, характеристик и описаний.", href: "https://ff.garena.com/en/weapons/" },
-  { id: "characters", category: "characters", title: "Персонажи и способности", description: "Официальный список персонажей и их навыков.", href: "https://ff.garena.com/en/chars" },
-  { id: "pets", category: "pets", title: "Питомцы и навыки", description: "Официальный каталог питомцев и их навыков.", href: "https://ff.garena.com/en/pets/" },
-  { id: "updates", category: "updates", title: "Обновления и патчноуты", description: "Новости, патчноуты, изменения карт, оружия, персонажей и питомцев.", href: "https://ff.garena.com/en/news/" },
+  { id: "maps", category: "maps", title: "Карты и точки интереса", description: "Каталог карт с описаниями и точками интереса, доступный внутри базы знаний.", href: "https://ff.garena.com/en/maps/" },
+  { id: "weapons", category: "weapons", title: "Оружие и характеристики", description: "Каталог оружия, типов, характеристик и описаний внутри базы знаний.", href: "https://ff.garena.com/en/weapons/" },
+  { id: "characters", category: "characters", title: "Персонажи и способности", description: "Список персонажей и их навыков внутри базы знаний.", href: "https://ff.garena.com/en/chars" },
+  { id: "pets", category: "pets", title: "Питомцы и навыки", description: "Каталог питомцев и их навыков внутри базы знаний.", href: "https://ff.garena.com/en/pets/" },
+  { id: "updates", category: "updates", title: "Обновления и патчноуты", description: "Новости, изменения карт, оружия, персонажей и питомцев внутри базы знаний.", href: "https://ff.garena.com/en/news/" },
 ];
 
 export const officialKnowledgeHighlights = [

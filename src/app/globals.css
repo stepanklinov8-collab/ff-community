@@ -166,7 +166,7 @@ input[type="radio"] {
   box-shadow: 0 12px 40px rgb(0 0 0 / 30%);
 }
 
-/* The map catalog follows the full-screen presentation used by Garena's map viewer. */
+/* The map catalog uses a full-screen presentation for the local knowledge base. */
 body.knowledge-garena-mode {
   background: #0a0a0a;
 }
@@ -207,10 +207,10 @@ body.knowledge-garena-mode .app-main {
 
 .garena-map-logo {
   color: #ffca05;
-  font: italic 900 46px/1 Arial, sans-serif;
-  letter-spacing: -0.18em;
+  font: 900 19px/1 Arial, sans-serif;
+  letter-spacing: 0.14em;
   text-decoration: none;
-  text-shadow: 3px 2px 0 #9b6800;
+  white-space: nowrap;
 }
 
 .garena-map-links {
@@ -221,6 +221,7 @@ body.knowledge-garena-mode .app-main {
 }
 
 .garena-map-links a,
+.garena-map-links button,
 .garena-map-actions span {
   color: #d7d7d7;
   font-size: 14px;
@@ -230,7 +231,16 @@ body.knowledge-garena-mode .app-main {
   white-space: nowrap;
 }
 
+.garena-map-links button {
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
 .garena-map-links a:hover,
+.garena-map-links button:hover,
+.garena-map-links button.is-active,
 .garena-map-footer a:hover {
   color: #ffca05;
 }
@@ -399,10 +409,24 @@ body.knowledge-garena-mode .app-main {
   -webkit-line-clamp: 2;
 }
 
-.garena-map-current-info a {
+.garena-map-local-badge {
+  display: block;
+  margin-top: 5px;
   color: #ffca05;
   font-size: 12px;
-  text-decoration: underline;
+}
+
+.knowledge-map-gallery {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.knowledge-map-gallery img {
+  width: 54px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid rgb(255 202 5 / 55%);
 }
 
 .garena-map-list {
