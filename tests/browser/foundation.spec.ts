@@ -49,6 +49,7 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   expect(await page.locator("body").innerText()).not.toContain("Garena");
   await page.getByRole("tab", { name: "Бермуды", exact: true }).click();
   await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Бермуды");
+  await page.getByText("Игры", { exact: true }).click();
   await page.getByRole("button", { name: "Оружие", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Лазерная лечащая пушка", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Персонажи", exact: true }).first().click();
@@ -63,4 +64,6 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await expect(page.getByRole("heading", { name: "Аккаунт и профиль", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Вселенная", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Игровые режимы", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Обзор игры", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Об игре", exact: true })).toBeVisible();
 });

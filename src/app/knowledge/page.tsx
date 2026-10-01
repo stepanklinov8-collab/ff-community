@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { mapCatalog } from "@/lib/competition/map-catalog";
 import { type KnowledgeCategoryId } from "@/lib/knowledge/catalog";
-import { knowledgeCharacters, knowledgeGuide, knowledgeMedia, knowledgePets, knowledgeSupport, knowledgeUniverse, knowledgeUpdates, knowledgeWeapons, type KnowledgeCatalogEntry } from "@/lib/knowledge/game-catalog";
+import { knowledgeCharacters, knowledgeGuide, knowledgeMedia, knowledgeOverview, knowledgePets, knowledgeSupport, knowledgeUniverse, knowledgeUpdates, knowledgeWeapons, type KnowledgeCatalogEntry } from "@/lib/knowledge/game-catalog";
 
 const categories: Array<{ id: KnowledgeCategoryId; title: string; text: string }> = [
+  { id: "overview", title: "Обзор игры", text: "Режимы, командная игра, события и соревновательная сцена." },
   { id: "maps", title: "Карты и локации", text: "Русские названия карт и всех доступных точек высадки." },
   { id: "weapons", title: "Оружие", text: "Типы оружия, характеристики и изменения баланса, собранные в базе." },
   { id: "characters", title: "Персонажи", text: "Персонажи, способности, пресеты и изменения навыков." },
@@ -58,9 +59,9 @@ function GarenaMapViewer({ currentMap, selectedLocation, onMapChange, onLocation
     <header className="garena-map-nav">
       <Link className="garena-map-logo" href="/" aria-label="OMCITE">OMCITE</Link>
       <nav className="garena-map-links" aria-label="Разделы базы знаний">
-        <details className="knowledge-nav-dropdown" open>
+        <details className="knowledge-nav-dropdown">
           <summary>Игры</summary>
-          <div className="knowledge-nav-dropdown-panel">{categories.filter(category => ["maps", "weapons", "characters", "pets", "omcite"].includes(category.id)).map(category => <button key={category.id} type="button" className={category.id === "maps" ? "is-active" : ""} onClick={() => onSectionChange(category.id)}>{category.title}</button>)}</div>
+          <div className="knowledge-nav-dropdown-panel">{categories.filter(category => ["overview", "maps", "weapons", "characters", "pets", "omcite"].includes(category.id)).map(category => <button key={category.id} type="button" className={category.id === "maps" ? "is-active" : ""} onClick={() => onSectionChange(category.id)}>{category.title}</button>)}</div>
         </details>
         {categories.filter(category => ["updates", "media", "support", "universe"].includes(category.id)).map(category => <button key={category.id} type="button" onClick={() => onSectionChange(category.id)}>{category.title}</button>)}
       </nav>
@@ -77,6 +78,7 @@ function GarenaMapViewer({ currentMap, selectedLocation, onMapChange, onLocation
 }
 
 const catalogBySection: Record<Exclude<KnowledgeCategoryId, "maps">, readonly KnowledgeCatalogEntry[]> = {
+  overview: knowledgeOverview,
   weapons: knowledgeWeapons,
   characters: knowledgeCharacters,
   pets: knowledgePets,
@@ -99,6 +101,7 @@ function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: E
   });
   const sectionTitle = categories.find(category => category.id === section)?.title ?? "База знаний";
   const sectionIntro: Record<typeof section, string> = {
+    overview: "Краткий обзор игры, командных форматов, персонажей, событий и соревновательной сцены.",
     weapons: "Карточки оружия с типом применения, кратким описанием и ключевыми характеристиками.",
     characters: "Персонажи, их роли и описания особых способностей на русском языке.",
     pets: "Питомцы и навыки, которые помогают команде в бою, разведке и высадке.",

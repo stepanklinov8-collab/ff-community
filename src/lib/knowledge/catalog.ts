@@ -1,8 +1,8 @@
-export type KnowledgeCategoryId = "maps" | "weapons" | "characters" | "pets" | "updates" | "media" | "support" | "universe" | "omcite";
+export type KnowledgeCategoryId = "overview" | "maps" | "weapons" | "characters" | "pets" | "updates" | "media" | "support" | "universe" | "omcite";
 
 export type OfficialKnowledgeItem = {
   id: string;
-  category: Exclude<KnowledgeCategoryId, "omcite">;
+  category: Exclude<KnowledgeCategoryId, "overview" | "omcite">;
   title: string;
   description: string;
   href: string;
