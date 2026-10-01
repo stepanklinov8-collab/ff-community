@@ -39,3 +39,9 @@ test("existing public legal page and mobile navigation still work", async ({ pag
   await expect(page.locator(".site-drawer")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+test("update 3 knowledge base starts with map catalog and location cards", async ({ page }) => {
+  await page.goto("/knowledge");
+  await expect(page.getByRole("heading", { name: "База знаний" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Бермуды" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Peak" })).toBeVisible();
+});

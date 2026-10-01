@@ -10,6 +10,7 @@
     "verify": "node scripts/verify.mjs",
     "build:test": "node scripts/safe-build.mjs",
     "test:foundation": "node --test tests/foundation.test.mjs",
+    "test:update3": "node --test tests/update3.test.mjs",
     "test:database": "node tools/database-tests/verify.mjs",
     "test:browser": "playwright test",
     "check:boundaries": "node scripts/check-boundaries.mjs",

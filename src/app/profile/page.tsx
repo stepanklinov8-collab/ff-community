@@ -11,6 +11,7 @@ import { authFetch } from "@/utils/api/auth-fetch";
 import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
 import { competitionCost } from "@/lib/competition/cost";
+import { playerRoles, type PlayerRoleId } from "@/lib/profile/roles";
 
 interface Team {
   id: string;
@@ -62,6 +63,8 @@ interface EditableProfile {
   gameId: string;
   bio: string;
   phone: string;
+  contactSocialUrl: string;
+  playerRoles: PlayerRoleId[];
   locale: "ru" | "kk" | "ky";
 }
 
@@ -96,7 +99,7 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", locale: "ru" });
+  const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", contactSocialUrl: "", playerRoles: [], locale: "ru" });
   const [badges, setBadges] = useState<string[]>([]);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
   const [profileMeta, setProfileMeta] = useState({ level: 1, reputation: 50, reputationEvents: 0, rating: 1, balance: 0 });
@@ -151,7 +154,7 @@ export default function ProfilePage() {
         const profileResponse = await authFetch("/api/profile");
         if (profileResponse.ok) {
           const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number; balance: number } };
-          setProfileForm(profilePayload.profile);
+          setProfileForm({ ...profilePayload.profile, playerRoles: profilePayload.profile.playerRoles ?? [] });
           setLocale(profilePayload.profile.locale);
           setProfileMeta({ level: profilePayload.profile.level, reputation: profilePayload.profile.reputation, reputationEvents: profilePayload.profile.reputationEvents, rating: profilePayload.profile.rating, balance: profilePayload.profile.balance });
           if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
@@ -290,7 +293,9 @@ export default function ProfilePage() {
           <label className="field-label">Игровой ник<input className="field mt-2" maxLength={20} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
           <label className="field-label">Free Fire ID<input className="field mt-2" inputMode="numeric" pattern="[0-9]+" value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
           <label className="field-label">Телефон или контакт<input className="field mt-2" maxLength={32} placeholder="Необязательно" value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+          <label className="field-label">Соцсеть для связи<input className="field mt-2" type="url" maxLength={300} placeholder="https://t.me/..." value={profileForm.contactSocialUrl} onChange={(event) => setProfileForm((current) => ({ ...current, contactSocialUrl: event.target.value }))} /><span className="mt-1 block text-xs text-slate-500">Необязательно. Видна зарегистрированным пользователям.</span></label>
           <label className="field-label">Язык<select className="field mt-2" value={profileForm.locale} onChange={(event) => setProfileForm((current) => ({ ...current, locale: event.target.value as EditableProfile["locale"] }))}><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="ky">Кыргызча</option></select></label>
+          <fieldset className="field-label sm:col-span-2"><legend>Игровые роли</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{playerRoles.map(role => <label key={role.id} className="flex items-center gap-2 rounded border border-white/10 p-2 text-sm"><input type="checkbox" checked={profileForm.playerRoles.includes(role.id)} onChange={event => setProfileForm(current => ({ ...current, playerRoles: event.target.checked ? [...current.playerRoles, role.id] : current.playerRoles.filter(item => item !== role.id) }))} />{role.label}</label>)}</div></fieldset>
           <label className="field-label sm:col-span-2">О себе<textarea className="field mt-2 min-h-28 resize-y" maxLength={500} value={profileForm.bio} onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))} /></label>
           <div className="sm:col-span-2"><button type="button" onClick={saveProfile} disabled={savingProfile} className="btn-primary disabled:opacity-50">{savingProfile ? "Сохраняем…" : "Сохранить изменения"}</button></div>
         </section>

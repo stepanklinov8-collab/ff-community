@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isKnownLandingLocation } from "./map-catalog";
 
 export const maps = ["bermuda", "nexterra", "solara", "purgatory", "kalahari"] as const;
 export const defaultPlacePoints = [12, 9, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -12,6 +13,7 @@ export const resultInputSchema = z.object({
   reason: z.enum(["no_show", "technical"]).default("no_show"),
   detail: z.enum(["team", "players"]).default("players"),
   place: z.number().int().positive().nullable(), kills: count.nullable(),
+  landingLocation: z.string().trim().max(100).nullable().default(null),
   rounds: z.number().int().min(0).max(7).nullable().default(null),
   players: z.array(playerInputSchema),
 });
@@ -71,7 +73,7 @@ export function emptyDraft(context: CompetitionContext): Draft {
   return { warnings: [], manualOrder: [], rows: context.entrants.flatMap(entrant =>
     context.games.filter(game => game.groupId === entrant.groupId).map(game => ({
       registrationId: entrant.id, gameId: game.id, played: null, reason: "no_show" as const,
-      detail: "players" as const, place: null, kills: null, rounds: null,
+      detail: "players" as const, place: null, kills: null, rounds: null, landingLocation: null,
       players: entrant.roster.map(player => ({ id: player.id, userId: player.id, played: true, kills: null, deaths: null, assists: null })),
     }))),
   };
@@ -93,6 +95,7 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
     if (inputs.has(key)) addIssue("duplicate_result", "Повтор результата участника в игре", row);
     const entrant = entrants.get(row.registrationId), game = games.get(row.gameId);
     if (!entrant || !game || entrant.groupId !== game.groupId) addIssue("wrong_registration", "Участник не зарегистрирован в этой группе и игре", row);
+    else if (!isKnownLandingLocation(game.map, row.landingLocation)) addIssue("invalid_landing_location", "Место высадки не относится к выбранной карте", row);
     inputs.set(key, row);
   }
   for (const entrant of context.entrants) {

@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
+import { playerRoleIds, type PlayerRoleId } from "@/lib/profile/roles";
 
 const profileSchema = z.object({
   nickname: z.string().trim().min(1).max(20),
   gameId: z.string().trim().regex(/^\d+$/),
   bio: z.string().trim().max(500),
   phone: z.string().trim().max(32),
+  contactSocialUrl: z.string().trim().url().max(300).or(z.literal("")),
+  playerRoles: z.array(z.string()).max(6).refine(values => new Set(values).size === values.length && values.every(value => playerRoleIds.has(value)), "Недопустимая роль"),
   locale: z.enum(["ru", "kk", "ky"]),
 });
 
@@ -16,7 +19,7 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
     const [{ data, error }, { data: wallet }] = await Promise.all([supabase
       .from("profiles")
-      .select("id, nickname, avatar_url, game_id, bio, phone, locale, profile_level, reputation_score, reputation_events_count, main_rating, updated_at")
+      .select("id, nickname, avatar_url, game_id, bio, phone, contact_social_url, player_roles, locale, profile_level, reputation_score, reputation_events_count, main_rating, updated_at")
       .eq("id", user.id)
       .maybeSingle(), supabase.from("site_wallets").select("balance").eq("user_id", user.id).maybeSingle()]);
     if (error) throw error;
@@ -28,6 +31,8 @@ export async function GET(request: Request) {
         gameId: data?.game_id || user.user_metadata?.game_id || "",
         bio: data?.bio || "",
         phone: data?.phone || "",
+        contactSocialUrl: data?.contact_social_url || "",
+        playerRoles: (data?.player_roles ?? []).filter((value: string): value is PlayerRoleId => playerRoleIds.has(value)),
         locale: data?.locale || "ru",
         level: data?.profile_level ?? 1,
         reputation: Number(data?.reputation_score ?? 50),
@@ -59,6 +64,8 @@ export async function PATCH(request: Request) {
       game_id: payload.gameId,
       bio: payload.bio || null,
       phone: payload.phone || null,
+      contact_social_url: payload.contactSocialUrl || null,
+      player_roles: payload.playerRoles,
       locale: payload.locale,
       updated_at: new Date().toISOString(),
     });

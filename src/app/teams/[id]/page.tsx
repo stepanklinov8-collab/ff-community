@@ -10,6 +10,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
+import TeamMapStatistics from "@/components/TeamMapStatistics";
 
 interface Team {
   id: string;
@@ -614,6 +615,7 @@ export default function TeamPage() {
 
       {/* Заявки */}
       <CompetitionStatistics type="team" id={team.id}/>
+      <TeamMapStatistics teamId={team.id} />
       <PublicWarningHistory type="team" id={team.id}/>
       {canManage && joinRequests.length > 0 && (
         <div className="mt-6 bg-gray-800 p-4 rounded">

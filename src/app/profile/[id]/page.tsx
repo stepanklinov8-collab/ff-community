@@ -9,6 +9,7 @@ import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
 import Image from "next/image";
 import { authFetch } from "@/utils/api/auth-fetch";
+import { playerRoles } from "@/lib/profile/roles";
 
 interface PublicProfile {
   nickname: string;
@@ -18,6 +19,8 @@ interface PublicProfile {
   reputation_score: number;
   reputation_events_count: number;
   main_rating: number;
+  player_roles: string[];
+  contact_social_url: string | null;
 }
 
 interface PlayerTeam {
@@ -61,6 +64,8 @@ export default function PublicProfilePage() {
   const [team, setTeam] = useState<PlayerTeam | null>(null);
   const [badges, setBadges] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contactSocialUrl, setContactSocialUrl] = useState<string | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [canReviewProfile, setCanReviewProfile] = useState(false);
   const [reputationEvents, setReputationEvents] = useState<ReputationEvent[]>([]);
   const [reviewEventId, setReviewEventId] = useState("");
@@ -79,6 +84,12 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     const init = async () => {
+      const publicResponse = await fetch(`/api/profile/public/${id}`, { cache: "no-store" });
+      if (publicResponse.ok) {
+        const publicPayload = await publicResponse.json() as { profile: PublicProfile };
+        setContactSocialUrl(publicPayload.profile.contact_social_url);
+        setSelectedRoles(publicPayload.profile.player_roles ?? []);
+      }
       const { data: profiles } = await supabase
         .from("profiles")
         .select("nickname, game_id, avatar_url, profile_level, reputation_score, reputation_events_count, main_rating")
@@ -93,6 +104,8 @@ export default function PublicProfilePage() {
         reputation_score: Number(profiles?.reputation_score ?? 50),
         reputation_events_count: profiles?.reputation_events_count ?? 0,
         main_rating: Number(profiles?.main_rating ?? 1),
+        player_roles: [],
+        contact_social_url: null,
       });
 
       // Статистика
@@ -236,6 +249,8 @@ export default function PublicProfilePage() {
               ))}
             </div>
             <p className="text-gray-400 text-sm mt-1">ID: {profile.game_id}</p>
+            {!!selectedRoles.length && <div className="mt-2 flex flex-wrap gap-1">{selectedRoles.map(role => <span key={role} className="rounded bg-cyan-950 px-2 py-0.5 text-xs text-cyan-200">{playerRoles.find(item => item.id === role)?.label ?? role}</span>)}</div>}
+            {contactSocialUrl && <a href={contactSocialUrl} target="_blank" rel="noreferrer" className="mt-2 block text-sm text-cyan-300">Связаться в соцсети →</a>}
           </div>
         </div>
 
