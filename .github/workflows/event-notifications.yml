@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: Check credentials and database without sending notifications
+        type: boolean
+        default: true
+
+concurrency:
+  group: event-notifications-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -17,11 +26,14 @@ jobs:
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CHECK_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.check_only }}
         run: |
           if [ -z "$SITE_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "SITE_URL and CRON_SECRET repository secrets are required."
             exit 1
           fi
-          curl --fail --silent --show-error --retry 3 \
+          endpoint="${SITE_URL%/}/api/cron/event-notifications"
+          if [ "$CHECK_ONLY" = "true" ]; then endpoint="${endpoint}?check=1"; fi
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 240 --retry 2 --retry-max-time 270 \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${SITE_URL%/}/api/cron/event-notifications"
+            "$endpoint"

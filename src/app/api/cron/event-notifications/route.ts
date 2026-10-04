@@ -31,6 +31,19 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Deployment checks must validate credentials and database access without
+  // publishing events, expiring sanctions or sending notifications.
+  if (new URL(request.url).searchParams.get("check") === "1") {
+    try {
+      const { error } = await createAdminClient().from("events").select("id").limit(1);
+      if (error) throw error;
+      return Response.json({ success: true, checkOnly: true }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      console.error("Scheduled maintenance health check", error);
+      return Response.json({ error: "Не удалось проверить подключение к базе" }, { status: 503 });
+    }
+  }
+
   const supabase = createAdminClient();
   for(const action of ["u2_expire_moderation","u2_publish_scheduled","u2_flush_notifications"]){
     const {error}=await supabase.rpc(action);if(error){console.error("Competition maintenance",action,error);return Response.json({error:"Не удалось завершить обработку мероприятий"},{status:500});}

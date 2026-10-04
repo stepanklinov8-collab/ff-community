@@ -16,7 +16,9 @@ try {
  await db.exec(dynamic.slice(dynamic.indexOf('create table if not exists public.betting_sources'),dynamic.indexOf('create or replace function public.place_dynamic_site_bet_for(')));
 
  // Exercise the original organization results formula against new normalized publication history.
- const legacy=await readFile(new URL('../../supabase/migrations/202609060001_competitive_economy.sql',import.meta.url),'utf8');
+ // Exercise Linux checkout line endings on Windows as well: function slicing
+ // must stop at the SQL terminator, without consuming the next statement.
+ const legacy=(await readFile(new URL('../../supabase/migrations/202609060001_competitive_economy.sql',import.meta.url),'utf8')).replaceAll('\r\n','\n');
  const start=legacy.indexOf('create or replace function public.recalculate_organization_results(');
  const end=legacy.indexOf('end $$;',start)+'end $$;'.length;
  await db.exec(legacy.slice(start,end));
@@ -28,7 +30,7 @@ try {
   ['refresh_organization_rating_from_player','profiles','refresh_organization_rating_from_player_trigger','after update of main_rating'],
   ['refresh_organization_rating_from_history','organization_participation_history','refresh_organization_rating_trigger','after insert or update or delete']
  ]) {
-  const a=legacy.indexOf('create or replace function public.'+functionName+'()'),b=legacy.indexOf('end $$;',a)+9;
+  const a=legacy.indexOf('create or replace function public.'+functionName+'()'),b=legacy.indexOf('end $$;',a)+'end $$;'.length;
   await db.exec(legacy.slice(a,b));
   await db.exec(`create trigger ${triggerName} ${event} on public.${table} for each row execute function public.${functionName}()`);
  }

@@ -41,7 +41,7 @@ try{
   catch(error){throw new Error(`Local import ${table}: ${error.message}`);}
  }
  const legacy=await readFile(new URL('../../supabase/migrations/202609060001_competitive_economy.sql',import.meta.url),'utf8');
- const functionSQL=name=>{const start=legacy.indexOf('create or replace function public.'+name+'(');return legacy.slice(start,legacy.indexOf('end $$;',start)+9);};
+ const functionSQL=name=>{const start=legacy.indexOf('create or replace function public.'+name+'(');return legacy.slice(start,legacy.indexOf('end $$;',start)+'end $$;'.length);};
  await db.exec(functionSQL('recalculate_organization_results'));
  const security=await readFile(new URL('../../supabase/migrations/202609060002_competitive_security.sql',import.meta.url),'utf8');
  await db.exec(security.slice(security.indexOf('create or replace function public.audit_organization_history()'),security.indexOf('create or replace function public.apply_reputation_review(')));
