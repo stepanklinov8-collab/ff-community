@@ -32,11 +32,13 @@ import { localeNames, locales } from "@/i18n/messages";
 import {competitionText} from "@/i18n/competition";
 import { useLanguage } from "@/components/LanguageProvider";
 import ModuleNavigation from "@/components/ModuleNavigation";
+import { knowledgeSections } from "@/lib/knowledge/navigation";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentKnowledgeSection, setCurrentKnowledgeSection] = useState("maps");
   const pathname = usePathname();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -73,6 +75,13 @@ export default function Sidebar() {
       listener.subscription.unsubscribe();
     };
   }, [setLocale, supabase]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (pathname.startsWith("/knowledge")) setCurrentKnowledgeSection(new URLSearchParams(window.location.search).get("section") ?? "maps");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open, pathname]);
 
   const menuItems = [
     { href: "/", label: t("home"), icon: House },
@@ -150,11 +159,16 @@ export default function Sidebar() {
                 const Icon = item.icon;
                 const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
                 return (
-                  <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={active ? "nav-item active" : "nav-item"}>
-                    <Icon size={19} />
-                    <span>{item.label}</span>
-                    <ChevronRight size={16} className="nav-chevron" />
-                  </Link>
+                  <div key={item.href} className={item.href === "/knowledge" && active ? "drawer-nav-group is-open" : "drawer-nav-group"}>
+                    <Link href={item.href} onClick={() => setOpen(false)} className={active ? "nav-item active" : "nav-item"}>
+                      <Icon size={19} />
+                      <span>{item.label}</span>
+                      <ChevronRight size={16} className="nav-chevron" />
+                    </Link>
+                    {item.href === "/knowledge" && active && <nav className="drawer-subnav" aria-label="Разделы базы знаний">
+                      {knowledgeSections.map((section) => <Link key={section.id} href={`/knowledge?section=${section.id}`} aria-current={currentKnowledgeSection === section.id ? "page" : undefined} className={currentKnowledgeSection === section.id ? "active" : ""} onClick={() => { setCurrentKnowledgeSection(section.id); setOpen(false); }}><span aria-hidden="true" />{section.title}</Link>)}
+                    </nav>}
+                  </div>
                 );
               })}
 

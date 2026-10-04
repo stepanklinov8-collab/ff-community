@@ -877,6 +877,120 @@ body.knowledge-garena-mode .app-main {
   .knowledge-catalog-card-image { height: 190px; }
 }
 
+/* Knowledge pages stay inside the shared OMCITE shell and use its blue palette. */
+.knowledge-page-shell .garena-map-page {
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgb(8 22 31 / 96%), rgb(4 11 17 / 98%));
+  border: 1px solid rgb(92 186 230 / 22%);
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 22%);
+}
+
+.knowledge-page-shell .garena-map-stage {
+  height: auto;
+  min-height: 0;
+  background: radial-gradient(circle at 50% 20%, rgb(35 141 178 / 18%), transparent 55%), #08131b;
+}
+
+.knowledge-page-shell .garena-map-viewport {
+  height: min(72vh, 760px);
+  min-height: 440px;
+}
+
+.knowledge-page-shell .garena-map-canvas { width: min(100%, 760px); }
+
+.knowledge-page-shell .knowledge-map-zoom {
+  color: #e8f9ff;
+  background: rgb(5 18 27 / 88%);
+  border-color: rgb(73 193 241 / 48%);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 35%);
+}
+
+.knowledge-page-shell .knowledge-map-zoom button {
+  color: #dff7ff;
+  background: rgb(13 45 61 / 92%);
+  border-color: rgb(92 186 230 / 24%);
+}
+
+.knowledge-page-shell .knowledge-map-zoom button:hover { color: #021017; background: var(--primary); }
+
+.knowledge-page-shell .garena-map-marker-name {
+  font-family: "Arial Narrow", "Roboto Condensed", "Bahnschrift Condensed", Impact, sans-serif;
+  color: #effbff;
+  background: linear-gradient(105deg, rgb(3 20 29 / 94%), rgb(5 38 53 / 70%));
+  border-left-color: #38c6f5;
+  box-shadow: 0 5px 15px rgb(0 10 18 / 52%);
+}
+
+.knowledge-page-shell .garena-map-marker:hover .garena-map-marker-name,
+.knowledge-page-shell .garena-map-marker:focus-visible .garena-map-marker-name,
+.knowledge-page-shell .garena-map-marker.is-selected .garena-map-marker-name {
+  color: #031017;
+  background: #65d9ff;
+  border-left-color: #fff;
+}
+
+.knowledge-page-shell .garena-map-marker-photo { border-color: #4bcdf8; box-shadow: 0 8px 28px rgb(0 82 120 / 55%); }
+
+.knowledge-page-shell .garena-map-selector {
+  position: relative;
+  padding: 22px clamp(18px, 4vw, 54px);
+  background: rgb(4 17 25 / 94%);
+  border-top: 1px solid rgb(92 186 230 / 22%);
+  backdrop-filter: blur(12px);
+}
+
+.knowledge-page-shell .garena-map-current-thumb,
+.knowledge-page-shell .knowledge-map-gallery img { border-color: rgb(74 204 250 / 62%); }
+
+.knowledge-page-shell .garena-map-local-badge,
+.knowledge-page-shell .knowledge-catalog-value { color: #67d8ff; }
+
+.knowledge-page-shell .garena-map-choice { background: #071720; border-color: rgb(92 186 230 / 22%); }
+.knowledge-page-shell .garena-map-choice.is-active { border-color: #55d2ff; box-shadow: 0 0 0 1px #55d2ff, 0 0 18px rgb(46 190 241 / 25%); }
+
+.knowledge-page-shell .knowledge-catalog-section {
+  color: #f4fbff;
+  background: linear-gradient(145deg, rgb(8 22 31 / 94%), rgb(4 11 17 / 96%));
+  border: 1px solid rgb(92 186 230 / 20%);
+  border-radius: 18px;
+}
+
+.knowledge-page-shell .knowledge-catalog-section .section-title,
+.knowledge-page-shell .knowledge-catalog-card-body h3 { font-family: var(--font-heading); font-style: normal; text-transform: none; }
+
+.knowledge-page-shell .knowledge-catalog-count { color: #9bdcf4; background: rgb(21 73 96 / 40%); border-color: rgb(92 186 230 / 24%); border-radius: 999px; }
+
+.knowledge-page-shell .knowledge-catalog-filters button {
+  color: #8eabb8;
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  background: rgb(5 18 26 / 75%);
+  border-color: rgb(92 186 230 / 20%);
+  border-radius: 999px;
+}
+
+.knowledge-page-shell .knowledge-catalog-filters button:hover,
+.knowledge-page-shell .knowledge-catalog-filters button.is-active { color: #e8fbff; background: rgb(13 83 108 / 65%); border-color: rgb(92 210 245 / 70%); }
+
+.knowledge-page-shell .knowledge-catalog-card { background: rgb(5 14 21 / 88%); border-color: rgb(92 186 230 / 18%); border-radius: 16px; }
+.knowledge-page-shell .knowledge-catalog-card:hover { border-color: rgb(92 210 245 / 62%); }
+.knowledge-page-shell .knowledge-catalog-card-image { color: #84d7f2; background: radial-gradient(circle at 30% 20%, rgb(35 141 178 / 35%), transparent 50%), #081b25; }
+.knowledge-page-shell .knowledge-catalog-tags span { color: #8edaf2; background: rgb(19 69 91 / 35%); border-color: rgb(92 186 230 / 18%); border-radius: 5px; }
+
+@media (max-width: 850px) {
+  .knowledge-page-shell .garena-map-viewport { height: min(64vh, 590px); min-height: 340px; }
+  .knowledge-page-shell .garena-map-canvas { width: min(100%, 590px); }
+  .knowledge-page-shell .garena-map-selector { position: relative; grid-template-columns: 1fr; padding: 18px; }
+}
+
+@media (max-width: 560px) {
+  .knowledge-page-shell .garena-map-viewport { height: 52vh; min-height: 330px; }
+  .knowledge-page-shell .garena-map-marker-name { font-size: 9px; }
+}
+
 .icon-button {
   display: inline-grid;
   width: 42px;
@@ -1022,6 +1136,46 @@ body.knowledge-garena-mode .app-main {
   padding-block: 20px;
   overflow-y: auto;
 }
+
+.drawer-nav-group { display: grid; gap: 4px; }
+
+.drawer-subnav {
+  display: grid;
+  gap: 3px;
+  margin: 1px 0 7px 34px;
+  padding: 7px 0 7px 12px;
+  border-left: 1px solid rgb(65 190 240 / 28%);
+}
+
+.drawer-subnav a {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 9px;
+  color: #8faebd;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 9px;
+  transition: 150ms ease;
+}
+
+.drawer-subnav a > span {
+  width: 5px;
+  height: 5px;
+  background: rgb(69 195 242 / 62%);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgb(45 191 242 / 32%);
+}
+
+.drawer-subnav a:hover,
+.drawer-subnav a.active {
+  color: #f0fbff;
+  background: rgb(15 91 122 / 28%);
+}
+
+.drawer-subnav a.active > span { background: var(--primary); box-shadow: 0 0 10px rgb(24 189 242 / 70%); }
 
 .nav-item {
   display: grid;
