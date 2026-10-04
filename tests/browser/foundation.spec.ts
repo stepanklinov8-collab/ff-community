@@ -43,6 +43,13 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "Карты и локации" })).toBeVisible();
   await expect(page.getByTestId("knowledge-map-image")).toHaveAttribute("alt", "Карта Солара");
+  const mapLayout = await page.locator(".garena-map-viewport").evaluate((viewport) => {
+    const canvas = viewport.querySelector<HTMLElement>(".garena-map-canvas");
+    const viewportRect = viewport.getBoundingClientRect();
+    const canvasRect = canvas?.getBoundingClientRect();
+    return { viewportHeight: viewportRect.height, canvasHeight: canvasRect?.height ?? 0 };
+  });
+  expect(mapLayout.viewportHeight).toBeGreaterThanOrEqual(mapLayout.canvasHeight - 1);
   await expect(page.getByRole("button", { name: /Хаб/ })).toBeVisible();
   expect(await page.getByRole("button", { name: /^\d+\./ }).count()).toBe(0);
   expect(await page.evaluate(() => Array.from(document.querySelectorAll("a")).map(link => new URL(link.href).hostname).filter(host => !["127.0.0.1", "localhost"].includes(host)))).toEqual([]);

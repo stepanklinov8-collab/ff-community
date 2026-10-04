@@ -894,8 +894,8 @@ body.knowledge-garena-mode .app-main {
 }
 
 .knowledge-page-shell .garena-map-viewport {
-  height: min(72vh, 760px);
-  min-height: 440px;
+  height: min(760px, calc(100vw - 32px));
+  min-height: 0;
 }
 
 .knowledge-page-shell .garena-map-canvas { width: min(100%, 760px); }
@@ -981,13 +981,10 @@ body.knowledge-garena-mode .app-main {
 .knowledge-page-shell .knowledge-catalog-tags span { color: #8edaf2; background: rgb(19 69 91 / 35%); border-color: rgb(92 186 230 / 18%); border-radius: 5px; }
 
 @media (max-width: 850px) {
-  .knowledge-page-shell .garena-map-viewport { height: min(64vh, 590px); min-height: 340px; }
-  .knowledge-page-shell .garena-map-canvas { width: min(100%, 590px); }
   .knowledge-page-shell .garena-map-selector { position: relative; grid-template-columns: 1fr; padding: 18px; }
 }
 
 @media (max-width: 560px) {
-  .knowledge-page-shell .garena-map-viewport { height: 52vh; min-height: 330px; }
   .knowledge-page-shell .garena-map-marker-name { font-size: 9px; }
 }
 
