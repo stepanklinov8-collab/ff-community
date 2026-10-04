@@ -152,4 +152,15 @@ try {
   await verifyLegacyRegistration(db,id,config);
   await verifyAcceptance(db,id,config);
  }
+ const leaveTeam=id(900);
+ await db.query(`insert into public.teams(id,name,type) values($1,'Leave test','team')`,[leaveTeam]);
+ await db.query(`insert into public.team_members(team_id,user_id,role_in_team) values($1,$2,'leader'),($1,$3,'main')`,[leaveTeam,id(2),id(3)]);
+ const asUser=user=>db.query(`select set_config('request.jwt.claim.sub',$1,false)`,[user]);
+ await asUser(id(2));
+ await assert.rejects(()=>db.query(`select public.leave_organization($1)`,[leaveTeam]),/Передайте лидерство/);
+ await asUser(id(3));
+ await db.query(`select public.leave_organization($1)`,[leaveTeam]);
+ assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[leaveTeam])).rows[0].n,1);
+ await assert.rejects(()=>db.query(`select public.leave_organization($1)`,[leaveTeam]),/не состоите/);
+ console.log('PASS: regular member can leave, leader must transfer leadership, repeat leave is rejected');
 } catch(error){console.error('FAILED:',error.message,error.where??'',error.detail??'');process.exitCode=1;} finally {await db.close();}

@@ -371,6 +371,24 @@ export default function TeamPage() {
     router.refresh();
   };
 
+  const leaveOrganization = async () => {
+    if (!team || !isMember || isLeader || organizationBusy || team.dissolved_at) return;
+    const kind = team.type === "guild" ? "гильдии" : "команды";
+    if (!confirm(`Выйти из ${kind} «${team.name}»?`)) return;
+
+    setOrganizationBusy(true);
+    const { error } = await supabase.rpc("leave_organization", { p_team_id: id });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось выйти из организации: " + error.message);
+      return;
+    }
+    setIsMember(false);
+    setInviteMessage(`Вы вышли из ${kind}.`);
+    router.push("/teams");
+    router.refresh();
+  };
+
   const sendJoinRequest = async () => {
     if (!currentUser) return;
 
@@ -492,6 +510,14 @@ export default function TeamPage() {
                   {organizationBusy ? "Обработка…" : `Распустить ${team.type === "guild" ? "гильдию" : "команду"}`}
                 </button>
               </div>
+            )}
+            {isMember && !isLeader && !team.dissolved_at && (
+              <button onClick={leaveOrganization} disabled={organizationBusy} className="mt-3 rounded border border-red-400/60 px-4 py-2 text-red-200 hover:bg-red-900/40 disabled:opacity-50">
+                {organizationBusy ? "Выход…" : `Выйти из ${team.type === "guild" ? "гильдии" : "команды"}`}
+              </button>
+            )}
+            {isMember && isLeader && !team.dissolved_at && (
+              <p className="mt-3 text-sm text-gray-400">Чтобы выйти из организации, сначала передайте лидерство.</p>
             )}
             {showTransfer && (
               <div className="mt-3 flex gap-2">
