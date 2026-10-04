@@ -32,7 +32,7 @@ export const knowledgeWeapons: readonly KnowledgeCatalogEntry[] = [
   { id: "p90", title: "P90", description: "Пистолет-пулемёт с большим магазином и высокой скорострельностью для боя на средней дистанции.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/d20a19cb43b419f7ea7c072b838b8806.png", tags: ["Высокая скорострельность", "Глушитель"], value: 50 },
 ] as const;
 
-export const knowledgeCharacters: readonly KnowledgeCatalogEntry[] = [
+const featuredKnowledgeCharacters: readonly KnowledgeCatalogEntry[] = [
   { id: "ray", title: "Рэй", subtitle: "Страж затмения", description: "Помечает врага солнечной энергией. При снижении здоровья цели метка ускоряет её поражение и возвращает здоровье владельцу навыка.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20264/bd25bf95be2da2c797f315ec061da923.png", tags: ["Атака", "Метка"] },
   { id: "nero", title: "Неро", subtitle: "Кузнец мечты", description: "Создаёт йети, который преследует ближайшего врага и формирует область, где нельзя устанавливать стены.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/202510/f8971a9015b19445e1d6f2be29df4d5a.png", tags: ["Контроль", "Зона"] },
   { id: "rin", title: "Рин", subtitle: "Нефритовый ниндзя", description: "Постепенно призывает кунаи, которые автоматически выбирают врагов или стены; дальняя цель получает больше урона.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20257/e9b120bb935cfe5732ffd3740d251d69.png", tags: ["Атака", "Дальность"] },
@@ -47,20 +47,93 @@ export const knowledgeCharacters: readonly KnowledgeCatalogEntry[] = [
   { id: "a-patroa", title: "Донна А", subtitle: "Владелица магазина", description: "Открывает дополнительный слот для навыка, а остальные слоты становятся доступны автоматически после получения персонажа.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4a16d6dfce6f801fcb26533425bd7d2d.png", tags: ["Пресеты", "Навыки"] },
 ] as const;
 
-export const knowledgePets: readonly KnowledgeCatalogEntry[] = [
-  { id: "fang", title: "Клык", subtitle: "Верность — это добродетель", description: "Даёт энергию или здоровье, когда противник отправляет союзника в нокдаун.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/58efe1ccd39d70cab6afc81962f7803b.png", tags: ["Поддержка", "Энергия"] },
-  { id: "flash", title: "Флэш", subtitle: "Меня так зовут, потому что я быстрый", description: "Снижает урон сзади от ножа и пуль, помогая пережить внезапную атаку.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/af54c81493c9c48ff854337ed122887c.png", tags: ["Защита", "Спина"] },
-  { id: "yeti", title: "Йети", subtitle: "Мягкая шерсть и холодная сила", description: "Уменьшает урон, получаемый от взрывов.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/07f0873e3d4b524464df9a294ccd0216.png", tags: ["Защита", "Взрывы"] },
-  { id: "sovereign", title: "Соверен", subtitle: "Я плохого не посоветую", description: "Увеличивает дальность и время действия сканирующих предметов и навыков.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8ba9d082f7b34ab77bc3cdd264529999.png", tags: ["Разведка", "Сканирование"] },
-  { id: "katran", title: "Катран", subtitle: "Рискнёшь поплыть со мной?", description: "После устранения или нокдауна рядом владелец и его команда получают бонус к скорости передвижения.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c926972d56e9197623e1bf269fcfd319.png", tags: ["Мобильность", "Команда"] },
-  { id: "night-panther", title: "Ночная Пантера", subtitle: "Конец близок", description: "Увеличивает объём переносимых предметов и расширяет рюкзак.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/dad6a7d911cc171d09e5a86f45477d37.png", tags: ["Ресурсы", "Рюкзак"] },
-  { id: "detective-panda", title: "Детектив Панда", subtitle: "Я защищу мир", description: "Восстанавливает здоровье после устранения противника.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/031e4a53c9562a273f1a3f158886abdf.png", tags: ["Исцеление", "Устранение"] },
-  { id: "shiba-inu", title: "Сиба-ину", subtitle: "Готовься к находке", description: "Находит грибы и отмечает их расположение на мини-карте.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e14dca4b27cfd2f617ec8c22b4f01da3.png", tags: ["Разведка", "Грибы"] },
-  { id: "ghost-fox", title: "Призрачная Лиса", subtitle: "Второй лучший друг человека", description: "Восстанавливает дополнительные очки здоровья при использовании аптечки.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/15f31c3f63841531600de1b3c73d0fbb.png", tags: ["Исцеление", "Аптечка"] },
-  { id: "robo", title: "Робо", subtitle: "Домашний робот на острове", description: "Добавляет прочность установленной стене.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4da07fc7bcc3e7e5b67f3b8271606134.png", tags: ["Защита", "Стены"] },
-  { id: "otter", title: "Выдра", subtitle: "Музыкально одарённая выдра", description: "При использовании аптечки или лечащего пистолета дополнительно восстанавливает энергию.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4c7c8b3ff7788ea4bd0f19b0870239c2.png", tags: ["Поддержка", "Энергия"] },
-  { id: "falcon", title: "Сокол", subtitle: "Полетели", description: "Позволяет дальше скользить после прыжка и быстрее снижаться после открытия парашюта для всей команды.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/011a8792f3b70e39a5ecd0873e1e4665.png", tags: ["Высадка", "Команда"] },
+const additionalCharacterProfiles = [
+  ["iris", "Ирис", "Оператор на миссиях", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/2156d6b5ec48a11fee8cfff3a248a77f.png"],
+  ["j-biebs", "Джей Бибс", "Отважный поэт", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f94d67ae9be38cebcc598d3e01a851ff.png"],
+  ["homer", "Гомер", "Слепой ассасин", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/6188da437e7431dd5deec6daa07325db.png"],
+  ["kenta", "Кента", "Кузнец", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/6b47bf06a33911e26a74b5928948870f.png"],
+  ["nairi", "Наири", "Исследователь климата", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/bd9401e3961c42ff6b1778788a98312b.png"],
+  ["otho", "Ото", "Эксперт в области памяти", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ce44cbba16b791a412ed9a3c699b297f.png"],
+  ["leon", "Леон", "Баскетболист", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ee309a97f2c4b4cfce1ca0eec83ad660.png"],
+  ["thiva", "Тива", "Певец и музыкант", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/fbbfee9cb50e7aa1d27d5bf8aacd9f02.png"],
+  ["dimitri", "Димитри", "Звукорежиссёр и музыкант", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/dfeca1d95a2868e37950ee12eb48e760.png"],
+  ["d-bee", "Ди-Би", "Создатель битов", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/0151a21e1ee9c19efec5b05ee6cd63d4.png"],
+  ["maro", "Маро", "Сокольничий", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5260d0a86e6fa2abfd064c5578bd66eb.png"],
+  ["skyler", "Скайлер", "Председатель медиакорпорации", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c1db6a8af8b43bf3e629deaeb555101d.png"],
+  ["xayne", "Ксейн", "Спортсменка-экстремал", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e4afb2e3debc88092492cdc71cceccbf.png"],
+  ["shirou", "Широ", "Курьер службы доставки", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/37ceabe19f8644bcb982552070f0e520.png"],
+  ["chrono", "Хроно", "Охотник за наградой", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ff68cdffc1deb1a746d71adebead325a.png"],
+  ["dasha", "Даша", "Торговец на чёрном рынке", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4a6e93ce61e87c40c7d3f58ad8ffb0bd.png"],
+  ["k", "Кей", "Профессор и мастер джиу-джитсу", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c3065fcd8976890432117933cc9b6847.png"],
+  ["oscar", "Оскар", "Ночной мститель", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20253/f0f515379011e2d7be3caf6546f8f3a4.png"],
+  ["luqueta", "Лукета", "Звезда футбола", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/11b1f18bd7549cba76b4f4a5e067bacb.png"],
+  ["clu", "Клу", "Частный детектив", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/3809ca9651ec4b484daa726b29e4a8c0.png"],
+  ["wolfrahh", "Вольфра", "Игровой стример", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a9e23091d829b9bbca0d86c30f56a1fe.png"],
+  ["jota", "Джота", "Мастер паркура", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/8f61ddcdaab137716938d7f65bb73fd4.png"],
+  ["kapella", "Капелла", "Поп-звезда", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/d3c8711acac05c22d3a5ac170a7a1d32.png"],
+  ["steffie", "Стеффи", "Граффити-художница", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/550cdc71cfa97dc3f23008188e474cbf.png"],
+  ["maxim", "Максим", "Скоростной едок", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/2f90eae09e38bf472d2588c7938a6f71.png"],
+  ["kla", "Кла", "Профессиональный кикбоксёр", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/95fa1e1e72f99888d80ecffb4f42e3f7.png"],
+  ["paloma", "Палома", "Лидер банды", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/b3120346772a0052f0c6cadb90d922c2.png"],
+  ["miguel", "Мигель", "Элитный боец спецназа", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5ab77333e69f89959f39e68f787b3a36.png"],
+  ["caroline", "Каролина", "Дочь влиятельной семьи", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/88068baca6c3adb14238b5050747d8c0.png"],
+  ["antonio", "Антонио", "Гангстер", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ca4550a99e019e84b9e127bf60f2d494.png"],
+  ["wukong", "Вуконг", "Боевой киборг", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a31ad9eb969fc5de5f483fb747722d35.png"],
+  ["moco", "Моко", "Хакер", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ac9a0b7d631852d8f4b3981035741ec8.png"],
+  ["hayato", "Хаято", "Наследник самурайского рода", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e90572ef474ed9c8e4112eeaa06cc6aa.png"],
+  ["laura", "Лаура", "Специальный агент", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/118d193c335267a09719c42d18377853.png"],
+  ["rafael", "Рафаэль", "Наёмник", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/41fb5d427a34dbf2d66ff6322ae933af.png"],
+  ["a124", "А124", "Гуманоидный робот", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a89bfb61f713424f88e8626915d30f23.png"],
+  ["alvaro", "Альваро", "Подрывник", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/71c07f43d2a44aa6803e4dc04c947639.png"],
+  ["santino", "Сантино", "Дизайнер одежды", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20233/b437f7d724b5bcc8e718ec395846b918.png"],
+  ["notora", "Нотора", "Мотогонщица", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/68fb852b9a7c3bc8294234934a59e5f3.png"],
+  ["alok", "Алок", "Известный диджей", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/181faa683450fa82e5b7ffe068a9c7f9.png"],
+  ["shani", "Шани", "Инженер на свалке", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/88546c3827eca2acc868700c0e9e693f.png"],
+  ["ford", "Форд", "Капитан дальнего плавания", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/202211/d959ef3d3c9a5254a3a9526abab95427.png"],
+  ["joseph", "Джозеф", "Председатель технокорпорации", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/9e14469ab8531dfe803b8c05cde5a14c.png"],
+  ["olivia", "Оливия", "Врач", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/202211/e22a6f96a8dc618ae1dd61b488de4d71.png"],
+  ["andrew", "Эндрю", "Бывший полицейский", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/20ca50be91eaaa4c33a92777c8429b24.png"],
+  ["kelly", "Келли", "Спринтер", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/202212/9477d8a9b9d1dbce6165b43ad3eaf524.png"],
+  ["nikita", "Никита", "Телохранитель", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5fa653cce82de113a6ef059fee9176e0.png"],
+  ["misha", "Миша", "Пилот гоночной машины", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/465a496fe5ca40e4cb748c82f7d53b53.png"],
 ] as const;
+
+export const knowledgeCharacters: readonly KnowledgeCatalogEntry[] = [
+  ...featuredKnowledgeCharacters,
+  ...additionalCharacterProfiles.map(([id, title, subtitle, imageUrl]) => ({ id, title, subtitle, imageUrl, description: `${title} — персонаж с профилем «${subtitle}». Карточка включена в полный каталог персонажей.`, tags: ["Персонаж", "Полный каталог"] })),
+];
+
+const featuredKnowledgePets: readonly KnowledgeCatalogEntry[] = [
+  { id: "fang", title: "Клык", subtitle: "Верность — это добродетель", description: "Даёт энергию или здоровье, когда противник отправляет союзника в нокдаун.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20229/58efe1ccd39d70cab6afc81962f7803b.png", tags: ["Поддержка", "Энергия"] },
+  { id: "flash", title: "Флэш", subtitle: "Меня так зовут, потому что я быстрый", description: "Снижает урон сзади от ножа и пуль, помогая пережить внезапную атаку.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/07f0873e3d4b524464df9a294ccd0216.png", tags: ["Защита", "Спина"] },
+  { id: "yeti", title: "Йети", subtitle: "Мягкая шерсть и холодная сила", description: "Уменьшает урон, получаемый от взрывов.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c926972d56e9197623e1bf269fcfd319.png", tags: ["Защита", "Взрывы"] },
+  { id: "sovereign", title: "Соверен", subtitle: "Я плохого не посоветую", description: "Увеличивает дальность и время действия сканирующих предметов и навыков.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/031e4a53c9562a273f1a3f158886abdf.png", tags: ["Разведка", "Сканирование"] },
+  { id: "katran", title: "Катран", subtitle: "Рискнёшь поплыть со мной?", description: "После устранения или нокдауна рядом владелец и его команда получают бонус к скорости передвижения.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/15f31c3f63841531600de1b3c73d0fbb.png", tags: ["Мобильность", "Команда"] },
+  { id: "night-panther", title: "Ночная Пантера", subtitle: "Конец близок", description: "Увеличивает объём переносимых предметов и расширяет рюкзак.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/4c7c8b3ff7788ea4bd0f19b0870239c2.png", tags: ["Ресурсы", "Рюкзак"] },
+  { id: "detective-panda", title: "Детектив Панда", subtitle: "Я защищу мир", description: "Восстанавливает здоровье после устранения противника.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a2fce3aada53454584fcfd99c2a23d54.png", tags: ["Исцеление", "Устранение"] },
+  { id: "shiba-inu", title: "Сиба-ину", subtitle: "Готовься к находке", description: "Находит грибы и отмечает их расположение на мини-карте.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/71fad31502f7fca241e0220d98102b33.png", tags: ["Разведка", "Грибы"] },
+  { id: "ghost-fox", title: "Призрачная Лиса", subtitle: "Второй лучший друг человека", description: "Восстанавливает дополнительные очки здоровья при использовании аптечки.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/eaf14ab7c504f9e058de35c5afac2b45.png", tags: ["Исцеление", "Аптечка"] },
+  { id: "robo", title: "Робо", subtitle: "Домашний робот на острове", description: "Добавляет прочность установленной стене.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/3b0541045e4f1e25fbe6736cd6553233.png", tags: ["Защита", "Стены"] },
+  { id: "otter", title: "Выдра", subtitle: "Музыкально одарённая выдра", description: "При использовании аптечки или лечащего пистолета дополнительно восстанавливает энергию.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/b1256df8ceca9f8d7723f5036e713173.png", tags: ["Поддержка", "Энергия"] },
+  { id: "falcon", title: "Сокол", subtitle: "Полетели", description: "Позволяет дальше скользить после прыжка и быстрее снижаться после открытия парашюта для всей команды.", imageUrl: "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/76f236ff23558395d69e253fe63ad225.png", tags: ["Высадка", "Команда"] },
+] as const;
+
+const additionalPetProfiles = [
+  ["mr-penguin", "Мистер Пинг-Вин", "Бывший подопытный, который путешествует по миру", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/fd0ec256295b71cf5adb7383235e9ae3.png"],
+  ["baboon", "Павиан", "Доброе сердце важнее внешности", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/9e60dea4a72153bdd88fade4ad48fcac.png"],
+  ["rockie", "Роки", "Питомец с зелёным ирокезом", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/9c5afe38217725a9cb527b03069044ed.png"],
+  ["dreki", "Дрейк", "Таинственный гость, пришедший на зов", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/0c0e8047ee07ecd45cb3cb638faff2e6.png"],
+  ["marcy", "Марси", "Гость из другого мира", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/549002ac06df9756b3c470051d624004.png"],
+  ["dr-quack", "Доктор Кряккер", "Называет себя доктором", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/052d08e5b1ad11e2e524e560ccf2ffb4.png"],
+  ["sensei-tig", "Сенсей Тиго", "Наставник для своей команды", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/b177a71fccfbbeee4bbb289213131b44.png"],
+  ["agent-hop", "Агент Скок", "Агент со шрамом из прошлого", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/04c21587e8af4d44901cc1fc0456a8f3.png"],
+  ["axel", "Аксель", "Популярный спутник игрока", "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/0c141cf65b9bf4983e893946f028bbd1.png"],
+] as const;
+
+export const knowledgePets: readonly KnowledgeCatalogEntry[] = [
+  ...featuredKnowledgePets,
+  ...additionalPetProfiles.map(([id, title, subtitle, imageUrl]) => ({ id, title, subtitle, imageUrl, description: `${title} — питомец с отдельным игровым навыком. Карточка включена в полный каталог питомцев.`, tags: ["Питомец", "Полный каталог"] })),
+];
 
 export const knowledgeUpdates: readonly KnowledgeCatalogEntry[] = [
   { id: "solara", title: "Солара: новая карта", subtitle: "20 мая 2025", description: "Футуристический портовый город с рельсовыми слайдами, динамической погодой, интерактивными зонами и новыми маршрутами для тактической игры.", tags: ["Карта", "Событие"] },

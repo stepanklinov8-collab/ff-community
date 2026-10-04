@@ -314,17 +314,59 @@ body.knowledge-garena-mode .app-main {
   background: #232323;
 }
 
+.garena-map-viewport {
+  display: grid;
+  width: 100%;
+  height: calc(100% - 178px);
+  min-height: 380px;
+  place-items: center;
+  overflow: hidden;
+}
+
 .garena-map-canvas {
   position: relative;
-  width: min(1000px, 100vw);
-  height: 1000px;
-  margin-inline: auto;
-  transform: translateY(-116px);
+  width: min(100%, calc(100vh - 278px));
+  max-width: 1000px;
+  aspect-ratio: 1;
+  transition: transform 180ms ease;
+  transform-origin: center;
 }
 
 .garena-map-image {
-  object-fit: cover;
+  object-fit: contain;
 }
+
+.knowledge-map-zoom {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  color: #fff;
+  background: rgb(5 5 5 / 82%);
+  border: 1px solid rgb(255 202 5 / 45%);
+  border-radius: 9px;
+  backdrop-filter: blur(8px);
+}
+
+.knowledge-map-zoom button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  background: #202020;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+}
+
+.knowledge-map-zoom button:hover { color: #080808; background: #ffca05; }
+.knowledge-map-zoom span { min-width: 48px; text-align: center; font-size: 12px; font-weight: 800; }
+.knowledge-map-zoom .knowledge-map-fit { min-width: 76px; }
 
 .garena-map-grid {
   position: absolute;
@@ -623,6 +665,15 @@ body.knowledge-garena-mode .app-main {
   object-fit: cover;
 }
 
+.knowledge-catalog-card-image.is-weapon {
+  background: radial-gradient(circle at 50% 48%, #243644 0, #0a1117 72%);
+}
+
+.knowledge-catalog-card-image.is-weapon img {
+  padding: 14px;
+  object-fit: contain;
+}
+
 .knowledge-catalog-card-image::after {
   position: absolute;
   inset: 0;
@@ -698,7 +749,10 @@ body.knowledge-garena-mode .app-main {
   .garena-map-current-title { font-size: 22px; }
   .garena-map-current-description { max-width: none; }
   .garena-map-stage { height: 100svh; min-height: 620px; }
-  .garena-map-canvas { width: 100vw; height: 100vw; margin-top: 0; transform: translateY(-10%); }
+  .garena-map-viewport { height: calc(100% - 280px); min-height: 310px; }
+  .garena-map-canvas { width: min(100vw, calc(100svh - 365px)); }
+  .knowledge-map-zoom { top: 10px; right: 10px; }
+  .knowledge-map-zoom .knowledge-map-fit { display: none; }
   .garena-map-marker-name { font-size: 12px; }
   .garena-map-footer { align-items: flex-start; flex-direction: column; padding: 24px 20px; }
   .garena-section-switcher { flex-wrap: wrap; }

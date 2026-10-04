@@ -20,6 +20,8 @@ type Market = {
   odds: number;
   status: string;
   locks_at: string;
+  outcome: string | null;
+  bets: Array<{id:string;stake:number;potential_payout:number;payout:number;status:string;settled_at:string|null}>;
 };
 type EconomySettings = {
   currency_name: string;
@@ -178,10 +180,18 @@ export default function AdminBettingPage() {
       <section className="mt-8">
         <h2 className="mb-3 text-xl font-bold">{t("adminBetting.marketsTitle")}</h2>
         <p className="mb-4 text-xs text-slate-500">{locale === "ru" ? "Ставки рассчитываются при публикации результатов. Возврат выполняется при отмене игры или мероприятия." : locale === "kk" ? "Ставкалар нәтижелер жарияланғанда есептеледі. Ойын не іс-шара тоқтатылса, қаражат қайтарылады." : "Коюмдар жыйынтыктар жарыяланганда эсептелет. Оюн же иш-чара жокко чыгарылса, каражат кайтарылат."}</p>
-        <div className="space-y-2">{data.markets.map((market) => <article key={market.id} className="cyber-card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-          <div><strong>{market.subject_team_name || t("adminBetting.outcome")}</strong><p className="text-slate-400">{market.mode} · {market.market_type} · {market.line ?? market.selection_value} · ×{Number(market.odds).toFixed(2)} · {market.status}</p></div>
-
-        </article>)}</div>
+        <div className="space-y-2">{data.markets.map((market) => {
+          const settled=market.status==="settled"||market.status==="void";
+          const totalStake=market.bets.reduce((sum,bet)=>sum+Number(bet.stake),0);
+          const totalPayout=market.bets.reduce((sum,bet)=>sum+Number(bet.payout),0);
+          const pendingCount=market.bets.filter((bet)=>bet.status==="open"||bet.status==="pending").length;
+          const statusLabel=market.status==="open"?"Приём открыт":market.status==="locked"?"Приём закрыт":market.status==="void"?"Возврат":"Рассчитан";
+          const outcomeLabel=market.outcome==="won"?"исход состоялся":market.outcome==="lost"?"исход не состоялся":market.outcome==="void"?"возврат":"";
+          return <article key={market.id} className="cyber-card p-4 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><strong>{market.subject_team_name || t("adminBetting.outcome")}</strong><p className="mt-1 text-slate-400">{market.mode} · {market.market_type} · {market.line ?? market.selection_value} · ×{Number(market.odds).toFixed(2)}</p></div><span className={`rounded-full border px-3 py-1 text-xs font-bold ${settled?"border-emerald-400/30 bg-emerald-400/[.07] text-emerald-200":"border-amber-400/25 bg-amber-400/[.06] text-amber-200"}`}>{statusLabel}{outcomeLabel?` · ${outcomeLabel}`:""}</span></div>
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставок</span><p className="mt-1 font-bold">{market.bets.length}</p></div><div><span className="text-xs text-slate-500">Общая сумма</span><p className="mt-1 font-bold">{totalStake}</p></div><div><span className="text-xs text-slate-500">Выплачено</span><p className="mt-1 font-bold">{settled?totalPayout:"—"}</p></div><div><span className="text-xs text-slate-500">Ожидают расчёта</span><p className={`mt-1 font-bold ${pendingCount?"text-amber-300":"text-emerald-300"}`}>{pendingCount}</p></div></div>
+          </article>;
+        })}</div>
       </section>
       <Link href="/admin" className="mt-6 inline-flex text-cyan-300 hover:underline">{t("adminBetting.back")}</Link>
     </div>

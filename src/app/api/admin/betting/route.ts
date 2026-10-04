@@ -45,6 +45,10 @@ export async function GET(request: Request) {
     if (marketsError || eventsError || warsError || sourcesError) {
       throw marketsError ?? eventsError ?? warsError ?? sourcesError;
     }
+    const marketIds = (markets ?? []).map((market) => market.id);
+    const bets = marketIds.length ? await allRows((a,b) => supabase.from("site_bets")
+      .select("id,market_id,stake,potential_payout,payout,status,settled_at")
+      .in("market_id",marketIds).order("placed_at",{ascending:false}).order("id").range(a,b)) : [];
     const eventIds = (events ?? []).map((event) => event.id);
     const sessions = eventIds.length ? await allRows((a,b) => supabase.from("event_sessions")
       .select("id,event_id,public_number,start_time,status,betting_enabled")
@@ -54,7 +58,10 @@ export async function GET(request: Request) {
       .not("first_published_at","is",null).order("session_id").range(a,b)) : [];
     const publishedSessions = new Set(publications.map(row=>row.session_id));
     return Response.json({
-      markets: markets ?? [],
+      markets: (markets ?? []).map((market)=>({
+        ...market,
+        bets:bets.filter((bet)=>bet.market_id===market.id),
+      })),
       sources: sources ?? [],
       events: (events ?? []).map((event) => ({ ...event, sessions: sessions.filter(session=>session.event_id===event.id)
         .map(session=>({...session,results_published:publishedSessions.has(session.id)})) })),

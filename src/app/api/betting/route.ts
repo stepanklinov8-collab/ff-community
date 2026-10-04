@@ -59,7 +59,7 @@ interface SelectionEvaluation {
 
 const unavailableMessage = "Коэффициент ниже 1,10. Ставка на этот исход недоступна";
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
-const betSelection = "id,market_id,stake,odds,potential_payout,status,payout,placed_at,betting_markets(subject_team_name,mode,market_type,selection_value,line,event_id,game_id,clan_war_id)";
+const betSelection = "id,market_id,stake,odds,potential_payout,status,payout,placed_at,settled_at,betting_markets(subject_team_name,mode,market_type,selection_value,line,event_id,game_id,clan_war_id,events(title),event_games(game_number,map_name,event_sessions(public_number,start_time)))";
 
 function average(values: number[], fallback: number) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : fallback;

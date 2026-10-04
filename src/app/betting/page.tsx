@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { useLanguage } from "@/components/LanguageProvider";
 import { mapTitle } from "@/lib/competition/map-catalog";
+import { displayedBetPayout } from "@/lib/betting-display";
 
 type Mode = "tournament" | "training" | "solo" | "bo" | "kv";
 type MarketType = "kills_over" | "kills_under" | "exact_place" | "win" | "loss" | "exact_score";
@@ -23,7 +24,16 @@ type Preview = {
   odds?: number;
   message?: string;
 };
-type BetMarket = { subject_team_name: string | null; market_type: string; selection_value: string; line: number | null; mode: string };
+type Related<T> = T | T[] | null;
+type BetMarket = {
+  subject_team_name: string | null;
+  market_type: string;
+  selection_value: string;
+  line: number | null;
+  mode: string;
+  events: Related<{ title: string }>;
+  event_games: Related<{ game_number: number; map_name: string; event_sessions: Related<{ public_number: number; start_time: string }> }>;
+};
 type Bet = {
   id: string;
   market_id: string;
@@ -33,7 +43,8 @@ type Bet = {
   status: string;
   payout: number;
   placed_at: string;
-  betting_markets: BetMarket | BetMarket[] | null;
+  settled_at: string | null;
+  betting_markets: Related<BetMarket>;
 };
 type Quote = { available: boolean; quoteId?: string; odds?: number; expiresAt?: string; message?: string };
 type PageData = {
@@ -55,6 +66,10 @@ const initialData: PageData = {
   previews: [],
   bets: [],
 };
+
+function firstRelated<T>(value: Related<T>): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
 
 export default function BettingPage() {
   const { t, formatDate, locale } = useLanguage();
@@ -117,6 +132,13 @@ export default function BettingPage() {
   const marketOptions: [MarketType, string][] = isClassic
     ? [["exact_place", marketLabels.exact_place], ["kills_over", marketLabels.kills_over], ["kills_under", marketLabels.kills_under]]
     : [["win", marketLabels.win], ["loss", marketLabels.loss], ["kills_over", marketLabels.kills_over], ["kills_under", marketLabels.kills_under], ["exact_score", marketLabels.exact_score]];
+  const activeBets = useMemo(() => data.bets.filter((bet) => bet.status === "open" || bet.status === "pending"), [data.bets]);
+  const settledBets = useMemo(() => data.bets.filter((bet) => bet.status !== "open" && bet.status !== "pending"), [data.bets]);
+  const statusLabels: Record<string, string> = locale === "ru"
+    ? { open: "Ожидает результата", pending: "Ожидает результата", won: "Выиграла", lost: "Проиграла", refunded: "Возврат" }
+    : locale === "kk"
+      ? { open: "Нәтиже күтілуде", pending: "Нәтиже күтілуде", won: "Ұтты", lost: "Ұтылды", refunded: "Қайтарылды" }
+      : { open: "Жыйынтык күтүлүүдө", pending: "Жыйынтык күтүлүүдө", won: "Утту", lost: "Утулду", refunded: "Кайтарылды" };
 
   const resetQuote = () => {
     setQuote(null);
@@ -289,10 +311,39 @@ export default function BettingPage() {
         </section>
       </>}
 
-      {data.bets.length > 0 && <section className="mt-8"><h2 className="mb-3 text-xl font-bold">{t("betting.myBets")}</h2><div className="space-y-2">{data.bets.map((bet) => {
-        const relation = Array.isArray(bet.betting_markets) ? bet.betting_markets[0] : bet.betting_markets;
-        return <div key={bet.id} className="cyber-card flex flex-wrap justify-between gap-3 p-3 text-sm"><span>{relation?.subject_team_name || t("betting.outcome")} · {formatDate(bet.placed_at, { dateStyle: "short", timeStyle: "short" })} · {bet.stake} ×{Number(bet.odds).toFixed(2)}</span><span className="text-cyan-300">{bet.status} · {bet.payout || bet.potential_payout}</span></div>;
-      })}</div></section>}
+      {data.bets.length > 0 && <section className="mt-8 space-y-6">
+        <div><h2 className="text-xl font-bold">{t("betting.myBets")}</h2><p className="mt-1 text-sm text-slate-400">{locale === "ru" ? "Фактическая выплата показывается отдельно от возможной. У проигранной ставки выплата равна нулю." : locale === "kk" ? "Нақты төлем ықтимал төлемнен бөлек көрсетіледі." : "Чыныгы төлөм мүмкүн болгон төлөмдөн өзүнчө көрсөтүлөт."}</p></div>
+        <div><h3 className="mb-3 text-base font-bold text-amber-200">{locale === "ru" ? "Активные ставки" : locale === "kk" ? "Белсенді бәстер" : "Активдүү коюмдар"}</h3>
+          {activeBets.length === 0 ? <p className="rounded-xl border border-white/10 bg-white/[.03] p-4 text-sm text-slate-500">{locale === "ru" ? "Нет ставок, ожидающих результата." : locale === "kk" ? "Нәтижені күтіп тұрған бәстер жоқ." : "Жыйынтык күтүп жаткан коюмдар жок."}</p> : <BetCards bets={activeBets} currencyName={data.currencyName} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} />}
+        </div>
+        {settledBets.length > 0 && <div><h3 className="mb-3 text-base font-bold text-emerald-200">{locale === "ru" ? "Результаты ставок" : locale === "kk" ? "Бәс нәтижелері" : "Коюмдардын жыйынтыгы"}</h3><BetCards bets={settledBets} currencyName={data.currencyName} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} /></div>}
+      </section>}
     </div>
   );
+}
+
+function BetCards({ bets, currencyName, statusLabels, marketLabels, formatDate }: {
+  bets: Bet[];
+  currencyName: string;
+  statusLabels: Record<string, string>;
+  marketLabels: Record<MarketType, string>;
+  formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string;
+}) {
+  return <div className="grid gap-3 lg:grid-cols-2">{bets.map((bet) => {
+    const market = firstRelated(bet.betting_markets);
+    const event = firstRelated(market?.events ?? null);
+    const game = firstRelated(market?.event_games ?? null);
+    const session = firstRelated(game?.event_sessions ?? null);
+    const marketType = market?.market_type as MarketType | undefined;
+    const resultAmount = displayedBetPayout({status:bet.status,payout:bet.payout,potentialPayout:bet.potential_payout});
+    const isActive = bet.status === "open" || bet.status === "pending";
+    const resultLabel = isActive ? "Возможная выплата" : bet.status === "refunded" ? "Возвращено" : "Фактическая выплата";
+    const statusTone = bet.status === "won" ? "border-emerald-400/30 bg-emerald-400/[.07] text-emerald-200" : bet.status === "lost" ? "border-red-400/25 bg-red-400/[.05] text-red-200" : bet.status === "refunded" ? "border-cyan-400/25 bg-cyan-400/[.06] text-cyan-200" : "border-amber-400/25 bg-amber-400/[.06] text-amber-200";
+    const selection = marketType?.startsWith("kills_") ? `${marketLabels[marketType]} ${market?.line}` : marketType === "exact_place" ? `${marketLabels.exact_place}: ${market?.selection_value}` : marketType ? `${marketLabels[marketType]}${market?.selection_value && !["win", "loss"].includes(marketType) ? `: ${market.selection_value}` : ""}` : "Исход";
+    return <article key={bet.id} className="cyber-card overflow-hidden p-4 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs text-slate-500">{event?.title ?? "Ставка"}{session ? ` · Сессия ${session.public_number}` : ""}{game ? ` · Игра ${game.game_number}` : ""}</p><h4 className="mt-1 text-base font-bold text-white">{market?.subject_team_name || "Участник"}</h4><p className="mt-1 text-slate-300">{selection}{game?.map_name ? ` · ${mapTitle(game.map_name)}` : ""}</p></div><span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusTone}`}>{statusLabels[bet.status] ?? bet.status}</span></div>
+      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставка</span><p className="mt-1 font-bold">{bet.stake} {currencyName}</p></div><div><span className="text-xs text-slate-500">Коэффициент</span><p className="mt-1 font-bold">×{Number(bet.odds).toFixed(2)}</p></div><div><span className="text-xs text-slate-500">Возможная</span><p className="mt-1 font-bold">{bet.potential_payout}</p></div><div><span className="text-xs text-slate-500">{resultLabel}</span><p className={`mt-1 font-black ${bet.status === "lost" ? "text-red-300" : "text-emerald-300"}`}>{resultAmount} {currencyName}</p></div></div>
+      <p className="mt-3 text-xs text-slate-600">Принята: {formatDate(bet.placed_at, { dateStyle: "short", timeStyle: "short" })}{bet.settled_at ? ` · Рассчитана: ${formatDate(bet.settled_at, { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
+    </article>;
+  })}</div>;
 }

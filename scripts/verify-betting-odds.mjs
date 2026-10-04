@@ -6,6 +6,7 @@ import {
 } from "../src/lib/betting-odds.ts";
 import { classifyBettingDatabaseError } from "../src/lib/betting-errors.ts";
 import { isEventEffectivelyPublished } from "../src/lib/event-publication.ts";
+import { displayedBetPayout } from "../src/lib/betting-display.ts";
 
 assert.equal(roundHalfUpToHundredths(1.1049), 1.10);
 assert.equal(roundHalfUpToHundredths(1.105), 1.11);
@@ -48,5 +49,11 @@ assert.deepEqual(classifyBettingDatabaseError({ message: "Insufficient balance" 
 });
 assert.equal(classifyBettingDatabaseError({ code: "23505", message: "duplicate key value" }).code, "DUPLICATE_BET");
 assert.equal(classifyBettingDatabaseError({ code: "XX000", message: "unexpected" }).code, "BET_DATABASE_XX000");
+
+assert.equal(displayedBetPayout({ status: "open", payout: 0, potentialPayout: 450 }), 450);
+assert.equal(displayedBetPayout({ status: "pending", payout: 0, potentialPayout: 450 }), 450);
+assert.equal(displayedBetPayout({ status: "won", payout: 450, potentialPayout: 450 }), 450);
+assert.equal(displayedBetPayout({ status: "lost", payout: 0, potentialPayout: 450 }), 0);
+assert.equal(displayedBetPayout({ status: "refunded", payout: 200, potentialPayout: 450 }), 200);
 
 console.log("Betting odds verification passed");
