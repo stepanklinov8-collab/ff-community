@@ -187,6 +187,7 @@ body.knowledge-garena-mode .app-main {
   overflow: hidden;
   color: #fff;
   background: #080808;
+  --knowledge-font: "Arial Narrow", "Roboto Condensed", "Bahnschrift Condensed", Impact, sans-serif;
 }
 
 .garena-map-page {
@@ -195,7 +196,8 @@ body.knowledge-garena-mode .app-main {
 }
 
 .garena-map-nav {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -203,15 +205,29 @@ body.knowledge-garena-mode .app-main {
   gap: clamp(24px, 5vw, 72px);
   padding: 0 clamp(24px, 5vw, 66px);
   background: #050505;
+  border-bottom: 2px solid #f4bf00;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+.garena-map-nav::after {
+  position: absolute;
+  right: 0;
+  bottom: -2px;
+  width: min(28vw, 360px);
+  height: 2px;
+  content: "";
+  background: #fff;
 }
 
 .garena-map-logo {
   color: #ffca05;
-  font: 900 19px/1 Arial, sans-serif;
-  letter-spacing: 0.14em;
+  font: italic 900 23px/1 var(--knowledge-font);
+  letter-spacing: 0.09em;
   text-decoration: none;
   white-space: nowrap;
 }
+
+.garena-map-logo span { color: #fff; }
 
 .garena-map-links {
   display: flex;
@@ -224,9 +240,12 @@ body.knowledge-garena-mode .app-main {
 .garena-map-links button,
 .garena-map-actions span {
   color: #d7d7d7;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-family: var(--knowledge-font);
+  font-size: 15px;
+  font-stretch: condensed;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -248,16 +267,19 @@ body.knowledge-garena-mode .app-main {
 .knowledge-nav-dropdown summary {
   cursor: pointer;
   color: #d7d7d7;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-family: var(--knowledge-font);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   list-style: none;
   white-space: nowrap;
+  text-transform: uppercase;
 }
 
 .knowledge-nav-dropdown summary::-webkit-details-marker { display: none; }
 .knowledge-nav-dropdown summary::after { content: "⌄"; margin-left: 6px; color: #ffca05; }
-.knowledge-nav-dropdown[open] summary { color: #ffca05; }
+.knowledge-nav-dropdown[open] summary,
+.knowledge-nav-dropdown summary.is-active { color: #ffca05; }
 
 .knowledge-nav-dropdown-panel {
   position: absolute;
@@ -269,17 +291,19 @@ body.knowledge-garena-mode .app-main {
   padding: 9px;
   background: rgba(5, 5, 5, 0.98);
   border: 1px solid rgba(255, 202, 5, 0.35);
-  border-radius: 8px;
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 0 100%);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
 }
 
 .knowledge-nav-dropdown-panel button {
   padding: 10px 11px;
   text-align: left;
+  border-left: 2px solid transparent;
 }
 
 .knowledge-nav-dropdown-panel button:hover,
-.knowledge-nav-dropdown-panel button.is-active { background: rgba(255, 202, 5, 0.1); }
+.knowledge-nav-dropdown-panel button.is-active { color: #ffca05; background: rgba(255, 202, 5, 0.1); border-left-color: #ffca05; }
 
 .garena-map-links a:hover,
 .garena-map-links button:hover,
@@ -298,13 +322,19 @@ body.knowledge-garena-mode .app-main {
 .garena-map-actions a {
   padding: 10px 30px;
   color: #080808;
-  font-size: 13px;
+  font-family: var(--knowledge-font);
+  font-size: 14px;
   font-weight: 800;
   background: #ffca05;
-  border-radius: 7px;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  text-transform: uppercase;
   text-decoration: none;
   white-space: nowrap;
 }
+
+.knowledge-mobile-menu-button,
+.knowledge-mobile-menu-layer { display: none; }
 
 .garena-map-stage {
   position: relative;
@@ -395,19 +425,32 @@ body.knowledge-garena-mode .app-main {
   top: -14px;
   left: 10px;
   width: max-content;
+  padding: 5px 10px 5px 12px;
   color: #fff;
-  font-size: clamp(13px, 1.5vw, 24px);
+  font-family: var(--knowledge-font);
+  font-size: clamp(11px, 1.15vw, 18px);
+  font-stretch: condensed;
+  font-style: italic;
   font-weight: 900;
-  text-shadow: 0 2px 5px #111, 0 0 7px #111;
-  transform: translate(-10%, -100%) rotate(-44deg);
+  letter-spacing: 0.035em;
+  text-shadow: 0 2px 3px #000;
+  text-transform: uppercase;
+  background: linear-gradient(105deg, rgb(5 5 5 / 92%), rgb(5 5 5 / 58%));
+  border-left: 3px solid #ffca05;
+  box-shadow: 0 5px 12px rgb(0 0 0 / 35%);
+  transform: translate(-10%, -100%) rotate(-28deg) skewX(-7deg);
   transform-origin: left bottom;
   white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
 }
 
 .garena-map-marker:hover .garena-map-marker-name,
 .garena-map-marker:focus-visible .garena-map-marker-name,
 .garena-map-marker.is-selected .garena-map-marker-name {
-  color: #ffda38;
+  color: #080808;
+  text-shadow: none;
+  background: #ffca05;
+  border-left-color: #fff;
 }
 
 .garena-map-marker-photo {
@@ -587,23 +630,69 @@ body.knowledge-garena-mode .app-main {
   font-size: 12px;
   background: transparent;
   border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 999px;
+  font-family: var(--knowledge-font);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.garena-section-switcher button:hover,
+.garena-section-switcher button.is-active { color: #070707; background: #ffca05; border-color: #ffca05; }
+
+.knowledge-catalog-page {
+  width: min(1440px, 100%);
+  min-height: calc(100vh - 80px);
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 64px);
+  background: radial-gradient(circle at 80% 0, rgb(255 202 5 / 7%), transparent 33%);
+}
+
+.knowledge-catalog-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(115deg, #111 0 64%, #1b1b1b 64%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-bottom: 3px solid #ffca05;
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+}
+
+.knowledge-catalog-hero::after {
+  position: absolute;
+  top: -30%;
+  right: 7%;
+  width: 110px;
+  height: 180%;
+  content: "";
+  background: #ffca05;
+  opacity: 0.08;
+  transform: skewX(-18deg);
+}
+
+.knowledge-catalog-hero .section-title,
+.knowledge-catalog-section .section-title {
+  font-family: var(--knowledge-font);
+  font-style: italic;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .knowledge-catalog-section {
-  background: linear-gradient(145deg, rgb(8 22 31 / 94%), rgb(4 11 17 / 96%));
+  background: linear-gradient(145deg, rgb(20 20 20 / 96%), rgb(7 7 7 / 98%));
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 0;
 }
 
 .knowledge-catalog-count {
   padding: 7px 12px;
-  color: #9bdcf4;
+  color: #ffdb4d;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgb(21 73 96 / 40%);
-  border: 1px solid rgb(92 186 230 / 24%);
-  border-radius: 999px;
+  background: rgb(255 202 5 / 8%);
+  border: 1px solid rgb(255 202 5 / 28%);
+  border-radius: 0;
 }
 
 .knowledge-catalog-filters {
@@ -614,19 +703,23 @@ body.knowledge-garena-mode .app-main {
 
 .knowledge-catalog-filters button {
   padding: 8px 12px;
-  color: #8eabb8;
+  color: #aaa;
   cursor: pointer;
-  background: rgb(5 18 26 / 75%);
-  border: 1px solid rgb(92 186 230 / 20%);
-  border-radius: 999px;
+  font-family: var(--knowledge-font);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #111;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 0;
   transition: 160ms ease;
 }
 
 .knowledge-catalog-filters button:hover,
 .knowledge-catalog-filters button.is-active {
-  color: #e8fbff;
-  background: rgb(13 83 108 / 65%);
-  border-color: rgb(92 210 245 / 70%);
+  color: #080808;
+  background: #ffca05;
+  border-color: #ffca05;
 }
 
 .knowledge-catalog-grid {
@@ -637,15 +730,15 @@ body.knowledge-garena-mode .app-main {
 
 .knowledge-catalog-card {
   overflow: hidden;
-  background: rgb(5 14 21 / 88%);
-  border: 1px solid rgb(92 186 230 / 18%);
-  border-radius: 16px;
+  background: #101010;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0;
   box-shadow: 0 18px 45px rgb(0 0 0 / 18%);
   transition: 180ms ease;
 }
 
 .knowledge-catalog-card:hover {
-  border-color: rgb(92 210 245 / 62%);
+  border-color: rgb(255 202 5 / 75%);
   transform: translateY(-2px);
 }
 
@@ -654,10 +747,10 @@ body.knowledge-garena-mode .app-main {
   display: grid;
   height: 168px;
   overflow: hidden;
-  color: #84d7f2;
+  color: #ffca05;
   font-size: 42px;
   font-weight: 900;
-  background: radial-gradient(circle at 30% 20%, rgb(35 141 178 / 35%), transparent 50%), #081b25;
+  background: radial-gradient(circle at 30% 20%, rgb(255 202 5 / 20%), transparent 50%), #151515;
   place-items: center;
 }
 
@@ -706,7 +799,10 @@ body.knowledge-garena-mode .app-main {
   margin: 0;
   color: #f4fbff;
   font-size: 17px;
+  font-family: var(--knowledge-font);
+  font-style: italic;
   font-weight: 800;
+  text-transform: uppercase;
 }
 
 .knowledge-catalog-card-body p {
@@ -730,20 +826,36 @@ body.knowledge-garena-mode .app-main {
 
 .knowledge-catalog-tags span {
   padding: 4px 7px;
-  color: #8edaf2;
+  color: #ffd94d;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: rgb(19 69 91 / 35%);
-  border: 1px solid rgb(92 186 230 / 18%);
-  border-radius: 5px;
+  background: rgb(255 202 5 / 7%);
+  border: 1px solid rgb(255 202 5 / 20%);
+  border-radius: 0;
 }
 
 @media (max-width: 850px) {
   .garena-map-links { display: none; }
   .garena-map-nav { justify-content: space-between; }
-  .garena-map-actions span { display: none; }
+  .garena-map-actions > a { display: none; }
+  .knowledge-mobile-menu-button { display: grid; width: 42px; height: 42px; padding: 9px; cursor: pointer; background: #161616; border: 1px solid rgb(255 202 5 / 48%); place-content: center; gap: 5px; }
+  .knowledge-mobile-menu-button span { display: block; width: 21px; height: 2px; background: #ffca05; transform: skewX(-14deg); }
+  .knowledge-mobile-menu-layer { position: fixed; z-index: 100; inset: 0; display: block; }
+  .knowledge-mobile-menu-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; background: rgb(0 0 0 / 68%); border: 0; backdrop-filter: blur(3px); }
+  .knowledge-mobile-menu { position: absolute; top: 0; right: 0; display: flex; width: min(88vw, 390px); height: 100%; padding: 24px; background: linear-gradient(155deg, #171717, #050505 66%); border-left: 2px solid #ffca05; box-shadow: -22px 0 60px rgb(0 0 0 / 65%); flex-direction: column; }
+  .knowledge-mobile-menu::before { position: absolute; top: 0; right: 42px; width: 90px; height: 4px; content: ""; background: #ffca05; transform: skewX(-35deg); }
+  .knowledge-mobile-menu-head { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid rgb(255 255 255 / 14%); }
+  .knowledge-mobile-menu-head small { display: block; color: #ffca05; font: 800 11px/1 var(--knowledge-font); letter-spacing: .16em; text-transform: uppercase; }
+  .knowledge-mobile-menu-head strong { display: block; margin-top: 7px; font: italic 900 30px/1 var(--knowledge-font); letter-spacing: .04em; text-transform: uppercase; }
+  .knowledge-mobile-menu-head button { width: 38px; height: 38px; padding: 0; color: #fff; font-size: 30px; line-height: 1; background: #222; border: 1px solid rgb(255 255 255 / 15%); }
+  .knowledge-mobile-menu nav { display: grid; margin-top: 16px; overflow-y: auto; }
+  .knowledge-mobile-menu nav button { display: grid; grid-template-columns: 34px 1fr; align-items: center; padding: 13px 8px; color: #ddd; font: italic 800 17px/1.1 var(--knowledge-font); letter-spacing: .04em; text-align: left; text-transform: uppercase; background: transparent; border: 0; border-bottom: 1px solid rgb(255 255 255 / 9%); }
+  .knowledge-mobile-menu nav button > span { color: #656565; font-size: 10px; font-style: normal; }
+  .knowledge-mobile-menu nav button.is-active { color: #090909; background: #ffca05; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); }
+  .knowledge-mobile-menu nav button.is-active > span { color: #4b3b00; }
+  .knowledge-mobile-menu > a { margin-top: auto; padding-top: 18px; color: #ffca05; font: 800 13px/1 var(--knowledge-font); letter-spacing: .06em; text-decoration: none; text-transform: uppercase; }
   .garena-map-selector { grid-template-columns: 1fr; gap: 14px; padding: 18px 20px; }
   .garena-map-current-thumb { width: 120px; height: 68px; }
   .garena-map-current-title { font-size: 22px; }
@@ -753,10 +865,11 @@ body.knowledge-garena-mode .app-main {
   .garena-map-canvas { width: min(100vw, calc(100svh - 365px)); }
   .knowledge-map-zoom { top: 10px; right: 10px; }
   .knowledge-map-zoom .knowledge-map-fit { display: none; }
-  .garena-map-marker-name { font-size: 12px; }
+  .garena-map-marker-name { padding: 3px 7px 3px 9px; font-size: 10px; border-left-width: 2px; transform: translate(-10%, -100%) rotate(-25deg) skewX(-7deg); }
   .garena-map-footer { align-items: flex-start; flex-direction: column; padding: 24px 20px; }
   .garena-section-switcher { flex-wrap: wrap; }
   .knowledge-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .knowledge-catalog-page { min-height: calc(100svh - 80px); padding: 22px 14px 42px; }
 }
 
 @media (max-width: 560px) {

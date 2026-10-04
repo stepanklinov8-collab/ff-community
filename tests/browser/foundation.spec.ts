@@ -71,6 +71,17 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   await expect(page.getByRole("heading", { name: "Аккаунт и профиль", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Вселенная", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Игровые режимы", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Обзор игры", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Об игре", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Об игре", exact: true }).first().click();
+  await expect(page.locator(".knowledge-catalog-section h2", { hasText: "Об игре" })).toBeVisible();
+});
+test("update 3 knowledge mobile navigation keeps every section accessible", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/knowledge");
+  await page.getByRole("button", { name: "Открыть разделы базы знаний" }).click();
+  const menu = page.getByRole("complementary", { name: "Разделы базы знаний" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("button", { name: "02 Карты и локации" })).toBeVisible();
+  await menu.getByRole("button", { name: "04 Персонажи" }).click();
+  await expect(page.getByRole("heading", { name: "Персонажи", exact: true })).toBeVisible();
+  await expect(menu).toHaveCount(0);
 });
