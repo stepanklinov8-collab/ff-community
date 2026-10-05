@@ -119,6 +119,8 @@ export default function EventPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const [pastLimit, setPastLimit] = useState(10);
+  const [showFutureSessions, setShowFutureSessions] = useState(false);
+  const [futureLimit, setFutureLimit] = useState(10);
   const [games, setGames] = useState<EventGame[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [registrationCounts, setRegistrationCounts] = useState<Record<string, RegistrationCount>>({});
@@ -207,6 +209,10 @@ export default function EventPage() {
       if (sess) {
         setSessions(sess);
         const requested = sess.find(s => s.id === new URLSearchParams(window.location.search).get("sessionId"));
+        const upcoming = sess.filter(s => !sessionHasEnded(s, Date.now()));
+        const requestedFutureIndex = upcoming.findIndex(s => s.id === requested?.id);
+        setShowFutureSessions(requestedFutureIndex > 0);
+        setFutureLimit(Math.max(10, requestedFutureIndex));
         if (requested && sessionHasEnded(requested, Date.now())) {
           setShowPastSessions(true);
           const past = sess.filter(s => sessionHasEnded(s, Date.now())).reverse();
@@ -466,6 +472,7 @@ export default function EventPage() {
 
   const sessionRegistrations = registrations.filter((registration) => registration.session_id === selectedSessionId);
   const upcomingSessions = sessions.filter(s => !sessionHasEnded(s, clockNow));
+  const futureSessions = upcomingSessions.slice(1);
   const pastSessions = sessions.filter(s => sessionHasEnded(s, clockNow)).reverse();
   const confirmed = sessionRegistrations.filter(r => r.status === "confirmed");
   const waiting = sessionRegistrations.filter(r => r.status === "waiting");
@@ -614,8 +621,17 @@ export default function EventPage() {
       {/* Сессии */}
       <div className="mt-6">
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
-        {upcomingSessions.map(renderSession)}
+        {(isAdmin ? upcomingSessions.slice(0, 1) : upcomingSessions).map(renderSession)}
         {!upcomingSessions.length && <p className="mb-4 text-gray-400">Предстоящих сессий пока нет.</p>}
+        {isAdmin && !!futureSessions.length && <>
+          <button type="button" className="secondary-button mb-3" aria-expanded={showFutureSessions} aria-controls="future-sessions" onClick={() => setShowFutureSessions(value => !value)}>
+            {showFutureSessions ? "▴" : "▾"} Будущие ({futureSessions.length})
+          </button>
+          {showFutureSessions && <div id="future-sessions">
+            {futureSessions.slice(0, futureLimit).map(renderSession)}
+            {futureLimit < futureSessions.length && <button type="button" className="secondary-button mb-3" onClick={() => setFutureLimit(value => value + 10)}>Показать ещё</button>}
+          </div>}
+        </>}
         {!!pastSessions.length && <>
           <button type="button" className="secondary-button mb-3" aria-expanded={showPastSessions} aria-controls="past-sessions" onClick={() => setShowPastSessions(value => !value)}>
             {showPastSessions ? "▴" : "▾"} Прошедшие ({pastSessions.length})
