@@ -9,6 +9,7 @@ import {verifyBetting} from './betting.mjs';
 import {verifyLifecycle} from './lifecycle.mjs';
 import {verifyStatistics} from './statistics.mjs';
 import {verifyRegistrations} from './registrations.mjs';
+import {verifyTrainingSchedule} from './training-schedule.mjs';
 const db=new PGlite();
 try {
  await db.exec(await readFile(new URL('./baseline.sql',import.meta.url),'utf8'));
@@ -149,6 +150,7 @@ try {
  await verifyStatistics(db,id);
  await verifyLifecycle(db,id,config);
  await verifyBetting(db,id,config);
+ await verifyTrainingSchedule(db,id,config);
  if(!process.argv.includes('--betting')) {
   await verifyContinuity(db,id,config);
   await verifyLegacyRegistration(db,id,config);

@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   agentRules: false,
   poweredByHeader: false,
+  ...(environment === "test" ? { experimental: { cpus: 2 } } : {}),
   images: {
     remotePatterns: [{ protocol: "https", hostname: "cdn.wildflamestudio.com" }],
   },

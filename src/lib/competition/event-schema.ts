@@ -7,6 +7,7 @@ const date=z.string().refine(value=>Number.isFinite(Date.parse(value)),"invalid 
 const game=z.object({id:z.string().uuid().optional(),map:z.enum(maps)});
 const group=z.object({id:z.string().uuid().optional(),name:z.string().trim().max(100).default(""),capacity:z.number().int().min(2).max(60),roomId:z.string().max(100).default(""),roomPassword:z.string().max(100).default(""),roomNote:z.string().max(2000).default(""),games:z.array(game).min(1)});
 export const sessionConfiguration=z.object({id:z.string().uuid().optional(),startTime:date,endTime:date,
+ trainingRotationPosition:z.number().int().min(0).max(1_000_000).nullable().optional(),
  registrationOpenTime:date.nullable(),registrationCloseTime:date.nullable(),maxTeams:z.number().int().min(1).max(1024),
  responsibleUserId:z.string().uuid().nullable().default(null),description:z.string().max(10000).default(""),
  stage:z.enum(["ordinary","qualification","semifinal","final"]).default("ordinary"),sourceSessionId:z.string().uuid().nullable().default(null),
@@ -16,6 +17,7 @@ export const sessionConfiguration=z.object({id:z.string().uuid().optional(),star
  .refine(s=>!s.registrationCloseTime||Date.parse(s.registrationCloseTime)<Date.parse(s.startTime),"Регистрация должна закрываться до начала")
  .refine(s=>!s.registrationOpenTime||!s.registrationCloseTime||Date.parse(s.registrationOpenTime)<Date.parse(s.registrationCloseTime),"Проверьте время регистрации");
 export const eventConfiguration=z.object({
+ trainingSchedule:z.object({enabled:z.literal(true),startsOn:z.string().date()}).nullable().default(null),
  title:z.string().trim().min(2).max(160),type:z.enum(["training","bo","tournament","kv","solo"]),cost:z.number().int().min(0).max(10000000),
  organizer:z.string().trim().max(160),organizerUserId:z.string().uuid().nullable(),description:z.string().max(10000),rulesText:z.string().max(10000).default(""),
  streamUrl:z.string().url().or(z.literal("")),paymentUrl:z.string().url().or(z.literal("")),imageUrl:z.string().url().or(z.literal("")).default(""),
@@ -27,6 +29,7 @@ export const eventConfiguration=z.object({
  ratingEnabled:z.boolean().default(true),winsRequired:z.number().int().positive().default(1)}),
  sessions:z.array(sessionConfiguration).min(1),
 }).superRefine((value,ctx)=>{
+ if(value.trainingSchedule&&(value.type!=="training"||!value.sessions.some(s=>s.stage==="ordinary")))ctx.addIssue({code:"custom",message:"Автоматическое расписание доступно для тренировок с обычными сессиями"});
  const solo=value.rules.mode==="solo",round=["bo","kv"].includes(value.rules.mode);
  const ids=new Set<string>();
  for(const item of value.sessions.flatMap(s=>[s,...s.groups.flatMap(g=>[g,...g.games])]))if(item.id){

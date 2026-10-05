@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminClient();
-  for(const action of ["u2_expire_moderation","u2_publish_scheduled","u2_flush_notifications"]){
+  for(const action of ["u2_expire_moderation","u2_publish_scheduled","u3_extend_training_schedules","u2_flush_notifications"]){
     const {error}=await supabase.rpc(action);if(error){console.error("Competition maintenance",action,error);return Response.json({error:"Не удалось завершить обработку мероприятий"},{status:500});}
   }
   const {data:cleanup}=await supabase.from("competition_storage_cleanup").select("storage_path").order("created_at").limit(100);

@@ -10,6 +10,7 @@ await run(["scripts/check-boundaries.mjs"]);
 await run(["--test", "tests/foundation.test.mjs"]);
 await run(["--test", "tests/update3.test.mjs"]);
 await run(["--test", "tests/cron-health.test.mjs"]);
+await run(["--test", "tests/training-schedule.test.mjs"]);
 await run(["node_modules/eslint/bin/eslint.js", "."]);
 await run(["--test", "tools/database-tests/domain.test.mjs"]);
 await run(["tools/database-tests/verify.mjs"]);

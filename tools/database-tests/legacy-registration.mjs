@@ -6,6 +6,7 @@ export async function verifyLegacyRegistration(db,id,base){
  const registrations=[];
  try{
   for(let n=0;n<3;n++){
+   if(n===2)await db.query(`update event_sessions set start_time=now()+interval '9 minutes',registration_close_time=now()+interval '8 minutes' where id=$1`,[id(6200)]);
    await db.query('insert into auth.users(id) values($1)',[id(6210+n)]);
    await db.query('insert into profiles(id,nickname) values($1,$2)',[id(6210+n),`Self-registration ${n}`]);
    await db.query('insert into teams(id,name) values($1,$2)',[id(6220+n),`Self team ${n}`]);
@@ -14,6 +15,10 @@ export async function verifyLegacyRegistration(db,id,base){
    if(n===0)await assert.rejects(()=>db.query('select * from register_team_for_session($1,$2,$3::uuid[])',[id(6200),id(6220+n),[id(6210+n),id(6210+n)]]),/повторяться/);
    const result=(await db.query('select * from register_team_for_session($1,$2,$3::uuid[])',[id(6200),id(6220+n),[id(6210+n)]])).rows[0];
    assert.equal(result.registration_status,n<2?'confirmed':'waiting');registrations.push(result.registration_id);
+   if(n===2){
+    await db.query(`update event_sessions set registration_close_time=now()-interval '1 second' where id=$1`,[id(6200)]);
+    await assert.rejects(()=>db.query('select * from register_team_for_session($1,$2,$3::uuid[])',[id(6200),id(6220+n),[id(6210+n)]]),/Registration is closed/);
+   }
   }
   await db.query(`update event_sessions set start_time=now()+interval '9 minutes' where id=$1`,[id(6200)]);
   await assert.rejects(()=>db.query('select cancel_session_registration($1)',[registrations[2]]),/Состав уже закрыт/);

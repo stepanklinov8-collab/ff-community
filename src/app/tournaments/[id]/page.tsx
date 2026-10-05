@@ -12,6 +12,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { mapTitle } from "@/lib/competition/map-catalog";
+import { sessionHasEnded } from "@/lib/competition/training-schedule";
 
 interface Event {
   id: string;
@@ -116,6 +117,8 @@ export default function EventPage() {
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [showPastSessions, setShowPastSessions] = useState(false);
+  const [pastLimit, setPastLimit] = useState(10);
   const [games, setGames] = useState<EventGame[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [registrationCounts, setRegistrationCounts] = useState<Record<string, RegistrationCount>>({});
@@ -203,6 +206,12 @@ export default function EventPage() {
       const sess = publicSessions.data ?? legacySessions?.data;
       if (sess) {
         setSessions(sess);
+        const requested = sess.find(s => s.id === new URLSearchParams(window.location.search).get("sessionId"));
+        if (requested && sessionHasEnded(requested, Date.now())) {
+          setShowPastSessions(true);
+          const past = sess.filter(s => sessionHasEnded(s, Date.now())).reverse();
+          setPastLimit(Math.max(10, past.findIndex(s => s.id === requested.id) + 1));
+        }
         setSelectedSessionId((current) => current || sess.find(s=>s.id===new URLSearchParams(window.location.search).get("sessionId"))?.id || sess.find(s=>Date.parse(s.end_time||s.start_time)>Date.now())?.id || sess[sess.length-1]?.id || "");
       }
       const { data: gameRows } = await supabase.from("event_games").select("id,session_id,game_number,map_name").eq("event_id", id).order("game_number");
@@ -456,6 +465,8 @@ export default function EventPage() {
   if (!event) return <div className="min-h-screen p-6"><p>Мероприятие не найдено.</p></div>;
 
   const sessionRegistrations = registrations.filter((registration) => registration.session_id === selectedSessionId);
+  const upcomingSessions = sessions.filter(s => !sessionHasEnded(s, clockNow));
+  const pastSessions = sessions.filter(s => sessionHasEnded(s, clockNow)).reverse();
   const confirmed = sessionRegistrations.filter(r => r.status === "confirmed");
   const waiting = sessionRegistrations.filter(r => r.status === "waiting");
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
@@ -500,6 +511,33 @@ export default function EventPage() {
       <span className="sr-only">Зарегистрировано / всего мест: </span>{selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "…"}
     </p>
   );
+  const renderSession = (s: Session) => {
+          const isResponsible = s.responsible_user_id === currentUser?.id;
+          const registrationCount = registrationCounts[s.id];
+          return (
+            <div key={s.id} data-session-id={s.id} className="bg-gray-800 p-4 rounded mb-2">
+              <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
+              {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
+              {registrationCount && <p className="mt-2 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200"><span className="sr-only">Зарегистрировано / всего мест: </span>{registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
+              {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {mapTitle(game.map_name)}</span>)}</div>}
+
+              <div className="my-3 flex gap-3"><Link className="text-cyan-300" href={`/tournaments/${id}/results?sessionId=${s.id}`}>Итоги сессии</Link>{(isResponsible||isAdmin||isOrganizer)&&<Link className="text-emerald-300" href={`/tournaments/${id}/manage-results?sessionId=${s.id}`}>Ввести результаты</Link>}</div>
+              <SessionControls eventId={id} sessionId={s.id} authenticated={!!currentUser}/>
+              {showResponsible && (isAdmin || isOrganizer) && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="flex-1 p-2 text-black rounded text-sm"
+                    placeholder="ID ответственного"
+                    value={responsibleUserId}
+                    onChange={(e) => setResponsibleUserId(e.target.value)}
+                  />
+                  <button onClick={() => assignResponsible(s.id)} className="px-3 py-1 bg-green-600 rounded text-sm">Назначить</button>
+                </div>
+              )}
+
+            </div>
+          );
+  };
   return (
     <div className="min-h-screen p-6">
       <Link href="/tournaments" className="text-blue-400 hover:underline">← К турнирам</Link>
@@ -576,33 +614,18 @@ export default function EventPage() {
       {/* Сессии */}
       <div className="mt-6">
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
-        {sessions.map((s) => {
-          const isResponsible = s.responsible_user_id === currentUser?.id;
-          const registrationCount = registrationCounts[s.id];
-          return (
-            <div key={s.id} className="bg-gray-800 p-4 rounded mb-2">
-              <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
-              {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
-              {registrationCount && <p className="mt-2 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200"><span className="sr-only">Зарегистрировано / всего мест: </span>{registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
-              {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {mapTitle(game.map_name)}</span>)}</div>}
+        {upcomingSessions.map(renderSession)}
+        {!upcomingSessions.length && <p className="mb-4 text-gray-400">Предстоящих сессий пока нет.</p>}
+        {!!pastSessions.length && <>
+          <button type="button" className="secondary-button mb-3" aria-expanded={showPastSessions} aria-controls="past-sessions" onClick={() => setShowPastSessions(value => !value)}>
+            {showPastSessions ? "▴" : "▾"} Прошедшие ({pastSessions.length})
+          </button>
+          {showPastSessions && <div id="past-sessions">
+            {pastSessions.slice(0, pastLimit).map(renderSession)}
+            {pastLimit < pastSessions.length && <button type="button" className="secondary-button" onClick={() => setPastLimit(value => value + 10)}>Показать ещё</button>}
+          </div>}
+        </>}
 
-              <div className="my-3 flex gap-3"><Link className="text-cyan-300" href={`/tournaments/${id}/results?sessionId=${s.id}`}>Итоги сессии</Link>{(isResponsible||isAdmin||isOrganizer)&&<Link className="text-emerald-300" href={`/tournaments/${id}/manage-results?sessionId=${s.id}`}>Ввести результаты</Link>}</div>
-              <SessionControls eventId={id} sessionId={s.id} authenticated={!!currentUser}/>
-              {showResponsible && (isAdmin || isOrganizer) && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    className="flex-1 p-2 text-black rounded text-sm"
-                    placeholder="ID ответственного"
-                    value={responsibleUserId}
-                    onChange={(e) => setResponsibleUserId(e.target.value)}
-                  />
-                  <button onClick={() => assignResponsible(s.id)} className="px-3 py-1 bg-green-600 rounded text-sm">Назначить</button>
-                </div>
-              )}
-
-            </div>
-          );
-        })}
       </div>
 
       {/* Запись */}
@@ -665,8 +688,8 @@ export default function EventPage() {
 
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
           {registrationSummary}
-          <button onClick={registerTeam} disabled={!registrationIsOpen || !canEditRoster} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
-            {!registrationIsOpen ? "Регистрация недоступна" : canEditRoster ? `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}` : "Состав заблокирован"}
+          <button onClick={registerTeam} disabled={!registrationIsOpen} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
+            {!registrationIsOpen ? "Регистрация недоступна" : `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}`}
           </button>
           {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
         </div>
