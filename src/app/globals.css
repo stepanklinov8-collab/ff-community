@@ -358,6 +358,7 @@ body.knowledge-garena-mode .app-main {
 }
 
 .garena-map-canvas {
+  container-type: inline-size;
   position: relative;
   width: min(100%, calc(100vh - 278px));
   max-width: 1000px;
@@ -402,72 +403,38 @@ body.knowledge-garena-mode .app-main {
 .knowledge-map-zoom span { min-width: 48px; text-align: center; font-size: 12px; font-weight: 800; }
 .knowledge-map-zoom .knowledge-map-fit { min-width: 76px; }
 
-.garena-map-grid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.2;
-  background-image: linear-gradient(rgb(255 255 255 / 35%) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 35%) 1px, transparent 1px);
-  background-size: 125px 125px;
+@font-face {
+  font-family: "Knowledge Map";
+  src: url("https://cdn.wildflamestudio.com/common/web_event/official2/dist/client/fonts/GFFLatinW05-Bold.d2bc101.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 .garena-map-marker {
   position: absolute;
   z-index: 4;
-  width: 38px;
-  height: 38px;
+  width: max-content;
+  height: auto;
   padding: 0;
-  color: #080808;
+  color: #fff;
+  font: 700 2.4cqw/1.5 "Knowledge Map", sans-serif;
+  text-align: center;
   cursor: pointer;
   background: transparent;
   border: 0;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  white-space: nowrap;
 }
 
 .garena-map-marker-name {
-  position: absolute;
-  top: -14px;
-  left: 10px;
-  width: max-content;
-  padding: 5px 10px 5px 12px;
-  color: #fff;
-  font-family: var(--knowledge-font);
-  font-size: clamp(11px, 1.15vw, 18px);
-  font-stretch: condensed;
-  font-style: italic;
-  font-weight: 900;
-  letter-spacing: 0.035em;
-  text-shadow: 0 2px 3px #000;
-  text-transform: uppercase;
-  background: linear-gradient(105deg, rgb(5 5 5 / 92%), rgb(5 5 5 / 58%));
-  border-left: 3px solid #ffca05;
-  box-shadow: 0 5px 12px rgb(0 0 0 / 35%);
-  transform: translate(-10%, -100%) rotate(-28deg) skewX(-7deg);
-  transform-origin: left bottom;
-  white-space: nowrap;
-  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 65%);
 }
 
-.garena-map-marker:hover .garena-map-marker-name,
-.garena-map-marker:focus-visible .garena-map-marker-name,
-.garena-map-marker.is-selected .garena-map-marker-name {
-  color: #080808;
-  text-shadow: none;
-  background: #ffca05;
-  border-left-color: #fff;
-}
-
-.garena-map-marker-photo {
-  position: absolute;
-  z-index: 8;
-  top: 46px;
-  left: 19px;
-  width: 96px;
-  height: 96px;
-  overflow: hidden;
-  border: 2px solid #f7c900;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 65%);
-  transform: translateX(-50%);
+.garena-map-marker:hover,
+.garena-map-marker:focus-visible,
+.garena-map-marker.is-selected {
+  color: #65d9ff;
 }
 
 .garena-map-selector {
@@ -869,7 +836,6 @@ body.knowledge-garena-mode .app-main {
   .garena-map-canvas { width: min(100vw, calc(100svh - 365px)); }
   .knowledge-map-zoom { top: 10px; right: 10px; }
   .knowledge-map-zoom .knowledge-map-fit { display: none; }
-  .garena-map-marker-name { padding: 3px 7px 3px 9px; font-size: 10px; border-left-width: 2px; transform: translate(-10%, -100%) rotate(-25deg) skewX(-7deg); }
   .garena-map-footer { align-items: flex-start; flex-direction: column; padding: 24px 20px; }
   .garena-section-switcher { flex-wrap: wrap; }
   .knowledge-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -918,24 +884,6 @@ body.knowledge-garena-mode .app-main {
 }
 
 .knowledge-page-shell .knowledge-map-zoom button:hover { color: #021017; background: var(--primary); }
-
-.knowledge-page-shell .garena-map-marker-name {
-  font-family: "Arial Narrow", "Roboto Condensed", "Bahnschrift Condensed", Impact, sans-serif;
-  color: #effbff;
-  background: linear-gradient(105deg, rgb(3 20 29 / 94%), rgb(5 38 53 / 70%));
-  border-left-color: #38c6f5;
-  box-shadow: 0 5px 15px rgb(0 10 18 / 52%);
-}
-
-.knowledge-page-shell .garena-map-marker:hover .garena-map-marker-name,
-.knowledge-page-shell .garena-map-marker:focus-visible .garena-map-marker-name,
-.knowledge-page-shell .garena-map-marker.is-selected .garena-map-marker-name {
-  color: #031017;
-  background: #65d9ff;
-  border-left-color: #fff;
-}
-
-.knowledge-page-shell .garena-map-marker-photo { border-color: #4bcdf8; box-shadow: 0 8px 28px rgb(0 82 120 / 55%); }
 
 .knowledge-page-shell .garena-map-selector {
   position: relative;
@@ -988,9 +936,23 @@ body.knowledge-garena-mode .app-main {
   .knowledge-page-shell .garena-map-selector { position: relative; grid-template-columns: 1fr; padding: 18px; }
 }
 
-@media (max-width: 560px) {
-  .knowledge-page-shell .garena-map-marker-name { font-size: 9px; }
+.knowledge-catalog-card-image.is-character { height: 360px; }
+.knowledge-catalog-card-image.is-character img,
+.knowledge-catalog-card-image.is-pet img {
+  padding: 12px;
+  object-fit: contain;
+  object-position: center;
 }
+.knowledge-catalog-card-image.is-character::after,
+.knowledge-catalog-card-image.is-weapon::after,
+.knowledge-catalog-card-image.is-pet::after { display: none; }
+.knowledge-character-subtitle { color: #9bdcf4; }
+.knowledge-weapon-stats { border-top: 1px solid rgb(92 186 230 / 20%); padding-top: 10px; }
+.knowledge-weapon-stats summary { color: #9bdcf4; cursor: pointer; }
+.knowledge-weapon-stats dl { display: grid; gap: 6px; margin: 12px 0 0; font-size: 13px; }
+.knowledge-weapon-stats dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.knowledge-weapon-stats dt { color: #8eabb8; }
+.knowledge-weapon-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .icon-button {
   display: inline-grid;

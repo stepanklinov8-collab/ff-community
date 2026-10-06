@@ -52,7 +52,7 @@ export const mapCatalog = [
       ["pochinok", "Починок"], ["rim_nam_village", "Деревня Рим Нам"], ["mars_electric", "Марс Электрик"],
       ["nurek_dam", "Плотина Нурек"], ["observatory", "Обсерватория"], ["sentosa", "Сентоса"], ["kota_tua", "Кота-Туа"],
       ["mill", "Мельница"], ["graveyard", "Кладбище"], ["bullseye", "Буллсай"], ["outpost", "Аванпост"],
-      ["academy", "Академия"], ["aden_creek", "Ручей Аден"], ["sanctuary", "Святилище"],
+      ["academy", "Академия"], ["the_circuit", "Гоночная трасса"], ["samurai_garden", "Сад самурая"], ["aden_creek", "Ручей Аден"], ["sanctuary", "Святилище"],
     ]),
   },
   {
@@ -69,8 +69,8 @@ export const mapCatalog = [
     ],
     locations: locations([
       ["intellect_center", "Центр интеллекта"], ["twin_bridges", "Двойные мосты"], ["museum", "Музей"],
-      ["mud_site", "Грязевой участок"], ["windmill", "Ветряные турбины"], ["greenhouses", "Теплицы"],
-      ["zipway", "Зипвей"], ["ghost_town", "Город-призрак"], ["grav_labs", "Гравитационные лаборатории"],
+      ["mud_site", "Грязевой участок"], ["mortar_ruins", "Руины Мортар"], ["windmill", "Турбина"], ["greenhouses", "Фармтопия"],
+      ["zipway", "Зипвей"], ["ghost_town", "Ржавый город"], ["grav_labs", "Гравитационные лаборатории"],
       ["deca_square", "Дека-сквер"], ["plazaria", "Плазария"], ["boxing_gym", "Боксёрский зал"], ["eco_drain", "Эко-сток"],
     ]),
   },
@@ -89,7 +89,7 @@ export const mapCatalog = [
     locations: locations([
       ["snowfall", "Снегопад"], ["vantage", "Авангард"], ["militia", "Милиция"], ["dock", "Док"],
       ["garrison", "Гарнизон"], ["railroad", "Железная дорога"], ["forest_red", "Красный лес"], ["fusion", "Фьюжн"],
-      ["basecamp", "Базовый лагерь"], ["carousel", "Карусель"], ["mammut", "Мамонт"], ["river", "Река"],
+      ["basecamp", "Базовый лагерь"], ["carousel", "Карусель"], ["mammut", "Мамонт"], ["river", "Устье реки"],
       ["snowy_village", "Снежная деревня"], ["railway_station", "Железнодорожная станция"],
     ]),
   },
