@@ -23,8 +23,9 @@ function GarenaMapViewer({ currentMap, selectedLocation, mapScale, onMapChange, 
 }) {
   const currentLocation = currentMap.locations.find(location => location.id === selectedLocation);
   const points = knowledgeMapPoints[currentMap.id];
+  const labelOffset = currentMap.id === "solara" ? mapLabelOffset : 0;
   const currentPoint = points.find(point => point.locationId === selectedLocation);
-  const gallery = [...new Set([...(currentPoint ? [currentPoint.photo] : []), ...currentMap.gallery])];
+  const gallery = [...new Set([...(currentPoint?.photo ? [currentPoint.photo] : []), ...currentMap.gallery])];
   return <div className="garena-map-page">
     <section className="garena-map-stage" aria-label={`Карта ${currentMap.title}`}>
       <div className="garena-map-viewport">
@@ -32,7 +33,7 @@ function GarenaMapViewer({ currentMap, selectedLocation, mapScale, onMapChange, 
         {points.map(point => {
           const location = currentMap.locations.find(item => item.id === point.locationId);
           if (!location) return null;
-          return <button key={location.id} type="button" data-location-id={location.id} className={`garena-map-marker ${selectedLocation === location.id ? "is-selected" : ""}`} style={{ left: `${(point.x - mapLabelOffset) / 10}%`, top: `${(point.y - mapLabelOffset) / 10}%` }} onClick={() => onLocationChange(location.id)} aria-label={location.title} aria-pressed={selectedLocation === location.id}><span className="garena-map-marker-name">{location.title}</span></button>;
+          return <button key={location.id} type="button" data-location-id={location.id} className={`garena-map-marker ${currentMap.id !== "solara" ? "is-flat" : ""} ${point.printedLabelWidth ? "replaces-printed-label" : ""} ${selectedLocation === location.id ? "is-selected" : ""}`} style={{ left: `${(point.x - labelOffset) / 10}%`, top: `${(point.y - labelOffset) / 10}%`, minWidth: point.printedLabelWidth ? `${point.printedLabelWidth / 10}cqw` : undefined }} onClick={() => onLocationChange(location.id)} aria-label={location.title} aria-pressed={selectedLocation === location.id}><span className="garena-map-marker-name">{point.label ?? location.title}</span></button>;
         })}
       </div>
       </div>
@@ -54,21 +55,50 @@ const catalogBySection: Record<Exclude<KnowledgeCategoryId, "maps">, readonly Kn
   omcite: knowledgeGuide,
 };
 
+function CatalogDetails({ entry }: { entry: KnowledgeCatalogEntry }) {
+  const character = entry.character;
+  if (character) return <details className="knowledge-entry-details">
+    <summary>Способность и биография</summary>
+    <div className="knowledge-entry-detail-content">
+      {character.baseAbility && <><h4>{character.baseAbility.name} · Базовый навык</h4><p>{character.baseAbility.description}</p></>}
+      <h4>{character.abilityName}{character.awakened ? " · Пробуждение" : ""}</h4>
+      <p>{character.abilityDescription}</p>
+      {character.parameters.length > 0 && <dl>{character.parameters.map(parameter => <div key={parameter.label}><dt>{parameter.label}</dt><dd>{parameter.value}</dd></div>)}</dl>}
+      <p className="knowledge-detail-note">{character.awakened ? "Здесь описан пробуждённый навык из официальной карточки. " : ""}Указаны опубликованные параметры. Неуказанные значения урона, длительности и перезарядки в карточке отсутствуют.</p>
+      <h4>Биография</h4>
+      <dl><div><dt>Возраст, лет</dt><dd>{character.age ?? "Не указан"}</dd></div><div><dt>День рождения</dt><dd>{character.birthday}</dd></div><div><dt>Пол</dt><dd>{character.gender}</dd></div></dl>
+      <p>{character.biography}</p>
+      <p className="knowledge-detail-note">HP — здоровье, EP — энергия, SP — очки щита. Сведения о возрасте относятся к игровой биографии.</p>
+    </div>
+  </details>;
+  if (entry.stats) return <details className="knowledge-entry-details knowledge-weapon-stats">
+    <summary>Характеристики и обвесы</summary>
+    <div className="knowledge-entry-detail-content">
+      <dl>{entry.stats.map(stat => <div key={stat.label}><dt>{stat.label}</dt><dd>{stat.value ?? "—"}</dd></div>)}</dl>
+      <p className="knowledge-detail-note">Магазин — число боеприпасов. Остальные числа — показатели шкал каталога: урон не равен гарантированной потере HP, а скорость перезарядки не обозначает секунды. Прочерк — значение не опубликовано или неприменимо.</p>
+      <h4>Обвесы, отмеченные в каталоге</h4>
+      {entry.attachments?.length ? <ul className="knowledge-attachment-list">{entry.attachments.map(attachment => <li key={attachment}>{attachment}</li>)}</ul> : <p>Обвесы не отмечены.</p>}
+      <p className="knowledge-detail-note">Время перезарядки в секундах, интервалы выстрелов и таблица урона по частям тела в официальной карточке не приведены.</p>
+    </div>
+  </details>;
+  return null;
+}
+
 function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: Exclude<KnowledgeCategoryId, "maps">; query: string; onQueryChange: (value: string) => void }) {
   const entries = catalogBySection[section];
   const [filter, setFilter] = useState("Все");
-  const filters = ["Все", ...(section === "weapons" ? Array.from(new Set(entries.map(entry => entry.tags[0]))) : Array.from(new Set(entries.flatMap(entry => entry.tags))).slice(0, 7))];
+  const filters = ["Все", ...(section === "weapons" ? Array.from(new Set(entries.map(entry => entry.tags[0]))) : section === "characters" ? ["Пробуждение", ...Array.from(new Set(entries.flatMap(entry => entry.tags))).filter(tag => tag !== "Пробуждение").slice(0, 7)] : Array.from(new Set(entries.flatMap(entry => entry.tags))).slice(0, 7))];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleEntries = entries.filter(entry => {
     const matchesFilter = filter === "Все" || entry.tags.includes(filter);
-    const haystack = `${entry.title} ${entry.subtitle ?? ""} ${entry.description} ${entry.tags.join(" ")}`.toLocaleLowerCase();
+    const haystack = `${entry.title} ${entry.subtitle ?? ""} ${entry.description} ${entry.tags.join(" ")} ${entry.character?.abilityName ?? ""} ${entry.character?.baseAbility?.name ?? ""} ${entry.character?.biography ?? ""}`.toLocaleLowerCase();
     return matchesFilter && haystack.includes(normalizedQuery);
   });
   const sectionTitle = categories.find(category => category.id === section)?.title ?? "База знаний";
   const sectionIntro: Record<typeof section, string> = {
     overview: "Краткий обзор игры, командных форматов, персонажей, событий и соревновательной сцены.",
-    weapons: "Карточки оружия с типом применения, кратким описанием и ключевыми характеристиками.",
-    characters: "Персонажи, их роли и описания особых способностей на русском языке.",
+    weapons: "Описания оружия, восемь показателей и обвесы. Раскройте карточку, чтобы увидеть характеристики.",
+    characters: "Биографии, способности и опубликованные параметры 65 персонажей. Все описания доступны на русском прямо в карточках.",
     pets: "Питомцы и навыки, которые помогают команде в бою, разведке и высадке.",
     updates: "Хронология обновлений, карт, режима, оружия, персонажей и игровых событий.",
     media: "Видео, изображения и материалы для подготовки к матчам и публикации мероприятий.",
@@ -82,9 +112,10 @@ function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: E
     <div className="knowledge-catalog-filters" role="tablist" aria-label={`Фильтры раздела ${sectionTitle}`}>{filters.map(item => <button key={item} type="button" role="tab" aria-selected={filter === item} onClick={() => setFilter(item)} className={filter === item ? "is-active" : ""}>{item}</button>)}</div>
     <div className="knowledge-catalog-grid">{visibleEntries.map(entry => <article className="knowledge-catalog-card" key={entry.id}>
       <div className={`knowledge-catalog-card-image ${section === "weapons" ? "is-weapon" : section === "characters" ? "is-character" : section === "pets" ? "is-pet" : ""}`}>{entry.imageUrl ? <Image src={entry.imageUrl} alt={`${entry.title}: иллюстрация`} fill sizes="(min-width: 900px) 220px, 100vw" unoptimized /> : <span>{entry.title.slice(0, 2).toUpperCase()}</span>}{entry.subtitle && section !== "characters" && <small>{entry.subtitle}</small>}</div>
-      <div className="knowledge-catalog-card-body"><div className="flex items-start justify-between gap-3"><h3>{entry.title}</h3>{typeof entry.value === "number" && <strong className="knowledge-catalog-value">{entry.value}</strong>}</div>{section === "characters" && entry.subtitle && <p className="knowledge-character-subtitle">{entry.subtitle}</p>}<p>{entry.description}</p><div className="knowledge-catalog-tags">{entry.tags.map(tag => <span key={tag}>{tag}</span>)}</div>{entry.stats && entry.stats.length > 0 && <details className="knowledge-weapon-stats"><summary>Характеристики</summary><dl>{entry.stats.map(stat => <div key={stat.label}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>)}</dl></details>}</div>
+      <div className="knowledge-catalog-card-body"><div className="flex items-start justify-between gap-3"><h3>{entry.title}</h3>{typeof entry.value === "number" && <strong className="knowledge-catalog-value">{entry.value}</strong>}</div>{section === "characters" && entry.subtitle && <p className="knowledge-character-subtitle">{entry.subtitle}</p>}<p>{entry.description}</p><div className="knowledge-catalog-tags">{entry.tags.map(tag => <span key={tag}>{tag}</span>)}</div><CatalogDetails entry={entry} /></div>
     </article>)}</div>
     {!visibleEntries.length && <p className="rounded-xl border border-white/10 bg-slate-950/40 p-6 text-sm text-slate-400">По вашему запросу материалы не найдены.</p>}
+    {(section === "weapons" || section === "characters") && <p className="knowledge-detail-note">Справочник проверен 06.10.2026 по официальному каталогу игры. Баланс может меняться с обновлениями; сведения относятся к опубликованной версии карточек.</p>}
   </section>;
 }
 

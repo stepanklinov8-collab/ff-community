@@ -1,470 +1,130 @@
 import type {MapId} from "../competition/map-catalog";
 
-export type KnowledgeMapPoint = {locationId: string; englishName: string; x: number; y: number; photo: string};
-// Garena atlas coordinates converted from Leaflet latitude/longitude to a 1000×1000 canvas.
-// The original label centre is 17 units above and left of the marker anchor.
+export type KnowledgeMapPoint = {locationId: string; englishName: string; x: number; y: number; photo?: string; label?: string; printedLabelWidth?: number};
+// Solara retains the approved atlas anchors. Other maps store registered in-game label centres.
 export const mapLabelOffset = 17;
 export const knowledgeMapPoints: Record<MapId, readonly KnowledgeMapPoint[]> = {
   "solara": [
-    {
-      "locationId": "waterfall",
-      "englishName": "Waterfall",
-      "x": 275,
-      "y": 250,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/17a4afa7367f9520fb97aa24b964e450.jpg"
-    },
-    {
-      "locationId": "riders_club",
-      "englishName": "Riders Club",
-      "x": 400,
-      "y": 130,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2ba345de8135924fcfbc1543695d8452.jpg"
-    },
-    {
-      "locationId": "funfair",
-      "englishName": "Funfair",
-      "x": 560,
-      "y": 350,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/4692a60c796d8ed0a2c6b9357d633259.jpg"
-    },
-    {
-      "locationId": "windmill",
-      "englishName": "Windmill",
-      "x": 790,
-      "y": 185,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/f4291a7632277515fb65ab841e88be7f.jpg"
-    },
-    {
-      "locationId": "delta_isle",
-      "englishName": "Delta Isle",
-      "x": 825,
-      "y": 425,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/b099949fbd6bd9cb973f6a1a22ddeb7b.jpg"
-    },
-    {
-      "locationId": "aquarium",
-      "englishName": "Aquarium",
-      "x": 920,
-      "y": 660,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/6475e056b064e48e368221c261d084fa.jpg"
-    },
-    {
-      "locationId": "eco_drain",
-      "englishName": "Eco Drain",
-      "x": 525,
-      "y": 875,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2ebf8dd1d8be7ec4011029a152115cc5.jpg"
-    },
-    {
-      "locationId": "tv_tower",
-      "englishName": "TV Tower",
-      "x": 575,
-      "y": 600,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/e61a99008446486c2aabe3e27f95af2b.jpg"
-    },
-    {
-      "locationId": "bayside",
-      "englishName": "Bayside",
-      "x": 850,
-      "y": 875,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/761503766b430d6c300e553268cfc5d9.jpg"
-    },
-    {
-      "locationId": "bloomtown",
-      "englishName": "Bloomtown",
-      "x": 425,
-      "y": 675,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/a03d715770a0b1eb1d8725a25a8ddd6b.jpg"
-    },
-    {
-      "locationId": "studio",
-      "englishName": "Studio",
-      "x": 200,
-      "y": 800,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/67ec7c4155bc1a4c020acb23c06aa6be.jpg"
-    },
-    {
-      "locationId": "the_hub",
-      "englishName": "The Hub",
-      "x": 100,
-      "y": 425,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/b05e2af1f305424caf84841ac6cb4651.jpg"
-    },
-    {
-      "locationId": "archway",
-      "englishName": "Archway",
-      "x": 360,
-      "y": 425,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/a9edfc2b3f05d50af176b12018ab5948.jpg"
-    },
-    {
-      "locationId": "casa_vista",
-      "englishName": "Casa Vista",
-      "x": 700,
-      "y": 700,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2b2f894966d65facba89448c6937b53c.jpg"
-    }
+    {"locationId":"waterfall","englishName":"Waterfall","x":275,"y":250,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/17a4afa7367f9520fb97aa24b964e450.jpg"},
+    {"locationId":"riders_club","englishName":"Riders Club","x":400,"y":130,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2ba345de8135924fcfbc1543695d8452.jpg"},
+    {"locationId":"funfair","englishName":"Funfair","x":560,"y":350,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/4692a60c796d8ed0a2c6b9357d633259.jpg"},
+    {"locationId":"windmill","englishName":"Windmill","x":790,"y":185,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/f4291a7632277515fb65ab841e88be7f.jpg"},
+    {"locationId":"delta_isle","englishName":"Delta Isle","x":825,"y":425,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/b099949fbd6bd9cb973f6a1a22ddeb7b.jpg"},
+    {"locationId":"aquarium","englishName":"Aquarium","x":920,"y":660,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/6475e056b064e48e368221c261d084fa.jpg"},
+    {"locationId":"eco_drain","englishName":"Eco Drain","x":525,"y":875,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2ebf8dd1d8be7ec4011029a152115cc5.jpg"},
+    {"locationId":"tv_tower","englishName":"TV Tower","x":575,"y":600,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/e61a99008446486c2aabe3e27f95af2b.jpg"},
+    {"locationId":"bayside","englishName":"Bayside","x":850,"y":875,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/761503766b430d6c300e553268cfc5d9.jpg"},
+    {"locationId":"bloomtown","englishName":"Bloomtown","x":425,"y":675,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/a03d715770a0b1eb1d8725a25a8ddd6b.jpg"},
+    {"locationId":"studio","englishName":"Studio","x":200,"y":800,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/67ec7c4155bc1a4c020acb23c06aa6be.jpg"},
+    {"locationId":"the_hub","englishName":"The Hub","x":100,"y":425,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/b05e2af1f305424caf84841ac6cb4651.jpg"},
+    {"locationId":"archway","englishName":"Archway","x":360,"y":425,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/a9edfc2b3f05d50af176b12018ab5948.jpg"},
+    {"locationId":"casa_vista","englishName":"Casa Vista","x":700,"y":700,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20255/2b2f894966d65facba89448c6937b53c.jpg"},
   ],
   "nexterra": [
-    {
-      "locationId": "intellect_center",
-      "englishName": "Intellect Center",
-      "x": 451,
-      "y": 203,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f72d0b2882b01925bd0dedaa23ac2ef4.jpg"
-    },
-    {
-      "locationId": "twin_bridges",
-      "englishName": "Twin Bridge",
-      "x": 704,
-      "y": 221,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/d34e4ae1817155222d9fa974556f3529.jpg"
-    },
-    {
-      "locationId": "museum",
-      "englishName": "Museum",
-      "x": 151,
-      "y": 361,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/08171f13d4f7a58ea3505cd353bac74c.jpg"
-    },
-    {
-      "locationId": "mortar_ruins",
-      "englishName": "Mortar Ruins",
-      "x": 755,
-      "y": 365,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/7c09c38d7295f86513386c176b86eb0f.jpg"
-    },
-    {
-      "locationId": "windmill",
-      "englishName": "Turbine",
-      "x": 128,
-      "y": 543,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/3b9fab832c0ab895815c4e3ed390ea79.jpg"
-    },
-    {
-      "locationId": "greenhouses",
-      "englishName": "Farmtopia",
-      "x": 376,
-      "y": 490,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/9de5acea1cd3e47bffcbfa75d6d58d84.jpg"
-    },
-    {
-      "locationId": "zipway",
-      "englishName": "Zipway",
-      "x": 655,
-      "y": 491,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/29e124e7447292741b7e719d424ca70c.jpg"
-    },
-    {
-      "locationId": "ghost_town",
-      "englishName": "Rust Town",
-      "x": 833,
-      "y": 509,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/b44cdffa72b430a17bf2509bc094b6cd.jpg"
-    },
-    {
-      "locationId": "grav_labs",
-      "englishName": "Grav Labs",
-      "x": 181,
-      "y": 790,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/32faf858a681a2ec1dd20dea0a93e4a2.jpg"
-    },
-    {
-      "locationId": "deca_square",
-      "englishName": "Deca Square",
-      "x": 583,
-      "y": 817,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/1e9c3b6b886f7ba757386b8f952e069f.jpg"
-    },
-    {
-      "locationId": "plazaria",
-      "englishName": "Plazaria",
-      "x": 352,
-      "y": 680,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/b1d19238277496edeac9bd6886fc2185.jpg"
-    },
-    {
-      "locationId": "boxing_gym",
-      "englishName": "Boxing Gym",
-      "x": 540,
-      "y": 560,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/d6e7eb1eb2093954f32976fb0a5d6fc5.jpg"
-    },
-    {
-      "locationId": "mud_site",
-      "englishName": "Mud Site",
-      "x": 750,
-      "y": 750,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/3f687300054e17735e91f4ef6d17c5ab.jpg"
-    }
+    {"locationId":"intellect_center","englishName":"Intellect Center","x":439.45,"y":139.65,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f72d0b2882b01925bd0dedaa23ac2ef4.jpg","printedLabelWidth":151},
+    {"locationId":"twin_bridges","englishName":"Twin Bridge","x":667.97,"y":252.93,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/d34e4ae1817155222d9fa974556f3529.jpg","printedLabelWidth":125},
+    {"locationId":"museum","englishName":"Museum","x":219.73,"y":345.7,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/08171f13d4f7a58ea3505cd353bac74c.jpg","printedLabelWidth":98},
+    {"locationId":"mortar_ruins","englishName":"Mortar Ruins","x":847.66,"y":307.62,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/7c09c38d7295f86513386c176b86eb0f.jpg","printedLabelWidth":133},
+    {"locationId":"windmill","englishName":"Turbine","x":78.13,"y":561.52,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/3b9fab832c0ab895815c4e3ed390ea79.jpg","printedLabelWidth":84},
+    {"locationId":"greenhouses","englishName":"Farmtopia","x":385.74,"y":521.48,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/9de5acea1cd3e47bffcbfa75d6d58d84.jpg","printedLabelWidth":110},
+    {"locationId":"zipway","englishName":"Zipway","x":640.63,"y":509.77,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/29e124e7447292741b7e719d424ca70c.jpg","printedLabelWidth":81},
+    {"locationId":"ghost_town","englishName":"Rust Town","x":868.16,"y":524.41,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/b44cdffa72b430a17bf2509bc094b6cd.jpg","printedLabelWidth":116},
+    {"locationId":"grav_labs","englishName":"Grav Labs","x":154.3,"y":697.27,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/32faf858a681a2ec1dd20dea0a93e4a2.jpg","printedLabelWidth":104,"label":"Грави-лабы"},
+    {"locationId":"plazaria","englishName":"Plazaria","x":371.09,"y":674.8,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/b1d19238277496edeac9bd6886fc2185.jpg","printedLabelWidth":88},
+    {"locationId":"boxing_gym","englishName":"Boxing Gym","x":583.01,"y":610.35,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/d6e7eb1eb2093954f32976fb0a5d6fc5.jpg","printedLabelWidth":131},
+    {"locationId":"deca_square","englishName":"Deca Square","x":544.92,"y":755.86,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/1e9c3b6b886f7ba757386b8f952e069f.jpg","printedLabelWidth":129},
+    {"locationId":"mud_site","englishName":"Mud Site","x":804.69,"y":742.19,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20241/3f687300054e17735e91f4ef6d17c5ab.jpg","printedLabelWidth":100},
   ],
   "alpine": [
-    {
-      "locationId": "snowfall",
-      "englishName": "Snowfall",
-      "x": 236,
-      "y": 223,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/fac60ddb902924cc172f999e220449d4.jpg"
-    },
-    {
-      "locationId": "vantage",
-      "englishName": "Vantage",
-      "x": 821,
-      "y": 758,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/b95242d8322c35619bab227f50a8448b.jpg"
-    },
-    {
-      "locationId": "railroad",
-      "englishName": "Railroad",
-      "x": 758,
-      "y": 236,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/bdb124cff56bd9b032d062e270f4082a.jpg"
-    },
-    {
-      "locationId": "dock",
-      "englishName": "Dock",
-      "x": 941,
-      "y": 460,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/df365a385fd4725b8c18661bfe654a09.jpg"
-    },
-    {
-      "locationId": "river",
-      "englishName": "River Mouth",
-      "x": 470,
-      "y": 670,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/746111f8a18831a3f23748f2041f9fae.jpg"
-    },
-    {
-      "locationId": "fusion",
-      "englishName": "Fusion",
-      "x": 202,
-      "y": 701,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/981bbeb519244327ffa1af1e06a79979.jpg"
-    }
+    {"locationId":"snowfall","englishName":"Snowfall","x":304.3,"y":196.26,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/fac60ddb902924cc172f999e220449d4.jpg"},
+    {"locationId":"garrison","englishName":"Garrison","x":472.08,"y":127.22},
+    {"locationId":"railroad","englishName":"Railroad","x":766.64,"y":178.14,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/bdb124cff56bd9b032d062e270f4082a.jpg"},
+    {"locationId":"carousel","englishName":"Carousel","x":762.41,"y":316.34},
+    {"locationId":"militia","englishName":"Militia","x":431.19,"y":350.08},
+    {"locationId":"sunside","englishName":"Sunside","x":670.81,"y":410.81},
+    {"locationId":"dock","englishName":"Dock","x":876.54,"y":432.02,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/df365a385fd4725b8c18661bfe654a09.jpg"},
+    {"locationId":"basecamp","englishName":"Basecamp","x":749.73,"y":515.19},
+    {"locationId":"forest_red","englishName":"Forest Red","x":352.23,"y":498.17},
+    {"locationId":"ocean_view","englishName":"Ocean View","x":140.7,"y":467.08},
+    {"locationId":"fusion","englishName":"Fusion","x":197.1,"y":647.69,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/981bbeb519244327ffa1af1e06a79979.jpg"},
+    {"locationId":"river","englishName":"River Mouth","x":435.4,"y":692.86,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/746111f8a18831a3f23748f2041f9fae.jpg"},
+    {"locationId":"rye","englishName":"Rye","x":635.57,"y":650.57},
+    {"locationId":"vantage","englishName":"Vantage","x":801.86,"y":704.18,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/b95242d8322c35619bab227f50a8448b.jpg"},
+    {"locationId":"stadium","englishName":"Stadium","x":556.64,"y":756.35},
+    {"locationId":"blue_ville","englishName":"Blue Ville","x":307.09,"y":848.04},
   ],
   "bermuda_remastered": [
-    {
-      "locationId": "hangar",
-      "englishName": "Hangar",
-      "x": 215,
-      "y": 532,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/76627b0f7681f28ef397a492721e32df.jpg"
-    },
-    {
-      "locationId": "observatory",
-      "englishName": "Observatory",
-      "x": 146,
-      "y": 341,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/92ccb7be797fea82480edb1e23c4b9f3.jpg"
-    },
-    {
-      "locationId": "academy",
-      "englishName": "Academy",
-      "x": 232,
-      "y": 221,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/2bc6dc11cfd19cd57599519240da7c40.jpg"
-    },
-    {
-      "locationId": "nurek_dam",
-      "englishName": "Nurek Dam",
-      "x": 542,
-      "y": 260,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/12352a9470ee7fdaf4cb6bb6d6c2e8cf.jpg"
-    },
-    {
-      "locationId": "mill",
-      "englishName": "Mill",
-      "x": 746,
-      "y": 262,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a96ea33efb33c2b1f76f082c64612d8d.jpg"
-    },
-    {
-      "locationId": "the_circuit",
-      "englishName": "The Circuit",
-      "x": 914,
-      "y": 505,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f7f523c72e4fbb0e787763b64f8cfc94.jpg"
-    },
-    {
-      "locationId": "samurai_garden",
-      "englishName": "Samurai\"s Garden",
-      "x": 889,
-      "y": 763,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/896102fc7ef8131c33a55e87d7567765.jpg"
-    }
+    {"locationId":"shipyard","englishName":"Shipyard","x":449.54,"y":97.55},
+    {"locationId":"academy","englishName":"Academy","x":284.38,"y":211.1,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/2bc6dc11cfd19cd57599519240da7c40.jpg"},
+    {"locationId":"observatory","englishName":"Observatory","x":100.64,"y":357.69,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/92ccb7be797fea82480edb1e23c4b9f3.jpg"},
+    {"locationId":"katulistiwa","englishName":"Katulistiwa","x":363.87,"y":329.81},
+    {"locationId":"nurek_dam","englishName":"Nurek Dam","x":540.39,"y":315.35,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/12352a9470ee7fdaf4cb6bb6d6c2e8cf.jpg"},
+    {"locationId":"mill","englishName":"Mill","x":727.23,"y":292.64,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/a96ea33efb33c2b1f76f082c64612d8d.jpg"},
+    {"locationId":"keraton","englishName":"Keraton","x":855.23,"y":355.6},
+    {"locationId":"bimasakti_strip","englishName":"Bimasakti Strip","x":443.35,"y":455.74},
+    {"locationId":"hangar","englishName":"Hangar","x":197.68,"y":540.39,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/76627b0f7681f28ef397a492721e32df.jpg"},
+    {"locationId":"clock_tower","englishName":"Clock Tower","x":369.04,"y":577.54},
+    {"locationId":"peak","englishName":"Peak","x":573.42,"y":545.54},
+    {"locationId":"the_circuit","englishName":"The Circuit","x":887.22,"y":531.08,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f7f523c72e4fbb0e787763b64f8cfc94.jpg"},
+    {"locationId":"kota_tua","englishName":"Kota Tua","x":762.32,"y":581.66},
+    {"locationId":"aden_creek","englishName":"Aden's Creek","x":129.57,"y":722.04},
+    {"locationId":"factory","englishName":"Factory","x":436.13,"y":739.58},
+    {"locationId":"pochinok","englishName":"Pochinok","x":643.61,"y":711.71},
+    {"locationId":"mars_electric","englishName":"Mars Electric","x":545.55,"y":793.25},
+    {"locationId":"samurai_garden","englishName":"Samurai's Garden","x":823.21,"y":797.37,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/896102fc7ef8131c33a55e87d7567765.jpg"},
   ],
   "bermuda": [
-    {
-      "locationId": "shipyard",
-      "englishName": "Shipyard",
-      "x": 417,
-      "y": 145,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5d5657e3de320057f9ae1db2f322778f.jpg"
-    },
-    {
-      "locationId": "graveyard",
-      "englishName": "Graveyard",
-      "x": 235,
-      "y": 258,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f99dde35ffc6e5c31eb51d138aae1975.jpg"
-    },
-    {
-      "locationId": "cape_town",
-      "englishName": "Cape Town",
-      "x": 943,
-      "y": 497,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20236/c0efbd03a841efc4920928ed40885522.jpg"
-    },
-    {
-      "locationId": "factory",
-      "englishName": "Factory",
-      "x": 452,
-      "y": 700,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/10ba262d7f7efe7211e55fa8983d5679.jpg"
-    },
-    {
-      "locationId": "mars_electric",
-      "englishName": "Mars Electric",
-      "x": 511,
-      "y": 849,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20236/f785e7e0ab6d771e40cbbf637295dd0d.jpg"
-    },
-    {
-      "locationId": "clock_tower",
-      "englishName": "Clock Tower",
-      "x": 353,
-      "y": 598,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5a02d91e5439a5936e83a517c1057b4f.jpg"
-    },
-    {
-      "locationId": "rim_nam_village",
-      "englishName": "Rim Nam Village",
-      "x": 137,
-      "y": 723,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20246/a3e141c710d24dcde3efbbb6684c5d72.png"
-    },
-    {
-      "locationId": "peak",
-      "englishName": "Peak",
-      "x": 580,
-      "y": 550,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20238/6a046e1117198d0559ed3c1cef12c9a1.jpg"
-    },
-    {
-      "locationId": "hangar",
-      "englishName": "Hangar",
-      "x": 150,
-      "y": 500,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20259/49fb1e58483d0f8656e6608950997f14.jpg"
-    }
+    {"locationId":"shipyard","englishName":"Shipyard","x":391.56,"y":107.29,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5d5657e3de320057f9ae1db2f322778f.jpg"},
+    {"locationId":"bullseye","englishName":"Bullseye","x":278.3,"y":169.65},
+    {"locationId":"graveyard","englishName":"Graveyard","x":233.33,"y":281.93,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/f99dde35ffc6e5c31eb51d138aae1975.jpg"},
+    {"locationId":"observatory","englishName":"Observatory","x":88.84,"y":352.06},
+    {"locationId":"plantation","englishName":"Plantation","x":436.32,"y":299.79},
+    {"locationId":"katulistiwa","englishName":"Katulistiwa","x":356.25,"y":361.22},
+    {"locationId":"bimasakti_strip","englishName":"Bimasakti Strip","x":439.13,"y":457.06},
+    {"locationId":"mill","englishName":"Mill","x":676.41,"y":311.85},
+    {"locationId":"riverside","englishName":"Riverside","x":601.29,"y":258.01},
+    {"locationId":"keraton","englishName":"Keraton","x":833.48,"y":400.96},
+    {"locationId":"hangar","englishName":"Hangar","x":160.93,"y":543.61,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20259/49fb1e58483d0f8656e6608950997f14.jpg"},
+    {"locationId":"clock_tower","englishName":"Clock Tower","x":368.79,"y":565.39,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/5a02d91e5439a5936e83a517c1057b4f.jpg"},
+    {"locationId":"peak","englishName":"Peak","x":579.62,"y":523.68,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20238/6a046e1117198d0559ed3c1cef12c9a1.jpg"},
+    {"locationId":"cape_town","englishName":"Cape Town","x":878.26,"y":552.43,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20236/c0efbd03a841efc4920928ed40885522.jpg"},
+    {"locationId":"kota_tua","englishName":"Kota Tua","x":742.55,"y":611.82},
+    {"locationId":"factory","englishName":"Factory","x":433.11,"y":691.48,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/10ba262d7f7efe7211e55fa8983d5679.jpg"},
+    {"locationId":"pochinok","englishName":"Pochinok","x":566.8,"y":711.21},
+    {"locationId":"rim_nam_village","englishName":"Rim Nam Village","x":166.65,"y":729.2,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20246/a3e141c710d24dcde3efbbb6684c5d72.png"},
+    {"locationId":"mars_electric","englishName":"Mars Electric","x":497.43,"y":815.62,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/20236/f785e7e0ab6d771e40cbbf637295dd0d.jpg"},
+    {"locationId":"sentosa","englishName":"Sentosa","x":874.2,"y":756.57},
+    {"locationId":"nurek_dam","englishName":"Nurek Dam","x":523.2,"y":271.58},
   ],
   "purgatory": [
-    {
-      "locationId": "forge",
-      "englishName": "Forge",
-      "x": 874,
-      "y": 581,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/38d2a5b7165fb6cc3682dd66212494b8.jpg"
-    },
-    {
-      "locationId": "ski_lodge",
-      "englishName": "Ski Lodge",
-      "x": 889,
-      "y": 430,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8dcb9dfa87d1f0f5a7afcf0945e3c11c.jpg"
-    },
-    {
-      "locationId": "lumber_mill",
-      "englishName": "Lumber Mill",
-      "x": 713,
-      "y": 842,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c3484f5d7c61fc6c3aa526646bea8250.jpg"
-    },
-    {
-      "locationId": "central",
-      "englishName": "Central",
-      "x": 427,
-      "y": 793,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/aa09bdcf62d67cdc353917081152d209.jpg"
-    },
-    {
-      "locationId": "golf_course",
-      "englishName": "Golf Course",
-      "x": 275,
-      "y": 677,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e455a31c61aa812d624795cee73a57e2.jpg"
-    },
-    {
-      "locationId": "mount_villa",
-      "englishName": "Mt. Villa",
-      "x": 181,
-      "y": 757,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ec596c79bb4376f91e91bb628382ff2e.jpg"
-    },
-    {
-      "locationId": "moathouse",
-      "englishName": "Moathouse",
-      "x": 635,
-      "y": 125,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/19a9871b025fcb044970736a577c7a7f.jpg"
-    }
+    {"locationId":"crossroads","englishName":"Crossroads","x":176.68,"y":187.42},
+    {"locationId":"moathouse","englishName":"Moathouse","x":627.52,"y":140.02,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/19a9871b025fcb044970736a577c7a7f.jpg"},
+    {"locationId":"fields","englishName":"Fields","x":626.25,"y":334.35},
+    {"locationId":"ski_lodge","englishName":"Ski Lodge","x":863.93,"y":374.23,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8dcb9dfa87d1f0f5a7afcf0945e3c11c.jpg"},
+    {"locationId":"marbleworks","englishName":"Marbleworks","x":236.49,"y":447.96},
+    {"locationId":"quarry","englishName":"Quarry","x":96.4,"y":581.14},
+    {"locationId":"brasilia","englishName":"Brasilia","x":501.17,"y":530.18},
+    {"locationId":"forge","englishName":"Forge","x":865.77,"y":578.07,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/38d2a5b7165fb6cc3682dd66212494b8.jpg"},
+    {"locationId":"campsite","englishName":"Campsite","x":701.52,"y":622.4},
+    {"locationId":"golf_course","englishName":"Golf Course","x":274.53,"y":663.4,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/e455a31c61aa812d624795cee73a57e2.jpg"},
+    {"locationId":"mount_villa","englishName":"Mt. Villa","x":156.5,"y":757.65,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/ec596c79bb4376f91e91bb628382ff2e.jpg"},
+    {"locationId":"central","englishName":"Central","x":415.61,"y":805.38,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/aa09bdcf62d67cdc353917081152d209.jpg"},
+    {"locationId":"fire_brigade","englishName":"Fire Brigade","x":557.49,"y":792.67},
+    {"locationId":"lumber_mill","englishName":"Lumber Mill","x":680.35,"y":841.28,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/c3484f5d7c61fc6c3aa526646bea8250.jpg"},
   ],
   "kalahari": [
-    {
-      "locationId": "shrines",
-      "englishName": "Shrines",
-      "x": 479,
-      "y": 200,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8fc4c725fc2645d254e886f321866431.jpg"
-    },
-    {
-      "locationId": "council_hall",
-      "englishName": "Council Hall",
-      "x": 754,
-      "y": 205,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/7dc92d3db759de7ee7772004ac80a295.jpg"
-    },
-    {
-      "locationId": "bayfront",
-      "englishName": "Bayfront",
-      "x": 601,
-      "y": 390,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/6ee1c61c6442b43264cf3fa89a651370.jpg"
-    },
-    {
-      "locationId": "refinery",
-      "englishName": "Refinery",
-      "x": 466,
-      "y": 530,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/1257247be58d6e15f520707308482c9b.jpg"
-    },
-    {
-      "locationId": "santa_catarina",
-      "englishName": "Santa Catarina",
-      "x": 850,
-      "y": 556,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/eae03b8cdabd5198841609023f72f98f.jpg"
-    },
-    {
-      "locationId": "command_post",
-      "englishName": "Command Post",
-      "x": 601,
-      "y": 635,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8d4395b6cb76cdd93ff336e67c077be5.jpg"
-    },
-    {
-      "locationId": "mammoth",
-      "englishName": "Mammoth",
-      "x": 250,
-      "y": 799,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/aa38a1cd354454c03eaec585036590a8.jpg"
-    },
-    {
-      "locationId": "confinement",
-      "englishName": "Confinement",
-      "x": 835,
-      "y": 383,
-      "photo": "https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/7a191d673347869ce452bea30172a7ba.jpg"
-    }
-  ]
+    {"locationId":"old_hampton","englishName":"Old Hampton","x":262.25,"y":141.34},
+    {"locationId":"shrines","englishName":"Shrines","x":442.67,"y":181.64,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8fc4c725fc2645d254e886f321866431.jpg"},
+    {"locationId":"council_hall","englishName":"Council Hall","x":740.02,"y":226.97,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/7dc92d3db759de7ee7772004ac80a295.jpg"},
+    {"locationId":"foundation","englishName":"Foundation","x":293.48,"y":341.89},
+    {"locationId":"bayfront","englishName":"Bayfront","x":561.6,"y":333.81,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/6ee1c61c6442b43264cf3fa89a651370.jpg"},
+    {"locationId":"confinement","englishName":"Confinement","x":812.6,"y":344.89,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/7a191d673347869ce452bea30172a7ba.jpg"},
+    {"locationId":"the_maze","englishName":"The Maze","x":164.44,"y":527.34},
+    {"locationId":"refinery","englishName":"Refinery","x":406.36,"y":520.28,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/1257247be58d6e15f520707308482c9b.jpg","label":"Нефтезавод"},
+    {"locationId":"santa_catarina","englishName":"Santa Catarina","x":774.3,"y":523.29,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/eae03b8cdabd5198841609023f72f98f.jpg"},
+    {"locationId":"command_post","englishName":"Command Post","x":624.09,"y":676.51,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/8d4395b6cb76cdd93ff336e67c077be5.jpg"},
+    {"locationId":"mammoth","englishName":"Mammoth","x":246.06,"y":748.08,"photo":"https://cdn.wildflamestudio.com/common/web_event/official2.ff.garena.all/img/20228/aa38a1cd354454c03eaec585036590a8.jpg"},
+    {"locationId":"the_sub","englishName":"The Sub","x":438.6,"y":807.55},
+    {"locationId":"stone_ridge","englishName":"Stone Ridge","x":744.06,"y":769.25},
+  ],
 };

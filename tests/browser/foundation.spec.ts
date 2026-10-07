@@ -65,7 +65,11 @@ test("update 3 knowledge base starts with map catalog and location cards", async
   expect(await page.locator(".knowledge-catalog-card-image.is-weapon img").first().evaluate(image => getComputedStyle(image).objectFit)).toBe("contain");
   await page.goto("/knowledge?section=characters");
   await expect(page.getByRole("heading", { name: "Рэй", exact: true })).toBeVisible();
-  await expect(page.getByText("60 материалов", { exact: true })).toBeVisible();
+  await expect(page.getByText("65 материалов", { exact: true })).toBeVisible();
+  const ray = page.locator("article").filter({ has: page.getByRole("heading", { name: "Рэй", exact: true }) });
+  await ray.getByText("Способность и биография", { exact: true }).click();
+  await expect(ray.getByText("Биография", { exact: true })).toBeVisible();
+  await expect(ray.getByText("45 с", { exact: true })).toBeVisible();
   await page.goto("/knowledge?section=pets");
   await expect(page.getByRole("heading", { name: "Клык", exact: true })).toBeVisible();
   await expect(page.getByText("21 материалов", { exact: true })).toBeVisible();

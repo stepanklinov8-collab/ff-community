@@ -427,6 +427,21 @@ body.knowledge-garena-mode .app-main {
   white-space: nowrap;
 }
 
+.garena-map-marker.is-flat {
+  font-size: 2cqw;
+  transform: translate(-50%, -50%);
+}
+
+/* Nexterra's source bitmap already contains text: replace it at its exact bounds. */
+.garena-map-marker.replaces-printed-label {
+  padding: 0.15cqw 0.4cqw;
+  font-size: 2.4cqw;
+  line-height: 1.2;
+  background: #172724;
+  border-radius: 0.3cqw;
+  box-shadow: 0 0 0.35cqw #172724;
+}
+
 .garena-map-marker-name {
   text-shadow: 0 1px 3px rgb(0 0 0 / 65%);
 }
@@ -947,12 +962,20 @@ body.knowledge-garena-mode .app-main {
 .knowledge-catalog-card-image.is-weapon::after,
 .knowledge-catalog-card-image.is-pet::after { display: none; }
 .knowledge-character-subtitle { color: #9bdcf4; }
-.knowledge-weapon-stats { border-top: 1px solid rgb(92 186 230 / 20%); padding-top: 10px; }
-.knowledge-weapon-stats summary { color: #9bdcf4; cursor: pointer; }
-.knowledge-weapon-stats dl { display: grid; gap: 6px; margin: 12px 0 0; font-size: 13px; }
-.knowledge-weapon-stats dl > div { display: flex; justify-content: space-between; gap: 12px; }
-.knowledge-weapon-stats dt { color: #8eabb8; }
-.knowledge-weapon-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+.knowledge-entry-details { border-top: 1px solid rgb(92 186 230 / 20%); padding-top: 10px; }
+.knowledge-entry-details summary { color: #9bdcf4; cursor: pointer; }
+.knowledge-entry-details summary:focus-visible { outline: 2px solid #9bdcf4; outline-offset: 4px; }
+.knowledge-entry-detail-content { display: grid; gap: 14px; padding-top: 16px; }
+.knowledge-catalog-card-body .knowledge-character-subtitle,
+.knowledge-entry-detail-content p { min-height: 0; }
+.knowledge-entry-detail-content h4 { color: #e3f5ff; font-weight: 700; font-size: 15px; }
+.knowledge-entry-details dl { display: grid; gap: 8px; margin: 0; font-size: 13px; }
+.knowledge-entry-details dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.knowledge-entry-details dt { color: #8eabb8; }
+.knowledge-entry-details dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.knowledge-catalog-card-body p.knowledge-detail-note, .knowledge-detail-note { color: #8eabb8; font-size: 12px; line-height: 1.65; }
+.knowledge-attachment-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; }
+.knowledge-attachment-list li { border: 1px solid rgb(92 186 230 / 25%); border-radius: 6px; padding: 3px 7px; font-size: 12px; }
 
 .icon-button {
   display: inline-grid;

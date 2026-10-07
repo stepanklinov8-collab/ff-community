@@ -30,7 +30,7 @@ export const mapCatalog = [
       ["shipyard", "Верфь"], ["peak", "Пик"], ["clock_tower", "Часовая башня"], ["factory", "Фабрика"],
       ["pochinok", "Починок"], ["rim_nam_village", "Деревня Рим Нам"], ["mars_electric", "Марс Электрик"],
       ["hangar", "Ангар"], ["nurek_dam", "Плотина Нурек"], ["observatory", "Обсерватория"], ["sentosa", "Сентоса"],
-      ["cape_town", "Кейптаун"], ["kota_tua", "Кота-Туа"], ["mill", "Мельница"], ["plantation", "Плантация"],
+      ["cape_town", "Кейптаун"], ["keraton", "Кератон"], ["riverside", "Риверсайд"], ["kota_tua", "Кота-Туа"], ["mill", "Мельница"], ["plantation", "Плантация"],
       ["katulistiwa", "Катулистиуа"], ["bimasakti_strip", "Полоса Бимасакти"], ["graveyard", "Кладбище"],
       ["bullseye", "Буллсай"], ["outpost", "Аванпост"], ["sanctuary", "Святилище"],
     ]),
@@ -52,7 +52,7 @@ export const mapCatalog = [
       ["pochinok", "Починок"], ["rim_nam_village", "Деревня Рим Нам"], ["mars_electric", "Марс Электрик"],
       ["nurek_dam", "Плотина Нурек"], ["observatory", "Обсерватория"], ["sentosa", "Сентоса"], ["kota_tua", "Кота-Туа"],
       ["mill", "Мельница"], ["graveyard", "Кладбище"], ["bullseye", "Буллсай"], ["outpost", "Аванпост"],
-      ["academy", "Академия"], ["the_circuit", "Гоночная трасса"], ["samurai_garden", "Сад самурая"], ["aden_creek", "Ручей Аден"], ["sanctuary", "Святилище"],
+      ["shipyard", "Верфь"], ["katulistiwa", "Катулистиуа"], ["bimasakti_strip", "Полоса Бимасакти"], ["keraton", "Кератон"], ["academy", "Академия"], ["the_circuit", "Гоночная трасса"], ["samurai_garden", "Сад самурая"], ["aden_creek", "Ручей Аден"], ["sanctuary", "Святилище"],
     ]),
   },
   {
@@ -90,7 +90,7 @@ export const mapCatalog = [
       ["snowfall", "Снегопад"], ["vantage", "Авангард"], ["militia", "Милиция"], ["dock", "Док"],
       ["garrison", "Гарнизон"], ["railroad", "Железная дорога"], ["forest_red", "Красный лес"], ["fusion", "Фьюжн"],
       ["basecamp", "Базовый лагерь"], ["carousel", "Карусель"], ["mammut", "Мамонт"], ["river", "Устье реки"],
-      ["snowy_village", "Снежная деревня"], ["railway_station", "Железнодорожная станция"],
+      ["sunside", "Солнечная сторона"], ["ocean_view", "Вид на океан"], ["rye", "Рай"], ["stadium", "Стадион"], ["blue_ville", "Блю-Вилль"], ["snowy_village", "Снежная деревня"], ["railway_station", "Железнодорожная станция"],
     ]),
   },
   {
@@ -128,7 +128,7 @@ export const mapCatalog = [
       ["forge", "Кузница"], ["brasilia", "Бразилия"], ["central", "Центральный район"], ["moathouse", "Дом на озере"],
       ["ski_lodge", "Лыжный курорт"], ["crossroads", "Перекрёсток"], ["fields", "Поля"], ["lumber_mill", "Лесопилка"],
       ["campsite", "Лагерь"], ["quarry", "Карьер"], ["fire_brigade", "Пожарная часть"], ["golf_course", "Гольф-клуб"],
-      ["trailer_park", "Автокемпинг"], ["mount_villa", "Горная вилла"], ["central_factory", "Центральная фабрика"],
+      ["marbleworks", "Мраморный завод"], ["trailer_park", "Автокемпинг"], ["mount_villa", "Горная вилла"], ["central_factory", "Центральная фабрика"],
     ]),
   },
   {
@@ -148,7 +148,7 @@ export const mapCatalog = [
       ["bayfront", "Бэйфронт"], ["santa_catarina", "Санта-Катарина"], ["confinement", "Изолятор"],
       ["stone_ridge", "Каменный хребет"], ["the_maze", "Лабиринт"], ["council_hall", "Зал совета"], ["foundation", "Фундамент"],
       ["old_hampton", "Старый Хэмптон"], ["mammoth", "Мамонт"], ["prison", "Тюрьма"], ["lab", "Лаборатория"],
-      ["elevated_road", "Высокая дорога"],
+      ["the_sub", "Подлодка"], ["elevated_road", "Высокая дорога"],
     ]),
   },
 ] as const satisfies readonly MapCatalogItem[];
