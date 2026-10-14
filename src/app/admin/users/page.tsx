@@ -113,7 +113,7 @@ export default function AdminUsersPage() {
   };
 
   const openModal = (user: User, type: "message" | "warning" | "ban" | "roles" | "delete") => {
-    if(type==="warning"){router.push(`/admin/competition-moderation?targetType=player&targetId=${user.id}`);return;}
+    if(type==="warning"){router.push(`/admin/warnings?targetType=player&targetId=${user.id}`);return;}
     setSelectedUser(user);
     setModalType(type);
     setMsgSubject("");

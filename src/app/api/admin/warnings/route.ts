@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       return Response.json({ success: true });
     }
 
-    return Response.json({error:"Для предупреждения укажите категорию, срок и снижение репутации в новом разделе модерации.",url:"/admin/competition-moderation"},{status:410});
+    return Response.json({error:"Для предупреждения укажите категорию, срок и снижение репутации в новом разделе модерации.",url:"/admin/warnings"},{status:410});
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Некорректные данные предупреждения" }, { status: 400 });
