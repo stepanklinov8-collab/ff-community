@@ -12,7 +12,10 @@ export async function verifyPlayerRating999(db,id,base){
  const startTime=new Date(Date.now()+86400000).toISOString();
  config.sessions=[{...base.sessions[0],id:session,startTime,endTime:new Date(Date.parse(startTime)+3600000).toISOString(),groups:[{id:group,name:'Rating',capacity:12,games:Array.from({length:10},(_,i)=>({id:id(97010+i),map:i%2?'solara':'bermuda'}))}]}];
  const event=(await scalar('select u2_event_configuration($1,null,0,$2::jsonb)',[id(1),JSON.stringify(config)])).eventId;
- await db.query("insert into rating_event_settings(event_id,category,hidden_coefficient) values($1,'official',1)",[event]);
+ assert.equal(Number(await scalar('select hidden_coefficient from rating_event_settings where event_id=$1',[event])),1,
+  'New training events receive the agreed coefficient of one automatically');
+ const trainingSettings=await scalar("select u2_rating_settings($1,$2,'official')",[id(1),event]);
+ assert.equal(Number(trainingSettings.coefficient),1,'Changing a training category keeps the training coefficient at one');
  const registrationA=id(97030),registrationB=id(97031);
  await db.query("insert into event_registrations(id,event_id,session_id,group_id,team_id,roster_json) values($1,$2,$3,$4,$5,$6::jsonb),($7,$2,$3,$4,$8,$9::jsonb)",
   [registrationA,event,session,group,team,JSON.stringify([user]),registrationB,opponent,JSON.stringify([other])]);
@@ -33,7 +36,8 @@ export async function verifyPlayerRating999(db,id,base){
  await db.query('select u2_save_results($1,$2,0,$3,$4,$5,$6::jsonb,$7::jsonb)',[id(1),session,revision,id(97040),'rating',JSON.stringify(draft),JSON.stringify(published)]);
  assert.equal(await scalar('select u4_complete_rating_session($1)',[session]),true);
  const rating=()=>scalar("select exact_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user]);
- assert.equal(Number(await rating()),22.6,'A=5/10+5/5+1*3=4.5, US=5, placement bonus=.1');
+ assert.equal(Number(await rating()),30.1,'K=.5+1=1.5, Z=3, D=0, A=6, US=5, placement bonus=.1');
+ assert.equal(Number(await scalar("select display_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user])),30,'Published rating is rounded to an integer while exact precision remains for calculations');
  const personalStats=await scalar('select u4_player_main_statistics($1)',[user]);
  assert.equal(Number(personalStats.games),10);assert.equal(Number(personalStats.kills),50);assert.equal(Number(personalStats.wins),1);
  const teamRating=()=>scalar("select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'",[team]);
@@ -53,37 +57,44 @@ export async function verifyPlayerRating999(db,id,base){
  await db.query('update competition_team_facts set kills=0 where game_id=$1 and team_id=$2',[id(97019),team]);
  await db.query('update competition_team_facts set kills=0 where game_id=$1 and team_id=$2',[id(97019),opponent]);
  await db.query('update competition_player_facts set kills=0 where game_id=$1 and user_id=$2',[id(97019),user]);
- assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),18.775,'Even an all-zero game gives a fixed quarter team share and zero global share');
+ assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),24.85,'All-zero game: K=.25, Z=3, A=1; U/S falls to 4.5');
+ assert.equal(Number(await scalar("select display_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user])),25);
  const guest=structuredClone(published);
  const guestRow=guest.rows.find(row=>row.gameId===id(97019)&&row.teamId===team);
  guestRow.players[0].kills=0;
  guestRow.players.push({id:id(97050),userId:null,nickname:'Guest',played:true,kills:5,deaths:0,assists:0});
  await db.query('update competition_publications set published=$2::jsonb where session_id=$1',[session,JSON.stringify(guest)]);
  await db.query('update competition_team_facts set kills=5 where game_id=$1',[id(97019)]);
- assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),18.325,'With team kills, a zero-kill player has zero share');
+ assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),24.4,'With team kills, a zero-kill player has zero share');
+ assert.equal(Number(await scalar("select display_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user])),24);
  await db.exec('rollback');
  assert.equal(Number(await scalar("select wins from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user])),1,'Ten games in one session mean one win');
  await db.query('delete from competition_player_facts where game_id=$1 and user_id=$2',[id(97019),user]);
  assert.equal(await scalar('select recalculate_player_rating($1)',[user]),null,'Nine games do not qualify');
  assert.equal((await db.query("select * from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[user])).rows.length,0);
  await db.query("insert into competition_player_facts(session_id,game_id,registration_id,user_id,team_id,mode,nickname,kills,deaths,assists,place,field_size) values($1,$2,$3,$4,$5,'training','Rating Player',5,0,0,1,2)",[session,id(97019),registrationA,user,team]);
- assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),22.6);
+ assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),30.1);
  await db.query('insert into competition_game_forecasts(game_id,team_id,map_name,strength,expected_place) values($1,$2,$3,10,.2)',[id(97010),team,'bermuda']);
- assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),23.8,'Only the recorded game gains D=.8');
+ assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),31.9,'Only the recorded game gains D=.8');
  await db.query("update rating_event_settings set category='season_final',hidden_coefficient=1.2 where event_id=$1",[event]);
- assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),28.54,'Current coefficient reweights the full history');
+ assert.equal(Number(await scalar('select recalculate_player_rating($1)',[user])),38.26,'Current coefficient reweights the full history');
  const incomplete=structuredClone(published);incomplete.rows[0].detail='team';
  await db.query('update competition_publications set published=$2::jsonb where session_id=$1',[session,JSON.stringify(incomplete)]);
  assert.equal(await scalar('select u4_complete_rating_session($1)',[session]),false);
  assert.equal(await scalar('select recalculate_player_rating($1)',[user]),null,'A single incomplete row excludes the whole session');
  assert.equal(Number((await scalar('select u4_player_main_statistics($1)',[user])).games),0,'Incomplete session is also excluded from visible personal totals');
  const upcoming=structuredClone(config),nextSession=id(97060),nextGroup=id(97061),thirdTeam=id(97062);
+ upcoming.type='tournament';upcoming.rules={...upcoming.rules,mode:'tournament'};
  await db.query("insert into teams(id,name) values($1,'Map newcomer')",[thirdTeam]);
  const nextStart=new Date(Date.now()+36*3600000).toISOString();
  upcoming.sessions=[{...config.sessions[0],id:nextSession,startTime:nextStart,
   endTime:new Date(Date.parse(nextStart)+3600000).toISOString(),groups:[{id:nextGroup,name:'Next field',capacity:12,
    games:[{id:id(97063),map:'bermuda'},{id:id(97064),map:'kalahari'}]}]}];
  const nextEvent=(await scalar('select u2_event_configuration($1,null,0,$2::jsonb)',[id(1),JSON.stringify(upcoming)])).eventId;
+ assert.equal(Number(await scalar('select hidden_coefficient from rating_event_settings where event_id=$1',[nextEvent])),1.2,
+  'New tournament events receive the agreed default coefficient of 1.2 automatically');
+ const tournamentSettings=await scalar("select u2_rating_settings($1,$2,'regional')",[id(1),nextEvent]);
+ assert.equal(Number(tournamentSettings.coefficient),1.2,'Changing a tournament category keeps its default coefficient at 1.2');
  for(const [i,teamId] of [team,opponent,thirdTeam].entries())
   await db.query('insert into event_registrations(id,event_id,session_id,group_id,team_id,roster_json) values($1,$2,$3,$4,$5,$6::jsonb)',
    [id(97065+i),nextEvent,nextSession,nextGroup,teamId,JSON.stringify([])]);
