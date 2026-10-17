@@ -8,9 +8,10 @@ export async function verifyStatistics(db,id){
  }
  const page=await leaderboard();
  assert.deepEqual(page.items.map(x=>x.id),[id(2000),id(2001),id(2002),id(2003)]);
- assert.deepEqual(page.items.map(x=>Number(x.position)),[1,1,3,4]);
+ const firstPosition=Number(page.items[0].position);
+ assert.deepEqual(page.items.map(x=>Number(x.position)),[firstPosition,firstPosition,firstPosition+2,firstPosition+3]);
  assert.ok(page.items.every(x=>x.rating===99.9&&!('exact_rating' in x)));
- assert.equal((await leaderboard('main','Statistic 2002')).items[0].position,3,'Search keeps global position');
+ assert.equal((await leaderboard('main','Statistic 2002')).items[0].position,firstPosition+2,'Search keeps global position');
  assert.equal((await leaderboard('bo')).items.length,0,'No BO place before first confirmed series');
  const first=await leaderboard('main','Statistic',0,2),second=await leaderboard('main','Statistic',2,2);
  assert.equal(first.hasMore,true);assert.equal(second.hasMore,false);
@@ -18,7 +19,7 @@ export async function verifyStatistics(db,id){
  const event=(await db.query(`select event_id from public.event_sessions where id=$1`,[id(700)])).rows[0].event_id;
  await db.query(`insert into public.events(id,title,type) values($1,'Historical solo','solo')`,[id(2050)]);
  await db.query(`insert into public.player_stats(user_id,event_id,kills,matches_played,status) values($1,$2,123,4,'approved')`,[id(2003),id(2050)]);
- assert.equal((await leaderboard('main','Statistic 2003')).items[0].kills,0);
+ assert.equal((await leaderboard('main','Statistic 2003')).items.length,0,'Solo activity does not grant a main rating');
  assert.equal((await leaderboard('solo','Statistic 2003')).items[0].kills,123);
  const history=(await db.query(`select place,deaths,assists,games from public.competition_public_history where target_id=$1 and mode='solo'`,[id(2003)])).rows[0];
  assert.deepEqual(history,{place:null,deaths:null,assists:null,games:4});
@@ -26,6 +27,7 @@ export async function verifyStatistics(db,id){
  await assert.rejects(()=>db.query(`insert into public.player_stats(user_id,event_id,session_id,kills,matches_played,status) values($1,$2,$3,999,8,'approved')`,[id(2003),event,id(700)]),/уже опубликованы/);
  await db.query(`insert into auth.users(id) select ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid from generate_series(3000,4004) n`);
  await db.query(`insert into public.profiles(id,nickname) select ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'Pagination '||n from generate_series(3000,4004) n`);
+ await db.query(`insert into public.competition_ratings(target_type,target_id,mode,exact_rating,display_rating) select 'player',id,'main',1,1 from public.profiles where nickname like 'Pagination %'`);
  const tail=await leaderboard('main','Pagination',1000);
  assert.equal(tail.items.length,5);assert.equal(tail.hasMore,false);
  assert.equal(await db.query(`select has_table_privilege('anon','public.competition_public_history','SELECT') allowed`).then(r=>r.rows[0].allowed),false);

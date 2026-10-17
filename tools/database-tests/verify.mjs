@@ -1,3 +1,5 @@
+import {verifySessionAwards} from './session-awards.mjs';
+import {verifyPlayerRating999} from './player-rating-999.mjs';
 import {PGlite} from '@electric-sql/pglite';
 import {readFile,readdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -167,4 +169,7 @@ try {
  assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[leaveTeam])).rows[0].n,1);
  await assert.rejects(()=>db.query(`select public.leave_organization($1)`,[leaveTeam]),/не состоите/);
  console.log('PASS: regular member can leave, leader must transfer leadership, repeat leave is rejected');
-} catch(error){console.error('FAILED:',error.message,error.where??'',error.detail??'');process.exitCode=1;} finally {await db.close();}
+ await verifySessionAwards(db,id,config);
+ await verifyPlayerRating999(db,id,config);
+} catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
+} finally {await db.close();}

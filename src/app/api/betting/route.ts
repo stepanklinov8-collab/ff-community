@@ -120,7 +120,9 @@ async function evaluateSelection(
       ? input.marketType === "kills_over" ? "over" : "under"
       : input.selectionValue;
   const line = input.marketType.startsWith("kills_") ? input.line ?? null : null;
+  const ratingScale: 100 | 999 = mode === "bo" || mode === "kv" ? 100 : 999;
   const modelSnapshot = {
+    ratingScale,
     teamRating: Number(team.main_rating ?? 1),
     opponentRating: average(otherRatings, 50),
     fieldAverageRating: average(fieldRatings, 50),
@@ -266,6 +268,7 @@ export async function GET(request: Request) {
         const marketType=source.mode==="bo"||source.mode==="kv"?"win":"kills_over";
         const line=marketType==="win"?null:suggestedKillsLine(6);
         const quote=calculateFixedOdds({marketType,line,selectionValue:marketType==="win"?"win":"over",teamRating:team.main_rating,
+          ratingScale:source.mode==="bo"||source.mode==="kv"?100:999,
           opponentRating:average(field.filter(t=>t.id!==team.id).map(t=>t.main_rating),50),fieldAverageRating:average(field.map(t=>t.main_rating),50),
           fieldSize:field.length,averageKills:6,averagePlace:(field.length+1)/2,sampleSize:0,maximumOdds:Number(settings?.maximum_odds??15)});
         previews.push({sourceId:source.id,sourceTitle:source.title,teamId:team.id,teamName:team.name,gameId:game.id,marketType,line,available:quote.eligible,

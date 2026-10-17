@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';
+export async function verifySessionAwards(db,id,base){
+ const scalar=async(sql,args=[])=>Object.values((await db.query(sql,args)).rows[0])[0];
+ const summary=async(type='team',n=91000)=>scalar('select u3_award_summary($1,$2)',[type,id(n)]);
+ for(let n=0;n<4;n++){
+  await db.query('insert into auth.users(id) values($1)',[id(91100+n)]);
+  await db.query('insert into profiles(id,nickname) values($1,$2)',[id(91100+n),`Award Player ${n}`]);
+  await db.query('insert into teams(id,name) values($1,$2)',[id(91000+n),`Award Team ${n}`]);
+ }
+ let operation=990000;
+ const fixtures=[];
+ const make=async(index,mode='training',enabled=true,groups=1)=>{
+  const session=id(92000+index*20),group=id(92001+index*20),game=id(92002+index*20);
+  const config=structuredClone(base);config.type=mode;config.rules={...base.rules,mode,mvpEnabled:enabled};
+  const startTime=new Date(Date.now()+(index+2)*86400000).toISOString();
+  config.sessions=[{...base.sessions[0],id:session,startTime,endTime:new Date(Date.parse(startTime)+3600000).toISOString(),groups:[{id:group,name:'Award',capacity:12,games:[{id:game,map:'bermuda'}]}]}];
+  if(groups>1)config.sessions[0].groups.push({id:id(92003+index*20),name:'Qualifier',capacity:12,games:[{id:id(92004+index*20),map:'kalahari'}]});
+  const event=(await scalar('select u2_event_configuration($1,null,0,$2::jsonb)',[id(1),JSON.stringify(config)])).eventId;
+  for(let n=0;n<4;n++)await db.query('insert into event_registrations(id,event_id,session_id,group_id,team_id,roster_json) values($1,$2,$3,$4,$5,$6::jsonb)',[id(92010+index*20+n),event,session,group,id(91000+n),JSON.stringify([id(91100+n)])]);
+  const doc={rules:config.rules,mvps:[id(91100)],rows:[0,1,2,3].map(n=>({registrationId:id(92010+index*20+n),gameId:game,groupId:group,teamId:id(91000+n),userId:null,name:`Award Team ${n}`,played:true,place:n+1,kills:4-n,points:16-n*3,rounds:null,detail:'players',reason:'no_show',fieldSize:4,players:[{id:id(91100+n),userId:id(91100+n),nickname:`Award Player ${n}`,played:true,kills:4-n,deaths:0,assists:0}]})),standings:[]};
+  const value={session,doc};fixtures.push(value);return value;
+ };
+ const publish=async(f,place=1,mvp=0,skip=false)=>{
+  const order=[1,2,3,4];order.splice(order.indexOf(place),1);order.unshift(place);
+  f.doc.rows.forEach((r,n)=>{r.place=order[n];r.played=!(skip&&n===0);r.players[0].played=r.played;});
+  f.doc.standings=f.doc.rows.map(r=>({...r,placeSum:r.place,gamesPlayed:r.played?1:0,wins:r.place===1?1:0,bonus:0,manual:false}));
+  f.doc.mvps=[id(91100+mvp)];
+  const revision=Number(await scalar('select coalesce((select revision from competition_publications where session_id=$1),0)',[f.session]));
+  const configuration=Number(await scalar('select configuration_revision from event_sessions where id=$1',[f.session]));
+  await db.query('select u2_save_results($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,false)',[id(1),f.session,revision,configuration,id(operation++),`award-${operation}`,JSON.stringify({rows:f.doc.rows,warnings:[],manualOrder:[]}),JSON.stringify(f.doc)]);
+ };
+ for(const [i,place] of [1,3,2,4,1].entries())await publish(await make(i),place,i===3?1:0);
+ let s=await summary();assert.equal(s.trainingStreak,1);assert.equal(s.count,3);assert.equal(s.ratingBonus,.325);
+ let p=await summary('player',91100);assert.equal(p.trainingStreak,1);assert.equal(p.count,4);assert.equal(p.ratingBonus,.475);
+ const originalDate=await scalar('select start_time from event_sessions where id=$1',[fixtures[4].session]);
+ await db.query("update event_sessions set start_time=now() where id=$1",[fixtures[4].session]);
+ assert.equal((await summary()).trainingStreak,0,'Chronology follows session date, not publication order');
+ await db.query('update event_sessions set start_time=$2 where id=$1',[fixtures[4].session,originalDate]);
+ assert.equal((await summary()).trainingStreak,1);
+ const before=await summary();await publish(fixtures[4]);assert.deepEqual(await summary(),before,'Republication is idempotent');
+ await publish(fixtures[3],3,0);s=await summary();assert.equal(s.trainingStreak,3);assert.equal(s.ratingBonus,.375,'Correcting a break repairs later multipliers');
+ assert.equal((await summary('player',91100)).trainingStreak,5);
+ await publish(await make(5),4,1,true);assert.equal((await summary()).trainingStreak,3,'Skipping does not break a streak');
+ await publish(await make(6),2);assert.equal((await summary()).trainingStreak,4);
+ const old=await make(7,'training',false);await publish(old);assert.equal((await summary()).trainingStreak,4);
+ old.doc.rules.mvpEnabled=true;await publish(old);assert.equal((await summary()).trainingStreak,4,'Old publication cannot gain eligibility on correction');
+ const qualifier=await make(8,'training',true,2);await publish(qualifier);assert.equal((await summary()).trainingStreak,4,'Qualification does not award a team placement');
+ for(let i=9;i<21;i++)await publish(await make(i,'tournament'));
+ s=await summary();assert.equal(s.trainingStreak,4);assert.equal(s.tournamentStreak,12);assert.equal(s.ratingBonus,5);
+ const awards=(await db.query('select * from u3_awards_for_target($1,$2)', ['team',id(91000)])).rows;
+ assert.equal(Number(awards.at(-1).bonus),1.5,'Multiplier capped at 3');
+ assert.equal(Number(await scalar('select wins from competition_ratings where target_type=$1 and target_id=$2 and mode=$3',['team',id(91000),'main'])),15,'Top two bonus does not manufacture a win');
+ const ratedBefore=Number(await scalar("select exact_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[id(91100)]));
+ const costBefore=Number(await scalar("select u2_cost_for_target('player',$1)",[id(91100)]));
+ const factsBefore=await scalar("select jsonb_build_object('kills',sum(kills),'games',count(*)) from competition_player_facts where user_id=$1",[id(91100)]);
+ await db.exec('begin');
+ await db.query("update competition_award_entries set outcome=0 where target_type='player' and target_id=$1",[id(91100)]);
+ const withoutBonus=Number(await scalar('select recalculate_player_rating($1)',[id(91100)]));
+ const costWithout=Number(await scalar("select u2_cost_for_target('player',$1)",[id(91100)]));
+ assert.ok(Math.abs(ratedBefore-withoutBonus-5)<.00001,'Rating gets the capped award, without compounding');
+ assert.ok(costBefore>costWithout,'Existing value formula reflects the higher rating');
+ assert.deepEqual(await scalar("select jsonb_build_object('kills',sum(kills),'games',count(*)) from competition_player_facts where user_id=$1",[id(91100)]),factsBefore);
+ await db.exec('rollback');
+ const earnedBefore=await summary();await db.query("update event_sessions set status='cancelled' where id=$1",[fixtures[20].session]);assert.equal((await summary()).tournamentStreak,11);
+ await db.query("update event_sessions set status='completed' where id=$1",[fixtures[20].session]);assert.deepEqual(await summary(),earnedBefore);
+ // Exact player award change below display precision must reach the played roster organization.
+ await db.query('insert into team_members(team_id,user_id) values($1,$2)',[id(91003),id(91103)]);
+ const precision=await make(22,'training');
+ const precisionEvent=await scalar('select event_id from event_sessions where id=$1',[precision.session]);
+ await db.query("insert into rating_event_settings(event_id,category,hidden_coefficient) values($1,'training',.01)",[precisionEvent]);
+ await publish(precision,1,3);
+ const displayBefore=await scalar('select main_rating from profiles where id=$1',[id(91103)]);
+ const teamBefore=Number(await scalar("select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'",[id(91003)]));
+ await publish(precision,1,2);
+ assert.equal(await scalar('select main_rating from profiles where id=$1',[id(91103)]),displayBefore);
+ const teamAfter=Number(await scalar("select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'",[id(91003)]));
+ assert.ok(Math.abs(teamBefore-teamAfter-.005*.55)<.000001,'Exact award change reaches organization even when profile display stays the same');
+ assert.equal(await scalar("select has_table_privilege('anon','competition_award_entries','SELECT')"),false);
+ assert.equal(await scalar("select has_function_privilege('authenticated','u3_award_summary(text,uuid)','EXECUTE')"),false);
+ console.log('PASS: session awards, top-3 hold/top-2 advance, independent formats, skips, corrections, idempotency, historical exclusion, qualification, caps and cancellation');
+}
