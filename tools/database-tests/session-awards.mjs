@@ -30,15 +30,15 @@ export async function verifySessionAwards(db,id,base){
   await db.query('select u2_save_results($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,false)',[id(1),f.session,revision,configuration,id(operation++),`award-${operation}`,JSON.stringify({rows:f.doc.rows,warnings:[],manualOrder:[]}),JSON.stringify(f.doc)]);
  };
  for(const [i,place] of [1,3,2,4,1].entries())await publish(await make(i),place,i===3?1:0);
- let s=await summary();assert.equal(s.trainingStreak,1);assert.equal(s.count,3);assert.equal(s.ratingBonus,.325);
- let p=await summary('player',91100);assert.equal(p.trainingStreak,1);assert.equal(p.count,4);assert.equal(p.ratingBonus,.475);
+ let s=await summary();assert.equal(s.trainingStreak,1);assert.equal(s.count,3);assert.equal(s.ratingBonus,1.625);
+ let p=await summary('player',91100);assert.equal(p.trainingStreak,1);assert.equal(p.count,4);assert.equal(p.ratingBonus,2.375);
  const originalDate=await scalar('select start_time from event_sessions where id=$1',[fixtures[4].session]);
  await db.query("update event_sessions set start_time=now() where id=$1",[fixtures[4].session]);
  assert.equal((await summary()).trainingStreak,0,'Chronology follows session date, not publication order');
  await db.query('update event_sessions set start_time=$2 where id=$1',[fixtures[4].session,originalDate]);
  assert.equal((await summary()).trainingStreak,1);
  const before=await summary();await publish(fixtures[4]);assert.deepEqual(await summary(),before,'Republication is idempotent');
- await publish(fixtures[3],3,0);s=await summary();assert.equal(s.trainingStreak,3);assert.equal(s.ratingBonus,.375,'Correcting a break repairs later multipliers');
+ await publish(fixtures[3],3,0);s=await summary();assert.equal(s.trainingStreak,3);assert.equal(s.ratingBonus,1.875,'Correcting a break repairs later multipliers');
  assert.equal((await summary('player',91100)).trainingStreak,5);
  await publish(await make(5),4,1,true);assert.equal((await summary()).trainingStreak,3,'Skipping does not break a streak');
  await publish(await make(6),2);assert.equal((await summary()).trainingStreak,4);
@@ -48,7 +48,7 @@ export async function verifySessionAwards(db,id,base){
  for(let i=9;i<21;i++)await publish(await make(i,'tournament'));
  s=await summary();assert.equal(s.trainingStreak,4);assert.equal(s.tournamentStreak,12);assert.equal(s.ratingBonus,5);
  const awards=(await db.query('select * from u3_awards_for_target($1,$2)', ['team',id(91000)])).rows;
- assert.equal(Number(awards.at(-1).bonus),1.5,'Multiplier capped at 3');
+ assert.equal(Number(awards.at(-1).bonus),1.8,'Tournament coefficient 1.2 scales the capped streak multiplier');
  assert.equal(Number(await scalar('select wins from competition_ratings where target_type=$1 and target_id=$2 and mode=$3',['team',id(91000),'main'])),15,'Top two bonus does not manufacture a win');
  const ratedBefore=Number(await scalar("select exact_rating from competition_ratings where target_type='player' and target_id=$1 and mode='main'",[id(91100)]));
  const costBefore=Number(await scalar("select u2_cost_for_target('player',$1)",[id(91100)]));
@@ -67,7 +67,7 @@ export async function verifySessionAwards(db,id,base){
  await db.query('insert into team_members(team_id,user_id) values($1,$2)',[id(91003),id(91103)]);
  const precision=await make(22,'training');
  const precisionEvent=await scalar('select event_id from event_sessions where id=$1',[precision.session]);
- await db.query("insert into rating_event_settings(event_id,category,hidden_coefficient) values($1,'training',.01)",[precisionEvent]);
+ await db.query("update rating_event_settings set category='training',hidden_coefficient=.01 where event_id=$1",[precisionEvent]);
  await publish(precision,1,3);
  const displayBefore=await scalar('select main_rating from profiles where id=$1',[id(91103)]);
  const teamBefore=Number(await scalar("select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'",[id(91003)]));

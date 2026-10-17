@@ -260,7 +260,7 @@ export default function PublicProfilePage() {
             <p className="text-gray-400 text-sm">Уровень</p><p className="text-xl font-bold">{profile.profile_level}</p>
           </div>
           <div className="bg-gray-700 p-3 rounded text-center">
-            <p className="text-gray-400 text-sm">Рейтинг</p><p className="text-xl font-bold">{profile.main_rating === null ? "—" : profile.main_rating.toFixed(1)}</p>
+            <p className="text-gray-400 text-sm">Рейтинг</p><p className="text-xl font-bold">{profile.main_rating === null ? "—" : profile.main_rating.toFixed(0)}</p>
           </div>
           <div className="bg-gray-700 p-3 rounded text-center">
             <p className="text-gray-400 text-sm">Репутация</p><p className="text-xl font-bold">{profile.reputation_events_count < 3 ? "Новый" : profile.reputation_score.toFixed(0)}</p>
