@@ -2,13 +2,14 @@ import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
 import { playerRoleIds, type PlayerRoleId } from "@/lib/profile/roles";
+import { normalizeContactSocialUrl } from "@/lib/profile/contact-social";
 
 const profileSchema = z.object({
   nickname: z.string().trim().min(1).max(20),
   gameId: z.string().trim().regex(/^\d+$/),
   bio: z.string().trim().max(500),
   phone: z.string().trim().max(32),
-  contactSocialUrl: z.string().trim().url().max(300).or(z.literal("")),
+  contactSocialUrl: z.string().trim().refine(value => normalizeContactSocialUrl(value) !== null, "Укажите ссылку на Telegram, VK, MAX или Instagram"),
   playerRoles: z.array(z.string()).max(6).refine(values => new Set(values).size === values.length && values.every(value => playerRoleIds.has(value)), "Недопустимая роль"),
   locale: z.enum(["ru", "kk", "ky"]),
 });
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
         level: data?.profile_level ?? 1,
         reputation: Number(data?.reputation_score ?? 50),
         reputationEvents: data?.reputation_events_count ?? 0,
-        rating: Number(data?.main_rating ?? 1),
+        rating: data?.main_rating == null ? null : Number(data.main_rating),
         balance: wallet?.balance ?? 0,
       },
     });
@@ -64,7 +65,7 @@ export async function PATCH(request: Request) {
       game_id: payload.gameId,
       bio: payload.bio || null,
       phone: payload.phone || null,
-      contact_social_url: payload.contactSocialUrl || null,
+      contact_social_url: normalizeContactSocialUrl(payload.contactSocialUrl),
       player_roles: payload.playerRoles,
       locale: payload.locale,
       updated_at: new Date().toISOString(),
@@ -86,7 +87,7 @@ export async function PATCH(request: Request) {
     if (metadataError) throw metadataError;
     return Response.json({ success: true });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ error: "Проверьте ник, игровой ID и контакты" }, { status: 400 });
+    if (error instanceof z.ZodError) return Response.json({ error: "Укажите корректный ник, игровой ID и ссылку Telegram, VK, MAX или Instagram" }, { status: 400 });
     return authErrorResponse(error);
   }
 }

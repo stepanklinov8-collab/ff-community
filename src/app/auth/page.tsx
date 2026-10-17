@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { authErrorMessage, emailRetrySeconds, emailTypoSuggestion, type EmailVerificationType } from "@/utils/auth/email-flow";
+import { normalizeContactSocialUrl } from "@/lib/profile/contact-social";
+import { authFetch } from "@/utils/api/auth-fetch";
 
 type AuthMode = "login" | "register" | "reset" | "update" | "confirm";
 const modeTitles: Record<AuthMode, string> = {
@@ -100,11 +102,16 @@ export default function AuthPage() {
     const formData = new FormData(event.currentTarget);
     const nickname = String(formData.get("nickname") ?? "").trim();
     const gameId = String(formData.get("gameId") ?? "").trim();
+    const contactSocialUrl = normalizeContactSocialUrl(String(formData.get("contactSocialUrl") ?? ""));
     const email = emailAddress.trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
     if (!checkEmail(email)) return;
     if (!nickname || nickname.length > 20 || !/^\d+$/.test(gameId) || password.length < 6) {
       setMessage("Укажите ник до 20 символов и цифровой Free Fire ID; пароль — не короче 6 символов.");
+      return;
+    }
+    if (!contactSocialUrl) {
+      setMessage("Укажите ссылку для связи в Telegram, VK, MAX или Instagram. TikTok и YouTube не принимаются.");
       return;
     }
     await runAction(async () => {
@@ -122,7 +129,7 @@ export default function AuthPage() {
         return;
       }
       const { data, error } = await supabase.auth.signUp({
-        email, password, options: { data: { nickname, game_id: gameId }, emailRedirectTo: `${window.location.origin}/auth/callback?next=/profile` },
+        email, password, options: { data: { nickname, game_id: gameId, contact_social_url: contactSocialUrl }, emailRedirectTo: `${window.location.origin}/auth/callback?next=/profile` },
       });
       if (error || !data.user) {
         logRegistration("error", error?.code ?? `SIGNUP_${error?.status ?? "UNKNOWN"}`, email);
@@ -162,6 +169,17 @@ export default function AuthPage() {
       if (error || !data.user) {
         if (error?.code === "email_not_confirmed") { setVerificationType("signup"); setMode("confirm"); }
         showError(error ?? {}); return;
+      }
+      try {
+        const profileResponse = await authFetch("/api/profile");
+        if (profileResponse.ok) {
+          const profile = await profileResponse.json() as { profile?: { contactSocialUrl?: string } };
+          if (!normalizeContactSocialUrl(profile.profile?.contactSocialUrl ?? "")) {
+            router.push("/profile?complete=contact"); router.refresh(); return;
+          }
+        }
+      } catch {
+        // A temporary profile API failure must not prevent sign-in.
       }
       router.push("/"); router.refresh();
     });
@@ -216,6 +234,10 @@ export default function AuthPage() {
           {mode === "register" && <form onSubmit={handleRegister} className="space-y-4">
             <input type="text" name="nickname" placeholder="Никнейм" autoComplete="username" maxLength={20} required />
             <input type="text" name="gameId" placeholder="Free Fire ID — только цифры" inputMode="numeric" pattern="[0-9]+" required />
+            <label className="block text-sm text-slate-300">Ссылка для связи · Telegram, VK, MAX или Instagram
+              <input className="mt-2" type="url" name="contactSocialUrl" placeholder="https://t.me/username" autoComplete="url" maxLength={300} required />
+              <span className="mt-1 block text-xs text-slate-500">Будет видна только зарегистрированным пользователям.</span>
+            </label>
             {emailInput}
             <input type="password" name="password" placeholder="Пароль — минимум 6 символов" autoComplete="new-password" minLength={6} required />
             <button type="submit" disabled={busy} className="primary-button w-full disabled:opacity-50">{busy ? "Создание…" : "Создать аккаунт"}</button>

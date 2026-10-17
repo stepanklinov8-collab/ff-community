@@ -1,14 +1,15 @@
 export type CompetitionMode = "main" | "solo" | "bo" | "kv";
 export interface StatisticsSummary {
-  mode: CompetitionMode; rating: number; games: number; kills: number; wins: number; cost?: number;
+  mode: CompetitionMode; rating: number | null; games: number; kills: number; wins: number; cost?: number;
   series: number; deaths: number | null; assists: number | null; legacyRows: number; ranked: boolean;
 }
 export interface HistoryItem {
   id: string; mode: string; event_id: string | null; session_id: string | null; clan_war_id: string | null;
   title: string; occurred_at: string; name_snapshot: string | null; kills: number; games: number | null;
-  place: number | null; wins: number | null; deaths: number | null; assists: number | null; source: string;
+  place: number | null; wins: number | null; deaths: number | null; assists: number | null; source: string; countedInRating?: boolean;
 }
 export interface PublicStatistics {
+  awards?: {count:number;ratingBonus:number;placementBonus?:number;totalRatingBonus?:number;trainingStreak:number;tournamentStreak:number};
   summaries: StatisticsSummary[]; history: HistoryItem[]; hasMore: boolean; goldOrganizer: boolean;
 }
 export async function getPublicStatistics(id: string, type = "player", mode = "main", offset = 0, signal?: AbortSignal): Promise<PublicStatistics> {

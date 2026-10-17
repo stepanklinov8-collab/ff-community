@@ -12,6 +12,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
 import { competitionCost } from "@/lib/competition/cost";
 import { playerRoles, type PlayerRoleId } from "@/lib/profile/roles";
+import { normalizeContactSocialUrl } from "@/lib/profile/contact-social";
 
 interface Team {
   id: string;
@@ -98,11 +99,12 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [editingProfile, setEditingProfile] = useState(false);
+  const [needsContact, setNeedsContact] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<EditableProfile>({ nickname: "", gameId: "", bio: "", phone: "", contactSocialUrl: "", playerRoles: [], locale: "ru" });
   const [badges, setBadges] = useState<string[]>([]);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0, cost: 0 });
-  const [profileMeta, setProfileMeta] = useState({ level: 1, reputation: 50, reputationEvents: 0, rating: 1, balance: 0 });
+  const [profileMeta, setProfileMeta] = useState<{level:number;reputation:number;reputationEvents:number;rating:number|null;balance:number}>({ level: 1, reputation: 50, reputationEvents: 0, rating: null, balance: 0 });
   const [warnings, setWarnings] = useState<WarningsPayload>({
     activeWarnings: [], warningCount: 0, history: [], activeBan: null,
   });
@@ -153,8 +155,12 @@ export default function ProfilePage() {
       try {
         const profileResponse = await authFetch("/api/profile");
         if (profileResponse.ok) {
-          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number; balance: number } };
+          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number | null; balance: number } };
           setProfileForm({ ...profilePayload.profile, playerRoles: profilePayload.profile.playerRoles ?? [] });
+          if (!normalizeContactSocialUrl(profilePayload.profile.contactSocialUrl ?? "")) {
+            setNeedsContact(true);
+            setEditingProfile(true);
+          }
           setLocale(profilePayload.profile.locale);
           setProfileMeta({ level: profilePayload.profile.level, reputation: profilePayload.profile.reputation, reputationEvents: profilePayload.profile.reputationEvents, rating: profilePayload.profile.rating, balance: profilePayload.profile.balance });
           if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
@@ -191,6 +197,10 @@ export default function ProfilePage() {
   }, [setLocale, supabase]);
 
   const saveProfile = async () => {
+    if (!normalizeContactSocialUrl(profileForm.contactSocialUrl)) {
+      setMessage("Укажите ссылку на Telegram, VK, MAX или Instagram для связи.");
+      return;
+    }
     setSavingProfile(true);
     setMessage("");
     try {
@@ -206,6 +216,7 @@ export default function ProfilePage() {
         user_metadata: { ...current.user_metadata, nickname: profileForm.nickname, game_id: profileForm.gameId, locale: profileForm.locale },
       } : current);
       setLocale(profileForm.locale);
+      setNeedsContact(false);
       setEditingProfile(false);
       setMessage("Профиль сохранён.");
     } catch (saveError) {
@@ -287,13 +298,18 @@ export default function ProfilePage() {
 
       {message && <div className="panel p-4 text-sm text-cyan-100">{message}</div>}
 
+      {needsContact && <div className="panel border border-cyan-400/45 bg-cyan-950/35 p-4 text-sm text-cyan-100" role="status">
+        Укажите в профиле ссылку на Telegram, VK, MAX или Instagram, чтобы другие зарегистрированные пользователи могли связаться с вами.
+        {!editingProfile && <button type="button" className="ml-3 font-bold text-cyan-300 underline" onClick={() => setEditingProfile(true)}>Заполнить</button>}
+      </div>}
+
       {editingProfile && (
         <section className="panel grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
           <div className="sm:col-span-2"><p className="eyebrow">Настройки аккаунта</p><h2 className="section-title mt-2">Редактирование профиля</h2></div>
           <label className="field-label">Игровой ник<input className="field mt-2" maxLength={20} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
           <label className="field-label">Free Fire ID<input className="field mt-2" inputMode="numeric" pattern="[0-9]+" value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
           <label className="field-label">Телефон или контакт<input className="field mt-2" maxLength={32} placeholder="Необязательно" value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} /></label>
-          <label className="field-label">Соцсеть для связи<input className="field mt-2" type="url" maxLength={300} placeholder="https://t.me/..." value={profileForm.contactSocialUrl} onChange={(event) => setProfileForm((current) => ({ ...current, contactSocialUrl: event.target.value }))} /><span className="mt-1 block text-xs text-slate-500">Необязательно. Видна зарегистрированным пользователям.</span></label>
+          <label className="field-label">Ссылка для связи · Telegram, VK, MAX или Instagram<input className="field mt-2" type="url" maxLength={300} required placeholder="https://t.me/username" value={profileForm.contactSocialUrl} onChange={(event) => setProfileForm((current) => ({ ...current, contactSocialUrl: event.target.value }))} /><span className="mt-1 block text-xs text-slate-500">Обязательно. Видна зарегистрированным пользователям. TikTok и YouTube не принимаются.</span></label>
           <label className="field-label">Язык<select className="field mt-2" value={profileForm.locale} onChange={(event) => setProfileForm((current) => ({ ...current, locale: event.target.value as EditableProfile["locale"] }))}><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="ky">Кыргызча</option></select></label>
           <fieldset className="field-label sm:col-span-2"><legend>Игровые роли</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{playerRoles.map(role => <label key={role.id} className="flex items-center gap-2 rounded border border-white/10 p-2 text-sm"><input type="checkbox" checked={profileForm.playerRoles.includes(role.id)} onChange={event => setProfileForm(current => ({ ...current, playerRoles: event.target.checked ? [...current.playerRoles, role.id] : current.playerRoles.filter(item => item !== role.id) }))} />{role.label}</label>)}</div></fieldset>
           <label className="field-label sm:col-span-2">О себе<textarea className="field mt-2 min-h-28 resize-y" maxLength={500} value={profileForm.bio} onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))} /></label>
@@ -302,7 +318,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${formatNumber(stats.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
+        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating === null ? "—" : profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${formatNumber(stats.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>

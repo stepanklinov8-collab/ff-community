@@ -63,6 +63,7 @@ export async function loadSession(supabase:Database,sessionId:string,auth?:AuthC
   const rules:Rules={mode,criterion:stored.criterion??"points",placePoints:stored.placePoints??defaultPlacePoints,killPoints:stored.killPoints??1,
     bonuses:stored.bonuses??{},nominations:stored.nominations??["points"],ratingEnabled:stored.ratingEnabled!==false,winsRequired:stored.winsRequired??1};
   rules.bonuses=Object.fromEntries(registrations.map(r=>[r.id,(Number(rules.bonuses[r.id])||0)+Number(r.carried_points)]));
+  rules.mvpEnabled=["training","tournament"].includes(mode)&&(!publication?.first_published_at||publication.awards_enabled===true);
   const groupNumbers=new Map(groups.map(g=>[g.id,g.public_number]));
   const prefix=`${event.public_number}-${String(session.public_number).padStart(2,"0")}`;
   const context:CompetitionContext={rules,entrants,games:games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,

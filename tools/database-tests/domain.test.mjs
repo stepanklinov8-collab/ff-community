@@ -197,3 +197,22 @@ test('K25: elapsed sessions archive separately then collapse without requiring r
  assert.deepEqual(middle.activeEvents[0].sessions,[sessions[1]]);assert.equal(middle.archiveEvents[0].archivedSessionId,sessions[0].id);
  const ended=archiveCards(events,Date.parse('2026-09-25T13:00:00Z'));assert.equal(ended.activeEvents.length,0);assert.equal(ended.archiveEvents.length,1);assert.equal(ended.archiveEvents[0].archivedSessionId,null);
 });
+
+test('session MVP: kills, final team place, manual full tie, guests and incomplete details',()=>{
+ const {context,draft}=fixture();context.rules.mvpEnabled=true;
+ draft.rows.find(r=>r.registrationId===context.entrants[1].id).players[0].kills=3;
+ assert.deepEqual(publishResults(context,draft,true).mvps,[context.entrants[1].roster[0].id]);
+ draft.rows.forEach(r=>r.players[0].kills=0);
+ assert.deepEqual(publishResults(context,draft,true).mvps,[context.entrants[0].roster[0].id]);
+ const teammate={id:id(2999),nickname:'Equal teammate'};context.entrants[0].roster.push(teammate);
+ draft.rows.filter(r=>r.registrationId===context.entrants[0].id).forEach(r=>r.players.push({id:teammate.id,userId:teammate.id,played:true,kills:0,deaths:0,assists:0}));
+ assert.throws(()=>publishResults(context,draft,true),error=>error.issues[0].code==='mvp_tie'&&error.issues[0].candidateUserIds.length===2);
+ draft.mvpUserId=context.entrants[2].roster[0].id;
+ assert.throws(()=>publishResults(context,draft,true),/Выберите MVP/);
+ draft.mvpUserId=teammate.id;
+ assert.deepEqual(publishResults(context,draft,true).mvps,[teammate.id]);
+ draft.rows[0].detail='team';draft.rows[0].kills=0;
+ assert.deepEqual(publishResults(context,draft,true).mvps,[]);
+ context.rules.mvpEnabled=false;
+ assert.deepEqual(publishResults(context,draft,true).mvps,[]);
+});

@@ -44,7 +44,7 @@ export function competitionCost(input: CompetitionCostInput) {
   const usScore = bounded01(usRatio / 2);
   const winScore = bounded01(wins / Math.max(1, games));
   const utility = bounded01(Number(input.utility ?? (0.65 * usScore + 0.35 * killRateScore) * 0.65 + winScore * 0.2 + 0.15));
-  const ratingScore = bounded(Number(input.rating ?? 1)) / 100;
+  const ratingScore = bounded(Number(input.rating ?? 0), 0, 999) / 999;
   const reputationScore = bounded(Number(input.reputation ?? 50)) / 100;
   const weightedSessions = Math.max(0, Number(input.weightedSessions ?? (games > 0 ? 1 : 0)));
   const confidence = 1 - Math.exp(-weightedSessions / 3.5);
@@ -55,17 +55,18 @@ export function competitionCost(input: CompetitionCostInput) {
 
 export function competitionOrganizationCost(input: CompetitionOrganizationCostInput) {
   const normalized = (value: number | null | undefined, fallback: number) => bounded01(Number(value ?? fallback) / 100);
+  const normalizedRating = (value: number | null | undefined) => bounded01(Number(value ?? 0) / 999);
   const memberCosts = input.memberCosts.map((value) => Math.max(0, Number(value) || 0));
   const memberCost = memberCosts.reduce((sum, value) => sum + value, 0);
   const memberCountFactor = bounded01(memberCosts.length / 4);
   const memberRating = (input.memberRatings ?? []).length
-    ? (input.memberRatings ?? []).reduce((sum, value) => sum + normalized(value, 1), 0) / (input.memberRatings ?? []).length
+    ? (input.memberRatings ?? []).reduce((sum, value) => sum + normalizedRating(value), 0) / (input.memberRatings ?? []).length
     : 0;
   const memberReputation = (input.memberReputations ?? []).length
     ? (input.memberReputations ?? []).reduce((sum, value) => sum + normalized(value, 50), 0) / (input.memberReputations ?? []).length
     : 0;
   const quality = bounded01(
-    0.25 * normalized(input.rating, 1)
+    0.25 * normalizedRating(input.rating)
     + 0.15 * normalized(input.results, 1)
     + 0.15 * normalized(input.achievements, 1)
     + 0.15 * normalized(input.reputation, 50)

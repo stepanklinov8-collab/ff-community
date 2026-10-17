@@ -35,6 +35,7 @@ export async function POST(request:Request,route:Route){
     const loaded=await loadSession(db,input.sessionId,auth);
     if(loaded.event.id!==id)return Response.json({error:"Сессия другого мероприятия"},{status:403});
     if(!mayEditResults(loaded.role,loaded.publication?.first_published_at??null))return Response.json({error:"Срок исправления результатов истёк"},{status:403});
+    if(loaded.role==="responsible"&&(input.draft.mvpUserId??null)!==(loaded.publication?.draft?.mvpUserId??null))return Response.json({error:"MVP при полном равенстве выбирает организатор или администратор"},{status:403});
     for(const warning of input.draft.warnings)if(warning.targetType==="player")await assertCanManageUserTarget(auth,warning.targetId);
     if(input.removedRegistrationIds.length){
       if(loaded.role!=="admin"||!input.approveRemoval||input.action==="draft")return Response.json({error:"Удаление опубликованного участника требует подтверждения администратора"},{status:403});

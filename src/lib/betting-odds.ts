@@ -14,6 +14,8 @@ export interface OddsInputs {
   line?: number | null;
   selectionValue: string;
   teamRating: number;
+  /** Main sporting rating uses 0..999; BO/KV retain their independent 1..100 scale. */
+  ratingScale?: 100 | 999;
   opponentRating?: number | null;
   fieldAverageRating?: number | null;
   fieldSize?: number | null;
@@ -63,7 +65,9 @@ export function suggestedKillsLine(averageKills: number) {
 
 export function calculateFixedOdds(input: OddsInputs): FixedOddsQuote {
   const confidence = clamp(input.sampleSize / 20, 0, 1);
-  const teamRating = clamp(Number(input.teamRating) || 1, 1, 100);
+  const normalizeRating = (value: number | null | undefined, fallback: number) =>
+    clamp((Number(value) || fallback) * 100 / (input.ratingScale ?? 100), 1, 100);
+  const teamRating = normalizeRating(input.teamRating, 1);
   const killsMean = Math.max(0, input.averageKills * confidence + 6 * (1 - confidence));
   const placeMean = Math.max(1, input.averagePlace * confidence + 6.5 * (1 - confidence));
   let probability = 0.5;
@@ -75,20 +79,20 @@ export function calculateFixedOdds(input: OddsInputs): FixedOddsQuote {
   } else if (input.marketType === "exact_place") {
     const place = Number(input.selectionValue);
     const fieldSize = clamp(Number(input.fieldSize) || 12, 2, 100);
-    const fieldRating = clamp(Number(input.fieldAverageRating) || 50, 1, 100);
+    const fieldRating = normalizeRating(input.fieldAverageRating, 50);
     const ratingAdvantage = (teamRating - fieldRating) / 100;
     const distance = Math.abs(place - placeMean);
     const baseProbability = (1 / fieldSize) * Math.exp(-distance / Math.max(1.8, fieldSize / 7));
     probability = clamp(baseProbability + ratingAdvantage * 0.12 + (1 - confidence) / fieldSize, 0.01, 0.86);
   } else if (input.marketType === "win" || input.marketType === "loss") {
-    const opponentRating = clamp(Number(input.opponentRating) || 50, 1, 100);
+    const opponentRating = normalizeRating(input.opponentRating, 50);
     const win = logistic((teamRating - opponentRating) / 12);
     probability = input.marketType === "win" ? win : 1 - win;
   } else {
     const scoreMatch = input.selectionValue.match(/^(7):([0-6])$|^([0-6]):(7)$/);
     const subjectWins = Boolean(scoreMatch?.[1]);
     const losingRounds = scoreMatch ? Number(scoreMatch[2] ?? scoreMatch[3]) : 3;
-    const opponentRating = clamp(Number(input.opponentRating) || 50, 1, 100);
+    const opponentRating = normalizeRating(input.opponentRating, 50);
     const winProbability = logistic((teamRating - opponentRating) / 12);
     const sideProbability = subjectWins ? winProbability : 1 - winProbability;
     const closeness = 1 - Math.abs(losingRounds - 3) / 7;

@@ -28,6 +28,7 @@ export const draftSchema = z.object({
     reason:z.string().max(1000),duration:z.enum(["week","permanent"]).nullable(),penalty:z.number().int().min(1).max(99).nullable(),
   })),
   manualOrder: z.array(z.string().uuid()).default([]),
+  mvpUserId: z.string().uuid().nullable().optional(),
 });
 export type Draft = z.infer<typeof draftSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
@@ -45,6 +46,7 @@ export interface Rules {
   bonuses: Record<string, number>;
   nominations: Array<"points" | "kills" | "places">;
   ratingEnabled: boolean; winsRequired: number;
+  mvpEnabled?: boolean;
 }
 export interface CompetitionContext { entrants: Entrant[]; games: Game[]; rules: Rules; groupCapacities?: Record<string, number> }
 export interface PlayerResult extends PlayerInput { nickname: string }
@@ -59,7 +61,7 @@ export interface Standing {
   bonus: number; manual: boolean;
 }
 export interface PublishedResults { rows: GameResult[]; standings: Standing[]; rules: Rules; mvps: string[] }
-export interface ValidationIssue { code: string; registrationId?: string; gameId?: string; message: string }
+export interface ValidationIssue { code: string; registrationId?: string; gameId?: string; message: string; candidateUserIds?: string[] }
 export class CompetitionError extends Error {
   issues: ValidationIssue[];
   constructor(issues: ValidationIssue[]) { super(issues[0]?.message ?? "Проверьте результаты"); this.issues = issues; }
@@ -194,7 +196,31 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
   }
   if (issues.length) throw new CompetitionError(issues);
   const standings = rankStandings(context, rows, draft.manualOrder, allowManualOrder);
-  return { rows, standings, rules: context.rules, mvps: roundMode ? selectMvps(rows) : [] };
+  let mvps = roundMode ? selectMvps(rows) : [];
+  if (context.rules.mvpEnabled && ["training", "tournament"].includes(context.rules.mode)) {
+    const candidates = sessionMvpCandidates(rows, standings);
+    if (candidates.length > 1 && !candidates.includes(draft.mvpUserId ?? "")) {
+      throw new CompetitionError([{code:"mvp_tie",message:"Выберите MVP среди игроков с равными убийствами и местом команды",candidateUserIds:candidates}]);
+    }
+    mvps = candidates.length > 1 ? [draft.mvpUserId!] : candidates;
+  }
+  return { rows, standings, rules: context.rules, mvps };
+}
+
+/** A fair comparison needs personal statistics for every played team. Guests cannot earn account awards. */
+export function sessionMvpCandidates(rows: GameResult[], standings: Standing[]): string[] {
+  if (rows.some(row => row.played && row.detail === "team")) return [];
+  const places = new Map(standings.map(row => [row.registrationId, row.place]));
+  const totals = new Map<string, {kills:number;place:number}>();
+  for (const row of rows) if (row.played) for (const player of row.players) if (player.played && player.userId) {
+    const value = totals.get(player.userId) ?? {kills:0,place:Infinity};
+    value.kills += player.kills ?? 0;
+    value.place = Math.min(value.place, places.get(row.registrationId) ?? Infinity);
+    totals.set(player.userId, value);
+  }
+  const sorted = [...totals].sort((a,b) => b[1].kills-a[1].kills || a[1].place-b[1].place);
+  const best = sorted[0]?.[1];
+  return best ? sorted.filter(([,value]) => value.kills===best.kills && value.place===best.place).map(([id]) => id) : [];
 }
 
 export function rankStandings(context: CompetitionContext, rows: GameResult[], manualOrder: string[], allowManual: boolean): Standing[] {
