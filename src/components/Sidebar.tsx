@@ -37,6 +37,7 @@ import { knowledgeSections } from "@/lib/knowledge/navigation";
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [profileNickname, setProfileNickname] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentKnowledgeSection, setCurrentKnowledgeSection] = useState("maps");
   const pathname = usePathname();
@@ -55,24 +56,32 @@ export default function Sidebar() {
       if (data.user) {
         const profileLocale = data.user.user_metadata?.locale;
         if (!window.localStorage.getItem("omcite-locale") && locales.includes(profileLocale)) {
-          setLocale(profileLocale);
+          setLocale(profileLocale, false);
         }
         const response = await authFetch("/api/admin/capabilities");
         const capabilities = response.ok ? await response.json() as { canOpenAdmin?: boolean } : null;
         if (active) setIsAdmin(Boolean(capabilities?.canOpenAdmin));
+        const { data: profile } = await supabase.from("profiles").select("nickname").eq("id", data.user.id).maybeSingle();
+        if (active) setProfileNickname(profile?.nickname ?? null);
       }
     }
 
-    loadUser();
+    void loadUser().catch(() => undefined);
+    const profileUpdated = (event: Event) => {
+      const nickname = (event as CustomEvent<{ nickname: string }>).detail?.nickname;
+      if (typeof nickname === "string") setProfileNickname(nickname);
+    };
+    window.addEventListener("omcite-profile-updated", profileUpdated);
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (!session?.user) setIsAdmin(false);
-      if (session?.user) void loadUser();
+      if (!session?.user) { setIsAdmin(false); setProfileNickname(null); }
+      if (session?.user) void loadUser().catch(() => undefined);
     });
 
     return () => {
       active = false;
       listener.subscription.unsubscribe();
+      window.removeEventListener("omcite-profile-updated", profileUpdated);
     };
   }, [setLocale, supabase]);
 
@@ -133,7 +142,7 @@ export default function Sidebar() {
           </Link>
           <Link href={user ? "/profile" : "/auth"} className="header-account">
             <UserRound size={18} />
-            <span>{user ? (user.user_metadata?.nickname ?? t("profile")) : t("signIn")}</span>
+            <span>{user ? (profileNickname ?? user.user_metadata?.nickname ?? t("profile")) : t("signIn")}</span>
           </Link>
         </div>
       </header>

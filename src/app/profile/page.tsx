@@ -94,6 +94,8 @@ export default function ProfilePage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -110,8 +112,10 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
+    let active = true;
     const init = async () => {
       const { data: authData } = await supabase.auth.getUser();
+      if (!active) return;
       const currentUser = authData.user;
       setUser(currentUser);
 
@@ -120,23 +124,32 @@ export default function ProfilePage() {
         return;
       }
 
-      setProfileForm((current) => ({
-        ...current,
-        nickname: currentUser.user_metadata?.nickname || "",
-        gameId: currentUser.user_metadata?.game_id || "",
-        locale: currentUser.user_metadata?.locale === "kk" || currentUser.user_metadata?.locale === "ky" ? currentUser.user_metadata.locale : "ru",
-      }));
+      const profileResponse = await authFetch("/api/profile");
+      const profilePayload = await profileResponse.json();
+      if (!profileResponse.ok || !profilePayload.profile) throw new Error(profilePayload.error || "Не удалось загрузить профиль. Повторите попытку.");
+      if (!active) return;
+      const profile = profilePayload.profile;
+      setProfileForm({ nickname: profile.nickname, gameId: profile.gameId, bio: profile.bio, phone: profile.phone,
+        contactSocialUrl: profile.contactSocialUrl, playerRoles: profile.playerRoles ?? [], locale: profile.locale });
+      setProfileLoaded(true);
+      const missingContact = !normalizeContactSocialUrl(profile.contactSocialUrl ?? "");
+      setNeedsContact(missingContact);
+      if (missingContact) setEditingProfile(true);
+      setLocale(profile.locale, false);
+      setProfileMeta({ level: profile.level, reputation: profile.reputation, reputationEvents: profile.reputationEvents, rating: profile.rating, balance: profile.balance });
+      if (profile.avatarUrl) setAvatarUrl(profile.avatarUrl);
 
       const [profileResult, roleResult, statsResult, membershipsResult, bloggerResult] = await Promise.all([
         supabase.from("profiles").select("avatar_url").eq("id", currentUser.id).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", currentUser.id).maybeSingle(),
-        getPublicStatistics(currentUser.id),
+        getPublicStatistics(currentUser.id).catch(() => null),
         supabase.from("team_members").select("role_in_team, teams(id, name, type, verified)").eq("user_id", currentUser.id),
         supabase.from("profile_badges").select("badge").eq("user_id", currentUser.id).eq("badge", "blogger").maybeSingle(),
       ]);
+      if (!active) return;
 
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
-      const mainStats = statsResult.summaries.find(row => row.mode === "main");
+      const mainStats = statsResult?.summaries.find(row => row.mode === "main");
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
       setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost({kills, deaths: mainStats?.deaths, games: matches, wins: mainStats?.wins ?? 0, rating: 50, reputation: 50})) });
 
@@ -151,23 +164,6 @@ export default function ProfilePage() {
       if (roleResult.data?.role) nextBadges.push(roleResult.data.role === "superadmin" ? "Владелец" : roleResult.data.role === "admin" ? "Администратор" : "Модератор");
       if (bloggerResult.data) nextBadges.push("Блогер");
       setBadges(nextBadges);
-
-      try {
-        const profileResponse = await authFetch("/api/profile");
-        if (profileResponse.ok) {
-          const profilePayload = await profileResponse.json() as { profile: EditableProfile & { avatarUrl?: string; level: number; reputation: number; reputationEvents: number; rating: number | null; balance: number } };
-          setProfileForm({ ...profilePayload.profile, playerRoles: profilePayload.profile.playerRoles ?? [] });
-          if (!normalizeContactSocialUrl(profilePayload.profile.contactSocialUrl ?? "")) {
-            setNeedsContact(true);
-            setEditingProfile(true);
-          }
-          setLocale(profilePayload.profile.locale);
-          setProfileMeta({ level: profilePayload.profile.level, reputation: profilePayload.profile.reputation, reputationEvents: profilePayload.profile.reputationEvents, rating: profilePayload.profile.rating, balance: profilePayload.profile.balance });
-          if (profilePayload.profile.avatarUrl) setAvatarUrl(profilePayload.profile.avatarUrl);
-        }
-      } catch {
-        // Новые поля станут доступны сразу после применения миграции.
-      }
 
       const teamIds = currentTeams.filter((team) => team.type === "team").map((team) => team.id);
       if (teamIds.length > 0) {
@@ -193,10 +189,14 @@ export default function ProfilePage() {
       }
       setLoading(false);
     };
-    void init();
-  }, [setLocale, supabase]);
+    void init().catch((error: unknown) => {
+      if (active) setMessage(error instanceof Error ? error.message : "Не удалось загрузить профиль. Повторите попытку.");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [setLocale, supabase, loadAttempt]);
 
   const saveProfile = async () => {
+    if (!profileLoaded || savingProfile) return;
     if (!normalizeContactSocialUrl(profileForm.contactSocialUrl)) {
       setMessage("Укажите ссылку на Telegram, VK, MAX или Instagram для связи.");
       return;
@@ -210,12 +210,15 @@ export default function ProfilePage() {
         body: JSON.stringify(profileForm),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Не удалось сохранить профиль");
+      if (!response.ok || !payload.profile) throw new Error(payload.error || "Сервер не подтвердил сохранение профиля. Повторите попытку.");
+      const saved = payload.profile as EditableProfile;
+      setProfileForm(saved);
       setUser((current) => current ? {
         ...current,
-        user_metadata: { ...current.user_metadata, nickname: profileForm.nickname, game_id: profileForm.gameId, locale: profileForm.locale },
+        user_metadata: { ...current.user_metadata, nickname: saved.nickname, game_id: saved.gameId, locale: saved.locale },
       } : current);
-      setLocale(profileForm.locale);
+      setLocale(saved.locale, false);
+      window.dispatchEvent(new CustomEvent("omcite-profile-updated", { detail: { nickname: saved.nickname } }));
       setNeedsContact(false);
       setEditingProfile(false);
       setMessage("Профиль сохранён.");
@@ -285,7 +288,7 @@ export default function ProfilePage() {
             <p className="mt-1 text-sm text-slate-400">Игровой ID: {profileForm.gameId || user.user_metadata?.game_id || "не указан"}</p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
-            <button type="button" onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
+            <button type="button" disabled={!profileLoaded || savingProfile} onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm disabled:opacity-50">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
             <label className="btn-secondary cursor-pointer text-sm">
               Выбрать аватар
               <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
@@ -296,25 +299,28 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {message && <div className="panel p-4 text-sm text-cyan-100">{message}</div>}
+      {message && <div className="panel p-4 text-sm text-cyan-100" role="status">{message}</div>}
+      {!profileLoaded && <button type="button" className="btn-secondary" onClick={() => { setLoading(true); setMessage(""); setLoadAttempt(value => value + 1); }}>Повторить загрузку профиля</button>}
 
       {needsContact && <div className="panel border border-cyan-400/45 bg-cyan-950/35 p-4 text-sm text-cyan-100" role="status">
         Укажите в профиле ссылку на Telegram, VK, MAX или Instagram, чтобы другие зарегистрированные пользователи могли связаться с вами.
         {!editingProfile && <button type="button" className="ml-3 font-bold text-cyan-300 underline" onClick={() => setEditingProfile(true)}>Заполнить</button>}
       </div>}
 
-      {editingProfile && (
-        <section className="panel grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
+      {editingProfile && profileLoaded && (
+        <form onSubmit={event => { event.preventDefault(); void saveProfile(); }}>
+        <fieldset disabled={savingProfile} className="panel grid min-w-0 gap-5 p-5 sm:grid-cols-2 sm:p-6">
           <div className="sm:col-span-2"><p className="eyebrow">Настройки аккаунта</p><h2 className="section-title mt-2">Редактирование профиля</h2></div>
-          <label className="field-label">Игровой ник<input className="field mt-2" maxLength={20} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
-          <label className="field-label">Free Fire ID<input className="field mt-2" inputMode="numeric" pattern="[0-9]+" value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
+          <label className="field-label">Игровой ник<input className="field mt-2" required maxLength={20} value={profileForm.nickname} onChange={(event) => setProfileForm((current) => ({ ...current, nickname: event.target.value }))} /></label>
+          <label className="field-label">Free Fire ID<input className="field mt-2" required inputMode="numeric" pattern="[0-9]+" value={profileForm.gameId} onChange={(event) => setProfileForm((current) => ({ ...current, gameId: event.target.value }))} /></label>
           <label className="field-label">Телефон или контакт<input className="field mt-2" maxLength={32} placeholder="Необязательно" value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} /></label>
           <label className="field-label">Ссылка для связи · Telegram, VK, MAX или Instagram<input className="field mt-2" type="url" maxLength={300} required placeholder="https://t.me/username" value={profileForm.contactSocialUrl} onChange={(event) => setProfileForm((current) => ({ ...current, contactSocialUrl: event.target.value }))} /><span className="mt-1 block text-xs text-slate-500">Обязательно. Видна зарегистрированным пользователям. TikTok и YouTube не принимаются.</span></label>
           <label className="field-label">Язык<select className="field mt-2" value={profileForm.locale} onChange={(event) => setProfileForm((current) => ({ ...current, locale: event.target.value as EditableProfile["locale"] }))}><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="ky">Кыргызча</option></select></label>
           <fieldset className="field-label sm:col-span-2"><legend>Игровые роли</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{playerRoles.map(role => <label key={role.id} className="flex items-center gap-2 rounded border border-white/10 p-2 text-sm"><input type="checkbox" checked={profileForm.playerRoles.includes(role.id)} onChange={event => setProfileForm(current => ({ ...current, playerRoles: event.target.checked ? [...current.playerRoles, role.id] : current.playerRoles.filter(item => item !== role.id) }))} />{role.label}</label>)}</div></fieldset>
           <label className="field-label sm:col-span-2">О себе<textarea className="field mt-2 min-h-28 resize-y" maxLength={500} value={profileForm.bio} onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))} /></label>
-          <div className="sm:col-span-2"><button type="button" onClick={saveProfile} disabled={savingProfile} className="btn-primary disabled:opacity-50">{savingProfile ? "Сохраняем…" : "Сохранить изменения"}</button></div>
-        </section>
+          <div className="sm:col-span-2"><button type="submit" disabled={savingProfile} className="btn-primary disabled:opacity-50">{savingProfile ? "Сохраняем…" : "Сохранить изменения"}</button></div>
+        </fieldset>
+        </form>
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

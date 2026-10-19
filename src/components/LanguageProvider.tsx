@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   type Locale,
   type MessageKey,
@@ -12,7 +12,7 @@ import { authFetch } from "@/utils/api/auth-fetch";
 
 interface LanguageContextValue {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
+  setLocale: (locale: Locale, persist?: boolean) => void;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
   formatDate: (value: string | number | Date, options?: Intl.DateTimeFormatOptions) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
@@ -41,17 +41,19 @@ export default function LanguageProvider({ children }: { children: React.ReactNo
     document.documentElement.lang = locale;
   }, [locale]);
 
-  const value = useMemo<LanguageContextValue>(() => ({
-    locale,
-    setLocale: (nextLocale) => {
+  const setLocale = useCallback((nextLocale: Locale, persist = true) => {
       window.localStorage.setItem("omcite-locale", nextLocale);
       window.dispatchEvent(new Event("omcite-language-change"));
-      void authFetch("/api/profile/locale", {
+      if (persist) void authFetch("/api/profile/locale", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ locale: nextLocale }),
       }).catch(() => undefined);
-    },
+  }, []);
+
+  const value = useMemo<LanguageContextValue>(() => ({
+    locale,
+    setLocale,
     t: (key, values) => {
       const template = messages[locale][key] ?? messages.ru[key];
       if (!values) return template;
@@ -61,7 +63,7 @@ export default function LanguageProvider({ children }: { children: React.ReactNo
     },
     formatDate: (input, options) => new Intl.DateTimeFormat(dateLocales[locale], options).format(new Date(input)),
     formatNumber: (input, options) => new Intl.NumberFormat(dateLocales[locale], options).format(input),
-  }), [locale]);
+  }), [locale, setLocale]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

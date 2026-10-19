@@ -11,7 +11,7 @@ export async function PATCH(request: Request) {
     const supabase = createAdminClient();
     const [{ error: profileError }, { error: metadataError }] = await Promise.all([
       supabase.from("profiles").update({ locale, updated_at: new Date().toISOString() }).eq("id", user.id),
-      supabase.auth.admin.updateUserById(user.id, { user_metadata: { ...user.user_metadata, locale } }),
+      supabase.auth.admin.updateUserById(user.id, { user_metadata: { locale } }),
     ]);
     if (profileError || metadataError) throw profileError ?? metadataError;
     return Response.json({ success: true });
