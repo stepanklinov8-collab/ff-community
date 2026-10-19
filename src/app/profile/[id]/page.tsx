@@ -10,6 +10,7 @@ import PublicWarningHistory from "@/components/PublicWarningHistory";
 import Image from "next/image";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { playerRoles } from "@/lib/profile/roles";
+import ProfileContactButton from "@/components/ProfileContactButton";
 
 interface PublicProfile {
   nickname: string;
@@ -84,7 +85,11 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     const init = async () => {
-      const publicResponse = await fetch(`/api/profile/public/${id}`, { cache: "no-store" });
+      const { data: { session } } = await supabase.auth.getSession();
+      const publicResponse = await fetch(`/api/profile/public/${id}`, {
+        cache: "no-store",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       if (publicResponse.ok) {
         const publicPayload = await publicResponse.json() as { profile: PublicProfile };
         setContactSocialUrl(publicPayload.profile.contact_social_url);
@@ -231,7 +236,7 @@ export default function PublicProfilePage() {
       <Link href="/rating" className="text-blue-400 hover:underline">← К рейтингу</Link>
 
       <div className="mt-6 bg-gray-800 p-6 rounded">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="mb-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
           <div className="w-20 h-20 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
             {profile.avatar_url ? (
               <Image src={profile.avatar_url} alt={`Аватар ${profile.nickname}`} width={80} height={80} unoptimized className="w-full h-full object-cover" />
@@ -241,7 +246,7 @@ export default function PublicProfilePage() {
               </div>
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-blue-500">{profile.nickname}</h1>
               {badges.map(badge => (
@@ -250,7 +255,7 @@ export default function PublicProfilePage() {
             </div>
             <p className="text-gray-400 text-sm mt-1">ID: {profile.game_id}</p>
             {!!selectedRoles.length && <div className="mt-2 flex flex-wrap gap-1">{selectedRoles.map(role => <span key={role} className="rounded bg-cyan-950 px-2 py-0.5 text-xs text-cyan-200">{playerRoles.find(item => item.id === role)?.label ?? role}</span>)}</div>}
-            {contactSocialUrl && <a href={contactSocialUrl} target="_blank" rel="noreferrer" className="mt-2 block text-sm text-cyan-300">Связаться в соцсети →</a>}
+            <ProfileContactButton url={contactSocialUrl} />
           </div>
         </div>
 

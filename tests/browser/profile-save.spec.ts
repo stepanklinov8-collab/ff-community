@@ -71,7 +71,7 @@ async function login(page:Page){
   await page.context().addCookies([{name:'sb-127-auth-token',value,domain:'127.0.0.1',path:'/',sameSite:'Lax'}]);
   await page.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
-    if(path==='/api/profile'||path==='/api/profile/locale')return route.continue();
+    if(path==='/api/profile'||path==='/api/profile/locale'||path.startsWith('/api/profile/public/'))return route.continue();
     if(path==='/api/profile/warnings')return route.fulfill({json:{activeWarnings:[],warningCount:0,history:[],activeBan:null}});
     return route.fulfill({json:{summaries:[],history:[],hasMore:false,goldOrganizer:false,modules:[],warnings:[],
       sanctions:[],canOpenAdmin:false,notifications:[],unreadCount:0}});
@@ -96,6 +96,7 @@ test('saved nickname, contact, roles, description and locale survive a full relo
   await page.getByRole('button',{name:'Сохранить изменения',exact:true}).click();
   await expect(page.getByRole('status')).toContainText('Профиль сохранён');
   await expect(page.locator('.header-account')).toContainText('Новый ник');
+  await expect(page.getByRole('link',{name:'Написать в Telegram'})).toHaveAttribute('href','https://t.me/saved_player');
   expect(writes).toBe(1);expect(localeWrites).toBe(0);
   expect(metadataUpdates[0]).not.toHaveProperty('unrelated');
   expect(profile.contact_social_url).toBe('https://t.me/saved_player');
@@ -109,6 +110,37 @@ test('saved nickname, contact, roles, description and locale survive a full relo
   await expect(page.getByLabel('Снайпер',{exact:true})).toBeChecked();
   await expect(page.getByRole('combobox',{name:/^Язык/})).toHaveValue('kk');
   expect(localeWrites).toBe(0);
+});
+
+test('registered visitors can open saved contacts from another player profile, while guests receive no contact',async({page,request})=>{
+  const targetId='00000000-0000-4000-8000-000000009102';
+  profile.contact_social_url='https://t.me/contact_player';
+  await login(page);
+  await page.setViewportSize({width:375,height:812});
+  for(const [url,platform] of [['https://t.me/contact_player','Telegram'],['https://vk.com/contact_player','VK'],
+    ['https://max.ru/contact_player','MAX'],['https://instagram.com/contact_player','Instagram']]){
+    profile.contact_social_url=url;
+    await page.goto(`/profile/${targetId}`);
+    const link=page.getByRole('link',{name:`Написать в ${platform}`});
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href',url);
+    await expect(link).toHaveAttribute('target','_blank');
+    const bounds=await link.boundingBox();
+    expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(375);
+  }
+  await page.screenshot({path:'tools/database-tests/artifacts/profile-save/contact-button-mobile.png'});
+  await page.context().route('https://instagram.com/contact_player',route=>route.fulfill({body:'Contact destination'}));
+  const popupPromise=page.waitForEvent('popup');
+  await page.getByRole('link',{name:'Написать в Instagram'}).click();
+  const popup=await popupPromise;
+  await expect(popup).toHaveURL('https://instagram.com/contact_player');
+  await popup.close();
+  const guestResponse=await request.get(`/api/profile/public/${targetId}`);
+  expect((await guestResponse.json()).profile.contact_social_url).toBeNull();
+  await page.context().clearCookies();
+  await page.goto(`/profile/${targetId}`);
+  await expect(page.getByRole('heading',{name:'Старый ник',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:/Написать в/})).toHaveCount(0);
 });
 
 test('an unconfirmed database write never displays saved and preserves the entered form',async({page})=>{

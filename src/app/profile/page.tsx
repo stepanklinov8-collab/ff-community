@@ -13,6 +13,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 import { competitionCost } from "@/lib/competition/cost";
 import { playerRoles, type PlayerRoleId } from "@/lib/profile/roles";
 import { normalizeContactSocialUrl } from "@/lib/profile/contact-social";
+import ProfileContactButton from "@/components/ProfileContactButton";
 
 interface Team {
   id: string;
@@ -95,6 +96,7 @@ export default function ProfilePage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [savedContactSocialUrl, setSavedContactSocialUrl] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -132,6 +134,7 @@ export default function ProfilePage() {
       setProfileForm({ nickname: profile.nickname, gameId: profile.gameId, bio: profile.bio, phone: profile.phone,
         contactSocialUrl: profile.contactSocialUrl, playerRoles: profile.playerRoles ?? [], locale: profile.locale });
       setProfileLoaded(true);
+      setSavedContactSocialUrl(profile.contactSocialUrl);
       const missingContact = !normalizeContactSocialUrl(profile.contactSocialUrl ?? "");
       setNeedsContact(missingContact);
       if (missingContact) setEditingProfile(true);
@@ -213,6 +216,7 @@ export default function ProfilePage() {
       if (!response.ok || !payload.profile) throw new Error(payload.error || "Сервер не подтвердил сохранение профиля. Повторите попытку.");
       const saved = payload.profile as EditableProfile;
       setProfileForm(saved);
+      setSavedContactSocialUrl(saved.contactSocialUrl);
       setUser((current) => current ? {
         ...current,
         user_metadata: { ...current.user_metadata, nickname: saved.nickname, game_id: saved.gameId, locale: saved.locale },
@@ -286,6 +290,7 @@ export default function ProfilePage() {
               {badges.map((badge) => <span key={badge} className="badge badge-blue">{badge}</span>)}
             </div>
             <p className="mt-1 text-sm text-slate-400">Игровой ID: {profileForm.gameId || user.user_metadata?.game_id || "не указан"}</p>
+            <ProfileContactButton url={savedContactSocialUrl} />
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
             <button type="button" disabled={!profileLoaded || savingProfile} onClick={() => setEditingProfile((current) => !current)} className="btn-secondary text-sm disabled:opacity-50">{editingProfile ? "Закрыть редактор" : "Редактировать профиль"}</button>
