@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { randomUUID } from "crypto";
 import { AvatarUploadError, readAvatarUpload, storagePathFromPublicUrl } from "@/lib/uploads/avatar";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     if (oldPath && oldPath !== uploadedPath) {
       await supabase.storage.from("avatars").remove([oldPath]);
     }
+    invalidatePublicData();
     return Response.json({ avatarUrl });
   } catch (error) {
     if (uploadedPath) await createAdminClient().storage.from("avatars").remove([uploadedPath]);

@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin } from "@/utils/supabase/server-auth";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
       p_actor:auth.user.id,p_event:payload.eventId,p_category:payload.category,p_coefficient:isOwner?payload.coefficient??null:null,
     });
     if(error)throw error;
+    invalidatePublicData();
     return Response.json(data);
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Проверьте категорию мероприятия" }, { status: 400 });

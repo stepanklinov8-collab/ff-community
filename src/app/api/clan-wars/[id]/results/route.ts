@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import {createHash} from "node:crypto";
 import {z} from "zod";
 import {createAdminClient} from "@/utils/supabase/admin";
@@ -31,5 +32,6 @@ export async function POST(request:Request,route:Route){try{
  const {data,error}=await db.rpc("u2_war_results",{p_actor:auth.user.id,p_war:id,p_action:input.action,p_revision:input.revision,p_configuration:input.configurationRevision,
  p_request:input.requestId,p_hash:hash,p_draft:input.draft??null,p_candidate:candidate,p_team:input.teamId??null});
  if(error)throw new Error(error.message);
+ if(input.action !== "draft") invalidatePublicData();
  return Response.json(data);
  }catch(error){if(error instanceof z.ZodError)return Response.json({error:"Проверьте поля результатов",issues:error.issues},{status:400});return competitionErrorResponse(error);}}

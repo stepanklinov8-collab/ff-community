@@ -81,8 +81,11 @@ async function login(page:Page){
 const contact=(page:Page)=>page.getByRole('textbox',{name:/Ссылка для связи/});
 
 test('saved nickname, contact, roles, description and locale survive a full reload and update the header',async({page})=>{
+  let statisticsRequests=0;
+  page.on('request',request=>{if(new URL(request.url()).pathname==='/api/competition/statistics')statisticsRequests++;});
   await login(page);
   await expect(contact(page)).toBeVisible();
+  expect(statisticsRequests).toBe(1);
   await expect(contact(page)).toHaveAttribute('required','');
   await page.getByRole('button',{name:'Сохранить изменения',exact:true}).click();
   expect(writes).toBe(0);

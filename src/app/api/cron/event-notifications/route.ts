@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendPushToUsers } from "@/lib/firebase/admin";
 import { allRows } from "@/lib/competition/server";
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
   for(const action of ["u2_expire_moderation","u2_publish_scheduled","u3_extend_training_schedules","u4_snapshot_game_forecasts","u2_flush_notifications"]){
     const {error}=await supabase.rpc(action);if(error){console.error("Competition maintenance",action,error);return Response.json({error:"Не удалось завершить обработку мероприятий"},{status:500});}
   }
+  invalidatePublicData();
   const {data:cleanup}=await supabase.from("competition_storage_cleanup").select("storage_path").order("created_at").limit(100);
   if(cleanup?.length){const paths=cleanup.map(row=>row.storage_path);const {error}=await supabase.storage.from("competition-evidence").remove(paths);if(!error)await supabase.from("competition_storage_cleanup").delete().in("storage_path",paths);}
   const now = new Date();

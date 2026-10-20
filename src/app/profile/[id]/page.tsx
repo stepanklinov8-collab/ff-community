@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {getPublicStatistics} from "@/lib/competition/public-statistics";
+import {getPublicStatistics, type PublicStatistics} from "@/lib/competition/public-statistics";
 import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
 import Image from "next/image";
@@ -62,6 +62,7 @@ export default function PublicProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [stats, setStats] = useState({ kills: 0, matches: 0, ratio: 0 });
+  const [statisticsData, setStatisticsData] = useState<PublicStatistics>();
   const [team, setTeam] = useState<PlayerTeam | null>(null);
   const [badges, setBadges] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +116,7 @@ export default function PublicProfilePage() {
 
       // Статистика
       const statistics = await getPublicStatistics(id);
+      setStatisticsData(statistics);
       const mainStats = statistics.summaries.find(row => row.mode === "main");
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
       const ratio = matches > 0 ? Number((kills / matches).toFixed(2)) : 0;
@@ -293,7 +295,7 @@ export default function PublicProfilePage() {
         )}
       </div>
 
-      <CompetitionStatistics type="player" id={id}/>
+      <CompetitionStatistics type="player" id={id} initialData={statisticsData}/>
       <PublicWarningHistory type="player" id={id}/>
       {canReviewProfile && (
         <section className="mt-6 rounded bg-gray-800 p-4">

@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
@@ -73,6 +74,7 @@ export async function PATCH(request: Request) {
       body: payload.note || (payload.status === "approved" ? "Результат добавлен в профиль" : "Проверьте данные и доказательства"),
       link: before.event_id ? `/tournaments/${before.event_id}` : "/profile/stats",
     });
+    invalidatePublicData();
     return Response.json({ success: true, stat: after });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Проверьте данные модерации" }, { status: 400 });

@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
       p_approve: payload.approve,
     });
     if (error) throw error;
+    invalidatePublicData();
     return Response.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Некорректное решение" }, { status: 400 });

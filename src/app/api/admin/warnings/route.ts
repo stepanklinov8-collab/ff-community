@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { assertCanManageUserTarget, authErrorResponse, requireModerator } from "@/utils/supabase/server-auth";
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
       });
       if (error) throw error;
       await notifyTarget(supabase, payload.targetType, payload.targetId, "Выдана блокировка", payload.reason);
-      return Response.json({ success: true });
+      invalidatePublicData(); return Response.json({ success: true });
     }
 
     return Response.json({error:"Для предупреждения укажите категорию, срок и снижение репутации в новом разделе модерации.",url:"/admin/warnings"},{status:410});
@@ -79,7 +80,7 @@ export async function DELETE(request: Request) {
       .eq("target_id", payload.targetId)
       .eq("is_active", true);
     if (error) throw error;
-    return Response.json({ success: true });
+    invalidatePublicData(); return Response.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return Response.json({ error: "Некорректные данные блокировки" }, { status: 400 });

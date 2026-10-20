@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import {z} from "zod";
 import {createAdminClient} from "@/utils/supabase/admin";
 import {requireUser,ApiAuthError,assertCanManageUserTarget} from "@/utils/supabase/server-auth";
@@ -47,5 +48,6 @@ export async function POST(request:Request){try{
  if(input.action==="sanction"&&input.targetType==="player")await assertCanManageUserTarget(auth,input.targetId);
  const {data,error}=await db.rpc(organizer?"u2_organizer_action":"u2_moderation_action",{p_actor:auth.user.id,p_input:input});if(error)throw new Error(error.message);
  // The committed outbox is delivered by maintenance, independently of this response.
+ invalidatePublicData();
  return Response.json(data??{success:true});
  }catch(error){if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message??"Проверьте форму"},{status:400});return competitionErrorResponse(error);}}

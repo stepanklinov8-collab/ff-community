@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -60,6 +61,7 @@ export async function POST(request:Request,route:Route){
       p_configuration_revision:input.configurationRevision,p_request:input.requestId,p_hash:hash,
       p_draft:draft,p_published:published,p_approve_removal:input.approveRemoval,p_solo:contributions,p_removed:input.removedRegistrationIds});
     if(error)throw new Error(error.message);
+    if(input.action === "publish") invalidatePublicData();
     return Response.json(data);
   }catch(error){if(error instanceof z.ZodError)return Response.json({error:"Проверьте поля результатов",issues:error.issues},{status:400});return competitionErrorResponse(error);}
 }

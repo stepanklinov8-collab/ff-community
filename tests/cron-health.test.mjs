@@ -11,6 +11,7 @@ function loadRoute({ secret = "test-cron", databaseError = null, clientError = n
   const calls = [];
   const exports = {};
   const imports = {
+    "@/lib/public-data/cache": { invalidatePublicData() { calls.push("invalidate"); } },
     "@/utils/supabase/admin": { createAdminClient() {
       calls.push("client");
       if (clientError) throw clientError;
