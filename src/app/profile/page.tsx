@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {getPublicStatistics} from "@/lib/competition/public-statistics";
+import {getPublicStatistics, type PublicStatistics} from "@/lib/competition/public-statistics";
 import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
 import { useEffect, useMemo, useState } from "react";
@@ -96,6 +96,7 @@ export default function ProfilePage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [statistics, setStatistics] = useState<PublicStatistics>();
   const [savedContactSocialUrl, setSavedContactSocialUrl] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -153,6 +154,7 @@ export default function ProfilePage() {
 
       if (profileResult.data?.avatar_url) setAvatarUrl(profileResult.data.avatar_url);
       const mainStats = statsResult?.summaries.find(row => row.mode === "main");
+      setStatistics(statsResult ?? undefined);
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
       setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost({kills, deaths: mainStats?.deaths, games: matches, wins: mainStats?.wins ?? 0, rating: 50, reputation: 50})) });
 
@@ -366,7 +368,7 @@ export default function ProfilePage() {
       </section>
 
       <div className="flex flex-wrap gap-3"><Link href="/organizer" className="btn-primary">Кабинет организатора</Link><Link href="/appeals" className="btn-secondary">Обжалования</Link></div>
-      <CompetitionStatistics type="player" id={user.id}/>
+      <CompetitionStatistics type="player" id={user.id} initialData={statistics}/>
       <PublicWarningHistory type="player" id={user.id}/>
       <section className="panel p-5 sm:p-6">
         <h2 className="section-title mb-4">Предупреждения <span className="text-slate-500">({warnings.warningCount})</span></h2>

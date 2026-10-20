@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin, requireModerator, requireSuperadmin } from "@/utils/supabase/server-auth";
@@ -53,6 +54,7 @@ export async function PATCH(request: Request) {
         link: `/teams/${team.id}`,
       })));
     }
+    invalidatePublicData();
     return Response.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Некорректные данные команды" }, { status: 400 });
@@ -67,6 +69,7 @@ export async function DELETE(request: Request) {
     const supabase = createAdminClient();
     const { error } = await supabase.from("teams").delete().eq("id", teamId);
     if (error) throw error;
+    invalidatePublicData();
     return Response.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Некорректный ID команды" }, { status: 400 });

@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireUser } from "@/utils/supabase/server-auth";
@@ -86,6 +87,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "Сервер не подтвердил сохранение профиля. Повторите попытку." }, { status: 502 });
     }
 
+    invalidatePublicData();
     const { error: metadataError } = await supabase.auth.admin.updateUserById(user.id, {
       user_metadata: {
         nickname: saved.nickname,

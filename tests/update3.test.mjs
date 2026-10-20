@@ -4,7 +4,8 @@ import { calculateMapStatistics } from "../src/lib/competition/map-statistics.ts
 import { isKnownLandingLocation, locationsForMap, mapCatalog } from "../src/lib/competition/map-catalog.ts";
 import { playerRoleIds } from "../src/lib/profile/roles.ts";
 import { knowledgeMapPoints } from "../src/lib/knowledge/map-points.ts";
-import { knowledgeCharacters, knowledgeWeapons } from "../src/lib/knowledge/game-catalog.ts";
+import { knowledgeCharacters } from "../src/lib/knowledge/catalog-data/characters.ts";
+import { knowledgeWeapons } from "../src/lib/knowledge/catalog-data/weapons.ts";
 
 test("map statistics use played games, first places and only recorded landing locations", () => {
   const rows = [

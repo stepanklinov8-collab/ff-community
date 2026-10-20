@@ -1,3 +1,4 @@
+import { invalidatePublicData } from "@/lib/public-data/cache";
 import {randomUUID} from "node:crypto";
 import {z} from "zod";
 import {createAdminClient} from "@/utils/supabase/admin";
@@ -21,6 +22,8 @@ export async function POST(request:Request){
    const {error}=await db.storage.from("event-images").upload(uploaded,data.bytes,{contentType:data.mimeType});if(error)throw error;raw.config.imageUrl=db.storage.from("event-images").getPublicUrl(uploaded).data.publicUrl;}
  }else raw=await request.json();
  const input=z.object({id:z.string().uuid().nullable(),revision:z.number().int().nonnegative(),config:z.unknown(),approve:z.boolean().default(false),preview:z.boolean().default(false)}).parse(raw);
- return Response.json(await saveEventConfiguration(db,auth,input.id,input.revision,input.config,input.approve,input.preview));
+ const result=await saveEventConfiguration(db,auth,input.id,input.revision,input.config,input.approve,input.preview);
+ if(!input.preview) invalidatePublicData();
+ return Response.json(result);
  }catch(error){if(uploaded)await db.storage.from("event-images").remove([uploaded]);if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message??"Проверьте поля",issues:error.issues},{status:400});if(error instanceof AvatarUploadError)return Response.json({error:error.message},{status:400});return competitionErrorResponse(error);}
 }

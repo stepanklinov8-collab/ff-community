@@ -1,59 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { mapCatalog } from "@/lib/competition/map-catalog";
-import { knowledgeMapPoints, mapLabelOffset } from "@/lib/knowledge/map-points";
 import { type KnowledgeCategoryId } from "@/lib/knowledge/catalog";
-import { knowledgeCharacters, knowledgeGuide, knowledgeMedia, knowledgeOverview, knowledgePets, knowledgeSupport, knowledgeUniverse, knowledgeUpdates, knowledgeWeapons, type KnowledgeCatalogEntry } from "@/lib/knowledge/game-catalog";
+import type { KnowledgeCatalogEntry } from "@/lib/knowledge/types";
+import { loadKnowledgeSection } from "@/lib/knowledge/load-section";
 import { isKnowledgeSection, knowledgeSections as categories } from "@/lib/knowledge/navigation";
 
-const mapDisplayOrder = ["solara", "nexterra", "alpine", "bermuda_remastered", "bermuda", "purgatory", "kalahari"]
-  .map(id => mapCatalog.find(map => map.id === id))
-  .filter((map): map is (typeof mapCatalog)[number] => Boolean(map));
-
-function GarenaMapViewer({ currentMap, selectedLocation, mapScale, onMapChange, onLocationChange, onScaleChange }: {
-  currentMap: (typeof mapCatalog)[number];
-  selectedLocation: string | null;
-  mapScale: number;
-  onMapChange: (id: (typeof mapCatalog)[number]["id"]) => void;
-  onLocationChange: (id: string) => void;
-  onScaleChange: (scale: number) => void;
-}) {
-  const currentLocation = currentMap.locations.find(location => location.id === selectedLocation);
-  const points = knowledgeMapPoints[currentMap.id];
-  const labelOffset = currentMap.id === "solara" ? mapLabelOffset : 0;
-  const currentPoint = points.find(point => point.locationId === selectedLocation);
-  const gallery = [...new Set([...(currentPoint?.photo ? [currentPoint.photo] : []), ...currentMap.gallery])];
-  return <div className="garena-map-page">
-    <section className="garena-map-stage" aria-label={`Карта ${currentMap.title}`}>
-      <div className="garena-map-viewport">
-      <div className="garena-map-canvas" style={{ transform: `scale(${mapScale})` }}><Image data-testid="knowledge-map-image" src={currentMap.imageUrl} alt={`Карта ${currentMap.title}`} fill sizes="(min-width: 1000px) 1000px, 100vw" priority unoptimized className="garena-map-image" />
-        {points.map(point => {
-          const location = currentMap.locations.find(item => item.id === point.locationId);
-          if (!location) return null;
-          return <button key={location.id} type="button" data-location-id={location.id} className={`garena-map-marker ${currentMap.id !== "solara" ? "is-flat" : ""} ${point.printedLabelWidth ? "replaces-printed-label" : ""} ${selectedLocation === location.id ? "is-selected" : ""}`} style={{ left: `${(point.x - labelOffset) / 10}%`, top: `${(point.y - labelOffset) / 10}%`, minWidth: point.printedLabelWidth ? `${point.printedLabelWidth / 10}cqw` : undefined }} onClick={() => onLocationChange(location.id)} aria-label={location.title} aria-pressed={selectedLocation === location.id}><span className="garena-map-marker-name">{point.label ?? location.title}</span></button>;
-        })}
-      </div>
-      </div>
-      <div className="knowledge-map-zoom" aria-label="Масштаб карты"><button type="button" onClick={() => onScaleChange(Math.max(0.7, Number((mapScale - 0.1).toFixed(1))))} aria-label="Уменьшить карту">−</button><span>{Math.round(mapScale * 100)}%</span><button type="button" onClick={() => onScaleChange(Math.min(1.8, Number((mapScale + 0.1).toFixed(1))))} aria-label="Увеличить карту">+</button><button type="button" className="knowledge-map-fit" onClick={() => onScaleChange(1)}>Вписать</button></div>
-      <div className="garena-map-selector"><div className="garena-map-current"><Image src={currentMap.thumbnailUrl} alt="" width={180} height={102} unoptimized className="garena-map-current-thumb" /><div className="garena-map-current-info"><p className="garena-map-current-title">{currentMap.title}</p><p className="garena-map-current-description">{currentLocation ? `${currentLocation.title}: точка выбрана для дальнейшей статистики.` : currentMap.description}</p><span className="garena-map-local-badge">Материал и фотографии доступны внутри базы знаний</span><div className="knowledge-map-gallery" aria-label={`Фотографии карты ${currentMap.title}`}>{gallery.map((imageUrl, index) => <Image key={imageUrl} src={imageUrl} alt={`${currentMap.title}, фотография ${index + 1}`} width={54} height={34} unoptimized />)}</div></div></div><div className="garena-map-list" role="tablist" aria-label="Карты базы знаний">{mapDisplayOrder.map(map => <button key={map.id} data-testid={`knowledge-map-${map.id}`} type="button" role="tab" aria-selected={map.id === currentMap.id} className={`garena-map-choice ${map.id === currentMap.id ? "is-active" : ""}`} onClick={() => onMapChange(map.id)}><Image src={map.thumbnailUrl} alt="" width={128} height={72} unoptimized /><span>{map.title}</span></button>)}</div></div>
-    </section>
-  </div>;
-}
-
-const catalogBySection: Record<Exclude<KnowledgeCategoryId, "maps">, readonly KnowledgeCatalogEntry[]> = {
-  overview: knowledgeOverview,
-  weapons: knowledgeWeapons,
-  characters: knowledgeCharacters,
-  pets: knowledgePets,
-  updates: knowledgeUpdates,
-  media: knowledgeMedia,
-  support: knowledgeSupport,
-  universe: knowledgeUniverse,
-  omcite: knowledgeGuide,
-};
+const KnowledgeMaps = dynamic(() => import("@/components/knowledge/MapSection"), { loading: () => <p className="page-shell" role="status">Загрузка карты…</p> });
 
 function CatalogDetails({ entry }: { entry: KnowledgeCatalogEntry }) {
   const character = entry.character;
@@ -85,7 +41,14 @@ function CatalogDetails({ entry }: { entry: KnowledgeCatalogEntry }) {
 }
 
 function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: Exclude<KnowledgeCategoryId, "maps">; query: string; onQueryChange: (value: string) => void }) {
-  const entries = catalogBySection[section];
+  const [entries, setEntries] = useState<readonly KnowledgeCatalogEntry[]>([]);
+  const [loaded, setLoaded] = useState(false), [error, setError] = useState(false), [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void loadKnowledgeSection(section).then(data => { if (active) { setEntries(data); setLoaded(true); setError(false); } })
+      .catch(() => { if (active) setError(true); });
+    return () => { active = false; };
+  }, [section, attempt]);
   const [filter, setFilter] = useState("Все");
   const filters = ["Все", ...(section === "weapons" ? Array.from(new Set(entries.map(entry => entry.tags[0]))) : section === "characters" ? ["Пробуждение", ...Array.from(new Set(entries.flatMap(entry => entry.tags))).filter(tag => tag !== "Пробуждение").slice(0, 7)] : Array.from(new Set(entries.flatMap(entry => entry.tags))).slice(0, 7))];
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -106,6 +69,7 @@ function KnowledgeCatalogSection({ section, query, onQueryChange }: { section: E
     universe: "Справочник режимов, ролей, карт и соревновательной истории проекта.",
     omcite: "Локальное руководство по использованию базы знаний и функций OMCITE.",
   };
+  if (!loaded) return <section className="panel p-7">{error ? <p role="alert">Не удалось загрузить раздел. <button type="button" className="text-cyan-300" onClick={() => setAttempt(value => value + 1)}>Повторить</button></p> : <p role="status">Загрузка раздела…</p>}</section>;
   return <section className="knowledge-catalog-section panel space-y-5 p-5 sm:p-7">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">База знаний OMCITE</p><h2 className="section-title mt-2">{sectionTitle}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">{sectionIntro[section]}</p></div><span className="knowledge-catalog-count">{visibleEntries.length} материалов</span></div>
     <label className="block max-w-xl"><span className="sr-only">Поиск в разделе</span><input className="field" value={query} onChange={event => onQueryChange(event.target.value)} placeholder={`Поиск в разделе «${sectionTitle}»`} /></label>
@@ -124,13 +88,9 @@ function KnowledgePageContent() {
   const searchParams = useSearchParams();
   const requestedSection = searchParams.get("section");
   const section: KnowledgeCategoryId = isKnowledgeSection(requestedSection) ? requestedSection : "maps";
-  const [selectedMap, setSelectedMap] = useState<(typeof mapCatalog)[number]["id"]>("solara");
-  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-  const [mapScale, setMapScale] = useState(1);
-  const currentMap = mapCatalog.find(map => map.id === selectedMap) ?? mapCatalog[0];
   const copy = { eyebrow: "Библиотека OMCITE", title: "База знаний", search: "Поиск по материалам", map: "Карты и места высадки", location: "Место высадки", official: "Материал базы знаний", open: "Открыть материал", details: "О карте", gallery: "Фотографии карты", source: "Материал базы знаний", choose: "Выберите область на карте" };
 
-  if (section === "maps") return <main className="page-shell knowledge-page-shell space-y-6"><section className="panel space-y-3 p-6 sm:p-8"><p className="eyebrow">{copy.eyebrow}</p><h1 className="section-title">Карты и локации</h1><p className="max-w-3xl text-slate-300">Выберите карту и точку высадки. Все названия приведены на русском языке, а выбранная локация может использоваться в статистике команд.</p></section><GarenaMapViewer currentMap={currentMap} selectedLocation={selectedLocation} mapScale={mapScale} onMapChange={id => { setSelectedMap(id); setSelectedLocation(null); setMapScale(1); }} onLocationChange={setSelectedLocation} onScaleChange={setMapScale} /></main>;
+  if (section === "maps") return <KnowledgeMaps />;
 
   const legacySection = section as Exclude<KnowledgeCategoryId, "maps">;
   return <main className="page-shell knowledge-page-shell space-y-6">

@@ -7,26 +7,31 @@ import {statisticsText} from "@/i18n/competition-statistics";
 import {getPublicStatistics, type CompetitionMode, type PublicStatistics} from "@/lib/competition/public-statistics";
 import {competitionCost} from "@/lib/competition/cost";
 
-export default function CompetitionStatistics({id, type = "player"}: {id: string; type?: "player" | "team"}) {
+export default function CompetitionStatistics({id, type = "player", initialData}: {id: string; type?: "player" | "team"; initialData?: PublicStatistics}) {
   const {locale} = useLanguage(), t = statisticsText(locale);
   const [mode, setMode] = useState<CompetitionMode>("main");
   return <section className="cyber-card my-6 space-y-5 p-5"><h2 className="text-xl font-bold">{t.statistics} · {t.allTime}</h2>
     <div className="flex flex-wrap gap-2">{(["main", "solo", "bo", "kv"] as const).filter(item => type === "player" || item !== "solo").map(item => <button key={item} aria-pressed={mode === item} className={mode === item ? "btn-primary" : "btn-secondary"} onClick={() => setMode(item)}>{t[item]}</button>)}</div>
-    <StatisticsRows key={`${id}:${type}:${mode}`} id={id} type={type} mode={mode}/>
+    <StatisticsRows key={`${id}:${type}:${mode}`} id={id} type={type} mode={mode} initialData={mode === "main" ? initialData : undefined}/>
   </section>;
 }
-function StatisticsRows({id, type, mode}: {id: string; type: "player" | "team"; mode: CompetitionMode}) {
+function StatisticsRows({id, type, mode, initialData}: {id: string; type: "player" | "team"; mode: CompetitionMode; initialData?: PublicStatistics}) {
   const {locale, formatNumber} = useLanguage(), t = statisticsText(locale);
   const awards = awardText(locale);
-  const [data, setData] = useState<PublicStatistics | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [fetchedData, setData] = useState<PublicStatistics | null>(null), [loading, setLoading] = useState(!initialData), [error, setError] = useState("");
+  const data = fetchedData ?? initialData ?? null;
   const [offset, setOffset] = useState(0), [retry, setRetry] = useState(0);
   useEffect(() => {
+    if (initialData && offset === 0 && retry === 0) return;
     const controller = new AbortController();
     void getPublicStatistics(id, type, mode, offset, controller.signal).then(body => {
-      if (!controller.signal.aborted) {setData(previous => ({...body, history: offset === 0 ? body.history : [...(previous?.history ?? []), ...body.history.filter(row => !previous?.history.some(p => p.id === row.id))]})); setError("");}
+      if (!controller.signal.aborted) {setData(previous => {
+        const history = (previous ?? initialData)?.history ?? [];
+        return {...body, history: offset === 0 ? body.history : [...history, ...body.history.filter(row => !history.some(p => p.id === row.id))]};
+      }); setError("");}
     }).catch(e => {if (!controller.signal.aborted) setError(e.message);}).finally(() => {if (!controller.signal.aborted) setLoading(false);});
     return () => controller.abort();
-  }, [id, type, mode, offset, retry]);
+  }, [id, type, mode, offset, retry, initialData]);
   const summary = data?.summaries.find(item => item.mode === mode), duel = mode === "bo" || mode === "kv";
   const mainSummary = data?.summaries.find(item => item.mode === "main");
   const metrics = summary ? [[t.rating, summary.rating === null ? "—" : formatNumber(summary.rating, {minimumFractionDigits: type === "player" ? 1 : 2, maximumFractionDigits: type === "player" ? 1 : 2})], ...(mode === "main" ? [[t.cost, `${formatNumber(Number(summary.cost ?? mainSummary?.cost ?? competitionCost({kills: summary.kills, deaths: summary.deaths, games: summary.games, wins: summary.wins, rating: summary.rating ?? 0, reputation: 50})), {minimumFractionDigits: 2, maximumFractionDigits: 2})} ₽`]] : []), [t.games, summary.games], [t.kills, summary.kills], [t.wins, summary.wins], [t.ratio, summary.games ? formatNumber(summary.kills / summary.games, {maximumFractionDigits: 2}) : "—"], ...(duel ? [[t.series, summary.series], [t.deaths, summary.deaths ?? "—"], [t.assists, summary.assists ?? "—"], ["KDA", summary.deaths !== null && summary.assists !== null ? formatNumber((summary.kills + summary.assists) / Math.max(1, summary.deaths), {maximumFractionDigits: 2}) : "—"]] : [])] : [];
