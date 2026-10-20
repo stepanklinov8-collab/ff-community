@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 
+// Hosting and visitor timezones differ in production; exercise that difference.
+test.use({ timezoneId: "America/New_York" });
+
 const player = "00000000-0000-4000-8000-000000008201";
 const eventId = "00000000-0000-4000-8000-000000008202";
 const sessionId = "00000000-0000-4000-8000-000000008203";
@@ -110,17 +113,21 @@ test("public cache refreshes immediately after settings change; unauthorized req
 });
 
 test("home serves counters and schedule in HTML, reuses its summary, and debounces search", async ({page,request}) => {
+  const clientErrors:string[]=[];
+  page.on("pageerror",error=>clientErrors.push(error.message));
   const initial=await request.get("/");
   expect(initial.ok()).toBeTruthy();
   const html=await initial.text();
   expect(html).toContain("Ближайшая тренировка");
   expect(html).toContain(">301<");
+  expect(html).toContain("19:00");
   expect(count("event_sessions")).toBe(1);
   const browserTables:string[]=[];
   page.on("request",req=>{if(req.url().includes("/rest/v1/"))browserTables.push(req.url());});
   await page.goto("/");
   await expect(page.locator(".hero-stats")).toContainText("301");
   await expect(page.getByRole("heading",{name:"Ближайшая тренировка"})).toBeVisible();
+  await expect(page.locator(".event-main p")).toContainText("12:00");
   expect(count("event_sessions")).toBe(1);
   expect(browserTables).toEqual([]);
   const search=page.locator(".global-search input");
@@ -130,6 +137,7 @@ test("home serves counters and schedule in HTML, reuses its summary, and debounc
   await search.pressSequentially("rena",{delay:40});
   await expect(page.locator(".search-results")).toContainText("Arena");
   expect(browserTables.filter(url=>url.includes("/teams?"))).toHaveLength(1);
+  expect(clientErrors).toEqual([]);
 });
 
 test("knowledge loads catalog text only for the selected section and preserves image URLs", async ({page}) => {

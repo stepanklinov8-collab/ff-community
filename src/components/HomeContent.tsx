@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { HomeSummary, HomeActivity } from "@/lib/home/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -27,10 +27,17 @@ interface SearchResult {
   type: "team" | "guild";
 }
 
+const subscribeTimeZone = () => () => {};
+const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+// The server and first browser render must agree, regardless of hosting timezone.
+// After hydration retain the visitor's local time, as on the original homepage.
+const initialTimeZone = () => "Europe/Moscow";
+
 export default function HomeContent({ initialData }: { initialData: HomeSummary | null }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { t, formatDate } = useLanguage();
+  const timeZone = useSyncExternalStore(subscribeTimeZone, browserTimeZone, initialTimeZone);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -148,13 +155,13 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
             ) : upcomingEvents.map((event) => (
               <Link key={event.sessionId} href={`/tournaments/${event.eventId}`} className="event-row">
                 <div className="event-date">
-                  <strong>{formatDate(event.startTime, { day: "2-digit" })}</strong>
-                  <span>{formatDate(event.startTime, { month: "short" })}</span>
+                  <strong>{formatDate(event.startTime, { day: "2-digit", timeZone })}</strong>
+                  <span>{formatDate(event.startTime, { month: "short", timeZone })}</span>
                 </div>
                 <div className="event-main">
                   <span className={`event-type type-${event.type}`}>{typeLabels[event.type] ?? event.type}</span>
                   <h3>{event.title}</h3>
-                  <p>{formatDate(event.startTime, { hour: "2-digit", minute: "2-digit", weekday: "short" })}</p>
+                  <p>{formatDate(event.startTime, { hour: "2-digit", minute: "2-digit", weekday: "short", timeZone })}</p>
                 </div>
                 <ChevronRight className="event-arrow" />
               </Link>
@@ -202,7 +209,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
               <>
                 <span className="activity-dot" />
                 <p>{activityText(activity)}</p>
-                <time>{formatDate(activity.created_at, { dateStyle: "short", timeStyle: "medium" })}</time>
+                <time>{formatDate(activity.created_at, { dateStyle: "short", timeStyle: "medium", timeZone })}</time>
               </>
             );
             return href
