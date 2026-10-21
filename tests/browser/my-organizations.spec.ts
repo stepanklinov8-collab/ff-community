@@ -80,7 +80,7 @@ test("a failed request can be retried without falsely showing an empty membershi
   const state = await setup(page, []);
   state.reject = true;
   await openFromMenu(page);
-  await expect(page.getByRole("alert")).toContainText("Не удалось загрузить твои организации");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Не удалось загрузить твои организации");
   await expect(page.getByText("Ты пока не состоишь в команде или гильдии.", { exact: true })).toHaveCount(0);
   state.reject = false;
   await page.getByRole("button", { name: "Повторить", exact: true }).click();
