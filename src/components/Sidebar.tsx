@@ -95,6 +95,7 @@ export default function Sidebar() {
   const menuItems = [
     { href: "/", label: t("home"), icon: House },
     { href: "/teams", label: t("teams"), icon: UsersRound },
+    { href: "/my-organizations", label: t("myOrganizations"), icon: ShieldCheck, auth: true },
     { href: "/tournaments", label: t("tournaments"), icon: Trophy },
     { href: "/clan-wars", label: t("clanWars"), icon: Swords },
     { href: "/rating", label: t("rating"), icon: Sparkles },
