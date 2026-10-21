@@ -7,6 +7,13 @@ export const dateLocales: Record<Locale, string> = { ru: "ru-RU", kk: "kk-KZ", k
 const ru = {
   home: "Главная",
   teams: "Команды и гильдии",
+  myOrganizations: "Твои организации",
+  "myOrganizations.description": "Команды и гильдии, в которых ты состоишь.",
+  "myOrganizations.empty": "Ты пока не состоишь в команде или гильдии.",
+  "myOrganizations.browse": "Найти команду или гильдию",
+  "myOrganizations.error": "Не удалось загрузить твои организации.",
+  "myOrganizations.retry": "Повторить",
+  "myOrganizations.opening": "Открываем профиль организации…",
   tournaments: "Турниры",
   clanWars: "Клановые войны",
   rating: "Рейтинг игроков",
@@ -392,6 +399,13 @@ export type MessageKey = keyof typeof ru;
 type Dictionary = Record<MessageKey, string>;
 
 const kk: Dictionary = {
+  myOrganizations: "Сенің ұйымдарың",
+  "myOrganizations.description": "Сен мүше болған командалар мен гильдиялар.",
+  "myOrganizations.empty": "Сен әзірге командаға немесе гильдияға кірмегенсің.",
+  "myOrganizations.browse": "Команда немесе гильдия табу",
+  "myOrganizations.error": "Сенің ұйымдарыңды жүктеу мүмкін болмады.",
+  "myOrganizations.retry": "Қайталау",
+  "myOrganizations.opening": "Ұйым профилі ашылуда…",
   home: "Басты бет", teams: "Командалар мен гильдиялар", tournaments: "Турнирлер", clanWars: "Клан соғыстары", rating: "Ойыншылар рейтингі", teamStats: "Командалар рейтингі", bloggers: "Блогерлер", betting: "Болжамдар", knowledge: "Білім базасы", messages: "Хабарламалар", notifications: "Хабарландырулар", profile: "Профиль", contacts: "Байланыстар", admin: "Басқару", signIn: "Кіру", signOut: "Шығу", search: "Іздеу",
   "common.loading": "Жүктелуде…", "common.choose": "Таңдаңыз", "common.cancel": "Бас тарту", "common.team": "Команда", "common.guild": "Гильдия", "common.noResults": "Ештеңе табылмады", "common.closeMenu": "Мәзірді жабу", "common.openMenu": "Мәзірді ашу", "common.mainNavigation": "Негізгі навигация", "common.language": "Тілді таңдау", "common.save": "Сақтау", "common.legal": "Құқықтық ақпарат", "common.avatarOf": "{name} аватары", "common.emblemOf": "{name} эмблемасы",
   "home.heroEyebrow": "OMCITE FREE FIRE COMMUNITY", "home.heroTitle": "Сенің командаң.", "home.heroAccent": "Сенің аренаң.", "home.heroText": "Турнирлер, жаттығулар, рейтингтер және ойыншылар тарихы — OMCITE қауымдастығына арналған бір платформада.", "home.findTournament": "Турнир табу", "home.communityStats": "Қауымдастық статистикасы", "home.players": "ойыншы", "home.teamsCount": "команда", "home.upcomingGames": "алдағы ойын", "home.searchLabel": "Командалар мен гильдияларды іздеу", "home.searchPlaceholder": "Команда немесе гильдия табу…", "home.calendar": "КҮНТІЗБЕ", "home.upcomingEvents": "Алдағы іс-шаралар", "home.allEvents": "Барлық іс-шаралар", "home.scheduleEmpty": "Кесте жаңартылуда. Сәл кейінірек қараңыз.", "home.startGame": "ОЙЫНДЫ БАСТАУ", "home.buildTeam": "Өз командаңды жина", "home.buildTeamText": "Команда немесе гильдия құрып, тексеруден өтіп, OMCITE іс-шараларына қатысыңыз.", "home.createRoster": "Құрамды жасаңыз", "home.passVerification": "Тексеруден өтіңіз", "home.joinTournament": "Турнирге тіркеліңіз", "home.createTeam": "Команда құру", "home.playerRatingText": "Үздік қатысушылар статистикасы", "home.teamRatingText": "Жүлделер, матчтар және құрамдар", "home.proposeTournament": "Турнир ұсыну", "home.proposeTournamentText": "Қауымдастыққа іс-шара жасаңыз", "home.community": "ҚАУЫМДАСТЫҚ", "home.latestEvents": "Соңғы оқиғалар", "home.activityEmpty": "Белсенділік таспасы әзірге бос.", "home.newCommunityEvent": "Қауымдастықтағы жаңа оқиға",
@@ -413,6 +427,13 @@ const kk: Dictionary = {
 };
 
 const ky: Dictionary = {
+  myOrganizations: "Сенин уюмдарың",
+  "myOrganizations.description": "Сен мүчө болгон командалар жана гильдиялар.",
+  "myOrganizations.empty": "Сен азырынча командага же гильдияга мүчө эмессиң.",
+  "myOrganizations.browse": "Команда же гильдия табуу",
+  "myOrganizations.error": "Сенин уюмдарыңды жүктөө мүмкүн болгон жок.",
+  "myOrganizations.retry": "Кайталоо",
+  "myOrganizations.opening": "Уюмдун профили ачылууда…",
   home: "Башкы бет", teams: "Командалар жана гильдиялар", tournaments: "Турнирлер", clanWars: "Кландык согуштар", rating: "Оюнчулардын рейтинги", teamStats: "Командалар рейтинги", bloggers: "Блогерлер", betting: "Божомолдор", knowledge: "Билим базасы", messages: "Билдирүүлөр", notifications: "Эскертмелер", profile: "Профиль", contacts: "Байланыштар", admin: "Башкаруу", signIn: "Кирүү", signOut: "Чыгуу", search: "Издөө",
   "common.loading": "Жүктөлүүдө…", "common.choose": "Тандаңыз", "common.cancel": "Жокко чыгаруу", "common.team": "Команда", "common.guild": "Гильдия", "common.noResults": "Эч нерсе табылган жок", "common.closeMenu": "Менюну жабуу", "common.openMenu": "Менюну ачуу", "common.mainNavigation": "Негизги навигация", "common.language": "Тилди тандоо", "common.save": "Сактоо", "common.legal": "Укуктук маалымат", "common.avatarOf": "{name} аватары", "common.emblemOf": "{name} эмблемасы",
   "home.heroEyebrow": "OMCITE FREE FIRE COMMUNITY", "home.heroTitle": "Сенин командаң.", "home.heroAccent": "Сенин аренаң.", "home.heroText": "Турнирлер, машыгуулар, рейтингдер жана оюнчулардын тарыхы — OMCITE коомчулугу үчүн бир платформада.", "home.findTournament": "Турнир табуу", "home.communityStats": "Коомчулуктун статистикасы", "home.players": "оюнчу", "home.teamsCount": "команда", "home.upcomingGames": "жакынкы оюн", "home.searchLabel": "Командаларды жана гильдияларды издөө", "home.searchPlaceholder": "Команда же гильдия табуу…", "home.calendar": "ЖЫЛНААМА", "home.upcomingEvents": "Жакынкы иш-чаралар", "home.allEvents": "Бардык иш-чаралар", "home.scheduleEmpty": "Жадыбал жаңыртылууда. Бир аздан кийин кириңиз.", "home.startGame": "ОЮНДУ БАШТОО", "home.buildTeam": "Өз командаңды чогулт", "home.buildTeamText": "Команда же гильдия түзүп, текшерүүдөн өтүп, OMCITE иш-чараларына катышыңыз.", "home.createRoster": "Курам түзүңүз", "home.passVerification": "Текшерүүдөн өтүңүз", "home.joinTournament": "Турнирге катталыңыз", "home.createTeam": "Команда түзүү", "home.playerRatingText": "Мыкты катышуучулардын статистикасы", "home.teamRatingText": "Сыйлыктар, матчтар жана курамдар", "home.proposeTournament": "Турнир сунуштоо", "home.proposeTournamentText": "Коомчулук үчүн иш-чара түзүңүз", "home.community": "КООМЧУЛУК", "home.latestEvents": "Акыркы окуялар", "home.activityEmpty": "Активдүүлүк тасмасы азырынча бош.", "home.newCommunityEvent": "Коомчулуктагы жаңы окуя",
