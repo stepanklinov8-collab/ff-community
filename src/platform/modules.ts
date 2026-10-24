@@ -1,4 +1,5 @@
 export const modules = [
+  { id: "chat", href: "/chat", title: { ru: "Чат", kk: "Чат", ky: "Чат" } },
   { id: "foundation-demo", href: "/extensions/foundation-demo", title: { ru: "Пример раздела", kk: "Бөлім үлгісі", ky: "Бөлүм үлгүсү" } },
 ] as const;
 export type ModuleMode = "off" | "preview" | "public";

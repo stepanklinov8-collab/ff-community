@@ -12,9 +12,12 @@ import {verifyLifecycle} from './lifecycle.mjs';
 import {verifyStatistics} from './statistics.mjs';
 import {verifyRegistrations} from './registrations.mjs';
 import {verifyTrainingSchedule} from './training-schedule.mjs';
+import {verifyChat} from './chat.mjs';
+import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
  await db.exec(await readFile(new URL('./baseline.sql',import.meta.url),'utf8'));
+ await installChatRealtimeFixture(db);
  const dynamic=await readFile(new URL('../../supabase/migrations/202609060005_dynamic_betting.sql',import.meta.url),'utf8');
  await db.exec(dynamic.slice(dynamic.indexOf('create table if not exists public.betting_sources'),dynamic.indexOf('create or replace function public.place_dynamic_site_bet_for(')));
 
@@ -171,5 +174,6 @@ try {
  console.log('PASS: regular member can leave, leader must transfer leadership, repeat leave is rejected');
  await verifySessionAwards(db,id,config);
  await verifyPlayerRating999(db,id,config);
+ await verifyChat(db,id);
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

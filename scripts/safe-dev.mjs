@@ -10,12 +10,12 @@ export function safeDevelopmentEnv(source = process.env) {
     ...safeTestEnv(source),
     NEXT_PUBLIC_DEPLOYMENT_ENV: "development",
     NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000",
-    OMCITE_MODULES: "foundation-demo=public",
+    OMCITE_MODULES: "foundation-demo=public,chat=public",
   };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", "3000", "-H", "127.0.0.1"], {
+  const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--webpack", "-p", "3000", "-H", "127.0.0.1"], {
     env: safeDevelopmentEnv(),
     stdio: "inherit",
     windowsHide: true,
