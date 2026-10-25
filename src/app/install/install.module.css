@@ -1,0 +1,45 @@
+.page { max-width: 1000px; margin-inline: auto; padding-bottom: 40px; }
+.hero { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 28px; padding: 32px; background: #0a1821; border: 1px solid #204455; border-radius: 20px; }
+.logo { border-radius: 24px; border: 1px solid #34718a; }
+.eyebrow { color: #53d2ff; font-weight: 800; letter-spacing: .16em; font-size: 12px; margin-bottom: 10px; }
+.hero h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 800; line-height: 1.15; margin-bottom: 16px; }
+.intro { font-size: 17px; line-height: 1.65; margin-bottom: 12px; }
+.muted { color: #a9bdc9; line-height: 1.65; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+.actions > * { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; white-space: normal; text-align: center; }
+.primaryAction, .secondaryAction { padding: 12px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; transition: background-color .15s; }
+.primaryAction { background: #18bdf2; color: #03131b; border: 1px solid #18bdf2; }
+.primaryAction:hover { background: #60d7ff; }
+.secondaryAction { background: #102b3a; color: #eef8ff; border: 1px solid #326079; }
+.secondaryAction:hover { background: #1a3c4f; }
+.actions button:disabled { opacity: .65; cursor: wait; }
+.status { min-height: 24px; display: flex; align-items: flex-start; gap: 8px; color: #92dfff; margin-top: 12px; font-size: 14px; line-height: 1.6; }
+.status svg { flex-shrink: 0; margin-top: 3px; }
+.messenger { display: flex; gap: 16px; padding: 24px; margin: 24px 0; background: #0b202c; border-left: 3px solid #18bdf2; border-radius: 0 14px 14px 0; }
+.messenger > svg { color: #53d2ff; flex-shrink: 0; margin-top: 3px; }
+.messenger h2, .card h2, .share h2 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+.messenger p, .desktop p { color: #bbcfdb; line-height: 1.7; }
+.instructions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.card { padding: 26px; border: 1px solid #244251; border-radius: 16px; background: #0a1218; }
+.card h2 { display: flex; align-items: center; gap: 10px; }
+.card h2 svg { color: #53d2ff; }
+.card ol { padding-left: 24px; list-style: decimal; }
+.card li { padding-left: 6px; margin-top: 18px; line-height: 1.65; color: #ccdae3; }
+.card li::marker { color: #53d2ff; font-weight: 700; }
+.desktop { padding: 20px 0; border-bottom: 1px solid #244251; }
+.desktop summary { cursor: pointer; display: flex; gap: 10px; align-items: center; font-weight: 600; min-height: 44px; }
+.desktop summary::after { content: "+"; margin-left: auto; font-size: 24px; color: #53d2ff; }
+.desktop[open] summary::after { content: "−"; }
+.desktop p { padding-top: 12px; }
+.share { padding-top: 28px; }
+.linkLabel { display: block; margin: 18px 0 8px; font-size: 14px; color: #a9bdc9; }
+.linkInput { width: 100%; background: #0a1218; border: 1px solid #326079; border-radius: 10px; padding: 14px; font-size: 16px; color: #e7f6ff; min-width: 0; }
+.page :is(button, a, input, summary):focus-visible { outline: 2px solid #53d2ff; outline-offset: 4px; }
+@media (max-width: 640px) {
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 22px; }
+  .logo { width: 80px; height: 80px; border-radius: 20px; }
+  .instructions { grid-template-columns: minmax(0, 1fr); }
+  .messenger { padding: 20px 16px; gap: 12px; }
+  .messenger h2, .card h2, .share h2 { font-size: 18px; }
+  .card { padding: 22px; }
+}

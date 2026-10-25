@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import LanguageProvider from "@/components/LanguageProvider";
 import SiteFooter from "@/components/SiteFooter";
+import { WebsiteInstallProvider } from "@/components/WebsiteInstall";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -12,8 +13,11 @@ export const metadata: Metadata = {
   },
   description: "Команды, гильдии, турниры, тренировки и статистика сообщества OMCITE.",
   applicationName: "OMCITE Arena",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "OMCITE", statusBarStyle: "default" },
   icons: {
-    icon: "/brand/omcite-emblem.jpg",
+    icon: { url: "/icons/omcite-192.png", sizes: "192x192", type: "image/png" },
+    apple: { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
   },
   openGraph: {
     title: "OMCITE Arena",
@@ -24,6 +28,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = { themeColor: "#03070a" };
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,11 +39,13 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <body>
         <LanguageProvider>
-          <Sidebar />
-          <main className="app-main">
-            {children}
-            <SiteFooter />
-          </main>
+          <WebsiteInstallProvider>
+            <Sidebar />
+            <main className="app-main">
+              {children}
+              <SiteFooter />
+            </main>
+          </WebsiteInstallProvider>
         </LanguageProvider>
       </body>
     </html>

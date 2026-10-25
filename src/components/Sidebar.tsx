@@ -19,6 +19,7 @@ import {
   Menu,
   Search,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Swords,
   Trophy,
@@ -109,6 +110,7 @@ export default function Sidebar() {
     { href:"/organizer", label:competitionText(locale,"organizer"), icon:Trophy, auth:true },
     { href: "/profile", label: t("profile"), icon: UserRound, auth: true },
     { href: "/support", label: "Поддержка", icon: Contact },
+    { href: "/install", label: t("installShortcut"), icon: Smartphone },
     { href: "/contacts", label: t("contacts"), icon: Contact },
   ];
 

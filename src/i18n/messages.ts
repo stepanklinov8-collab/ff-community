@@ -5,6 +5,7 @@ export const localeNames: Record<Locale, string> = { ru: "RU", kk: "KZ", ky: "KG
 export const dateLocales: Record<Locale, string> = { ru: "ru-RU", kk: "kk-KZ", ky: "ky-KG" };
 
 const ru = {
+  installShortcut: "Значок на телефон",
   home: "Главная",
   teams: "Команды и гильдии",
   myOrganizations: "Твои организации",
@@ -399,6 +400,7 @@ export type MessageKey = keyof typeof ru;
 type Dictionary = Record<MessageKey, string>;
 
 const kk: Dictionary = {
+  installShortcut: "Телефонға белгіше",
   myOrganizations: "Сенің ұйымдарың",
   "myOrganizations.description": "Сен мүше болған командалар мен гильдиялар.",
   "myOrganizations.empty": "Сен әзірге командаға немесе гильдияға кірмегенсің.",
@@ -427,6 +429,7 @@ const kk: Dictionary = {
 };
 
 const ky: Dictionary = {
+  installShortcut: "Телефонго белги",
   myOrganizations: "Сенин уюмдарың",
   "myOrganizations.description": "Сен мүчө болгон командалар жана гильдиялар.",
   "myOrganizations.empty": "Сен азырынча командага же гильдияга мүчө эмессиң.",
