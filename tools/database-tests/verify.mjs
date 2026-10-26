@@ -13,6 +13,7 @@ import {verifyStatistics} from './statistics.mjs';
 import {verifyRegistrations} from './registrations.mjs';
 import {verifyTrainingSchedule} from './training-schedule.mjs';
 import {verifyChat} from './chat.mjs';
+import {verifyLeaveOrganization} from './leave-organization.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -172,6 +173,7 @@ try {
  assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[leaveTeam])).rows[0].n,1);
  await assert.rejects(()=>db.query(`select public.leave_organization($1)`,[leaveTeam]),/не состоите/);
  console.log('PASS: regular member can leave, leader must transfer leadership, repeat leave is rejected');
+ await verifyLeaveOrganization(db,id);
  await verifySessionAwards(db,id,config);
  await verifyPlayerRating999(db,id,config);
  await verifyChat(db,id);

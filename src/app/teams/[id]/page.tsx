@@ -11,6 +11,7 @@ import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import TeamMapStatistics from "@/components/TeamMapStatistics";
+import LeaveOrganizationControl from "@/components/LeaveOrganizationControl";
 
 interface Team {
   id: string;
@@ -371,21 +372,12 @@ export default function TeamPage() {
     router.refresh();
   };
 
-  const leaveOrganization = async () => {
-    if (!team || !isMember || isLeader || organizationBusy || team.dissolved_at) return;
-    const kind = team.type === "guild" ? "гильдии" : "команды";
-    if (!confirm(`Выйти из ${kind} «${team.name}»?`)) return;
-
-    setOrganizationBusy(true);
-    const { error } = await supabase.rpc("leave_organization", { p_team_id: id });
-    setOrganizationBusy(false);
-    if (error) {
-      setInviteMessage("Не удалось выйти из организации: " + error.message);
-      return;
-    }
+  const onOrganizationLeft = () => {
     setIsMember(false);
-    setInviteMessage(`Вы вышли из ${kind}.`);
-    router.push("/teams");
+    setCanManage(false);
+    setPendingTransfer(null);
+    setMembers(current => current.filter(member => member.user_id !== currentUser?.id));
+    router.replace("/teams");
     router.refresh();
   };
 
@@ -511,10 +503,9 @@ export default function TeamPage() {
                 </button>
               </div>
             )}
-            {isMember && !isLeader && !team.dissolved_at && (
-              <button onClick={leaveOrganization} disabled={organizationBusy} className="mt-3 rounded border border-red-400/60 px-4 py-2 text-red-200 hover:bg-red-900/40 disabled:opacity-50">
-                {organizationBusy ? "Выход…" : `Выйти из ${team.type === "guild" ? "гильдии" : "команды"}`}
-              </button>
+            {currentUser && isMember && !isLeader && !team.dissolved_at && (
+              <LeaveOrganizationControl key={team.id} teamId={team.id} name={team.name} type={team.type}
+                userId={currentUser.id} disabled={organizationBusy} onBusyChange={setOrganizationBusy} onLeft={onOrganizationLeft} />
             )}
             {isMember && isLeader && !team.dissolved_at && (
               <p className="mt-3 text-sm text-gray-400">Чтобы выйти из организации, сначала передайте лидерство.</p>
