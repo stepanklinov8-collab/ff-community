@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { terminationCompensationSchema } from "./termination-compensation.ts";
+import { noShowPenaltySchema } from "./no-show-penalty.ts";
 
 const coins = z.number().int().min(0).max(1_000_000_000_000);
 const bps = z.number().int().min(0).max(10000);
@@ -27,6 +28,9 @@ export const financialTermsSchema = z.object({
   salary: z.object({ amount: coins, periodDays: z.number().int().min(1).max(1000000) }).strict().nullable(),
   rates: paymentRatesSchema,
   overdueCompensation: terminationCompensationSchema,
+  // Absent in previously saved v2 versions: absence means no fine, never an
+  // inferred default. Old immutable JSON is not rewritten on read.
+  noShowPenalty: noShowPenaltySchema.optional(),
   rankingBonuses: z.array(rankingBonusSchema).max(20),
   eventOverrides: z.array(eventOverrideSchema).max(20),
 }).strict().superRefine((value, ctx) => {
@@ -44,7 +48,7 @@ export type RankingBonus = z.infer<typeof rankingBonusSchema>;
 export const emptyFinancialTerms = (): FinancialTerms => ({
   signingAmount: 0, salary: null,
   rates: { perGame: 0, perSession: 0, perTournament: 0, perKill: 0, perMvp: 0 },
-  overdueCompensation: { kind: "none" }, rankingBonuses: [], eventOverrides: [],
+  overdueCompensation: { kind: "none" }, noShowPenalty: { kind: "none" }, rankingBonuses: [], eventOverrides: [],
 });
 
 /** Resolve one explicitly selected event against an already frozen version.

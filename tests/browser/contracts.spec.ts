@@ -48,6 +48,10 @@ test("manager prepares a private contract with structured financial conditions",
   await page.getByLabel("Процент компенсации", { exact: true }).fill("10");
   await page.getByRole("combobox", { name: "База процента", exact: true }).selectOption("player_value");
   await page.getByRole("combobox", { name: "Выбрать из суммы и процента", exact: true }).selectOption("minimum");
+  await page.getByRole("combobox", { name: "Способ штрафа", exact: true }).selectOption("combined");
+  await page.getByLabel("Сумма штрафа, OC", { exact: true }).fill("350");
+  await page.getByRole("spinbutton", { name: "Процент стоимости игрока", exact: true }).fill("10");
+  await page.getByRole("combobox", { name: "Сравнение для штрафа", exact: true }).selectOption("maximum");
   await expect(page.getByText(/меньшее из двух значений/)).toBeVisible();
   await expect(page.locator("textarea")).toHaveCount(0);
   await page.screenshot({ path: "tools/database-tests/artifacts/contracts/form-desktop.png", fullPage: true });
@@ -57,6 +61,7 @@ test("manager prepares a private contract with structured financial conditions",
   expect(mutations[0]).toMatchObject({ action: "save", organizationId: teamId, playerId, expectedRevision: 0,
     terms: { schemaVersion: 2, trainingShareBps: 2500, participation: { mode: "proportional" }, financial: {
       salary: { amount: 1000, periodDays: 9 }, rates: { perKill: 5 },
+      noShowPenalty: { kind: "combined", amount: 350, basisPoints: 1000, selection: "maximum" },
       overdueCompensation: { kind: "combined", amount: 1000, basisPoints: 1000, base: { kind: "player_value" }, selection: "minimum" },
     } } });
   expect(mutations[0].terms).not.toHaveProperty("note");

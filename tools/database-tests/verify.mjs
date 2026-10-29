@@ -25,6 +25,7 @@ import {verifyContractPrizeAllocation} from './contract-prize-allocation.mjs';
 import {verifyContractObligations} from './contract-obligations.mjs';
 import {verifyContractSalary} from './contract-salary.mjs';
 import {verifyContractFinancialStart} from './contract-financial-start.mjs';
+import {verifyContractSessionTerms} from './contract-session-terms.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -212,6 +213,7 @@ try {
  await verifyContractObligations(db,id);
  await verifyContractSalary(db,id);
  await verifyContractFinancialStart(db,id);
+ await verifyContractSessionTerms(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

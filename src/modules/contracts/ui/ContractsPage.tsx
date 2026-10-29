@@ -38,7 +38,7 @@ function TermsSummary({ terms }: { terms: ContractTerms }) {
     <div><dt className="text-slate-400">Количество выступлений</dt><dd>{terms.limit ? `${number(terms.limit.count)} · ${{ games: "игры", trainings: "тренировки", tournaments: "турниры" }[terms.limit.unit]}` : "Без ограничения"}</dd></div>
     <div><dt className="text-slate-400">Доля игрока</dt><dd>Тренировки {percentage(terms.trainingShareBps)} · Турниры {percentage(terms.tournamentShareBps)}</dd></div>
     <div><dt className="text-slate-400">Личные награды</dt><dd>Игроку {percentage(terms.personalShareBps)}, организации {percentage(10000 - terms.personalShareBps)}</dd></div>
-    <div><dt className="text-slate-400">Участие</dt><dd>{terms.participation.mode === "any" ? "Полная доля при любом участии" : terms.participation.mode === "proportional" ? "Пропорционально сыгранным играм" : `Полная доля после ${terms.participation.games} игр`}</dd></div>
+    <div><dt className="text-slate-400">Участие</dt><dd>{terms.participation.mode === "any" ? "Полная доля при любом участии" : terms.participation.mode === "proportional" ? "Пропорционально сыгранным играм" : `Минимум ${terms.participation.games} игр. При меньшем участии нет доли призовых, оплаты игр/сессии и бонусов за киллы/MVP этой сессии.`}</dd></div>
     <div><dt className="text-slate-400">Переход в другой состав</dt><dd>{feeText(terms.transfer, "от цены перехода")}. {terms.transferRequiresConsent ? "Нужно согласие организации" : "Согласие при выполнении условий не требуется"}</dd></div>
     <div><dt className="text-slate-400">Выход по инициативе игрока</dt><dd>{feeText(terms.playerExit, "от стоимости игрока на момент оплаты")}</dd></div>
     <div><dt className="text-slate-400">Расторжение организацией</dt><dd>{feeText(terms.organizationTermination, "от стоимости игрока на момент оплаты")} игроку. По обоюдному согласию — без штрафа.</dd></div>
@@ -190,6 +190,7 @@ export default function ContractsPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Правило участия<select className={inputClass} value={terms.participation.mode} onChange={event => updateTerms({ participation: event.target.value === "minimum" ? { mode: "minimum", games: 1 } : { mode: event.target.value as "any" | "proportional" } })}><option value="any">Полная доля за любое участие</option><option value="proportional">Пропорционально сыгранным играм</option><option value="minimum">Полная доля после минимума игр</option></select></label>
         {terms.participation.mode === "minimum" && <label>Минимум игр<input className={inputClass} type="number" min="1" max="10000" value={terms.participation.games} onChange={event => updateTerms({ participation: { mode: "minimum", games: Number(event.target.value) } })} /></label>}
+        {terms.participation.mode === "minimum" && <p className="text-sm text-slate-300">Если минимум не выполнен, выплаты за эту сессию не начисляются, включая оплату игр и бонусы за киллы/MVP. Зарплата по времени действия договора рассчитывается отдельно. Штраф за полную неявку задаётся ниже.</p>}
       </div>
       <div className="grid gap-6 sm:grid-cols-2">
         <FeeInput label="Компенсация при переходе" value={terms.transfer} basis="от цены перехода" onChange={transfer => updateTerms({ transfer })} />

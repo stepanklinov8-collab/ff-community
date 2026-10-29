@@ -1,4 +1,8 @@
 -- UNFINISHED: not an executable release migration. Adapt to constructor v2 first.
+-- As of 29.10, migration .014 ALREADY defines contract_agreements and its guard.
+-- Do not execute this old draft or recreate those tables. Reuse .012/.013 money
+-- functions and .014/.015 frozen-session calculation; all payout paths still
+-- need reconciliation, limit accounting, guest/exit consents and owner waivers.
 begin;
 alter table public.organization_contract_versions
  add column offered_by uuid references public.profiles(id),

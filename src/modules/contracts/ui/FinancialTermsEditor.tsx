@@ -5,6 +5,7 @@ import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
 import { financialTermsSchema, type FinancialTerms, type EventOverride } from "../financial-terms";
 import { describeTerminationCompensation, type TerminationCompensation } from "../termination-compensation";
+import { describeNoShowPenalty, type NoShowPenalty } from "../no-show-penalty";
 
 const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
 const money = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
@@ -39,6 +40,23 @@ function OverdueEditor({ value, onChange }: { value: TerminationCompensation; on
   </fieldset>;
 }
 
+function NoShowEditor({ value, onChange }: { value: NoShowPenalty; onChange: (value: NoShowPenalty) => void }) {
+  return <fieldset className="space-y-3"><legend className="font-semibold">Штраф за неявку</legend>
+    <p className="text-sm text-slate-300">Применяется только к заявленному игроку, который не сыграл ни одной игры. За частичное участие этот штраф не применяется.</p>
+    <label className="block">Способ штрафа<select className={inputClass} value={value.kind} onChange={e => {
+      const kind = e.target.value;
+      onChange(kind === "none" ? { kind: "none" } : kind === "fixed" ? { kind: "fixed", amount: 0 } : kind === "percent" ? { kind: "percent", basisPoints: 0 } : { kind: "combined", amount: 0, basisPoints: 0, selection: "maximum" });
+    }}><option value="none">Без штрафа</option><option value="fixed">Фиксированная сумма</option><option value="percent">Процент стоимости игрока</option><option value="combined">Сумма и процент: сравнить</option></select></label>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {(value.kind === "fixed" || value.kind === "combined") && <Amount label="Сумма штрафа" value={value.amount} onChange={amount => onChange({ ...value, amount })} />}
+      {(value.kind === "percent" || value.kind === "combined") && <label>Процент стоимости игрока<input required className={inputClass} type="number" min="0" max="100" step="0.01" value={value.basisPoints / 100} onChange={e => onChange({ ...value, basisPoints: Math.round(Number(e.target.value) * 100) })} /></label>}
+      {value.kind === "combined" && <label>Сравнение для штрафа<select className={inputClass} value={value.selection} onChange={e => onChange({ ...value, selection: e.target.value as "maximum" | "minimum" })}><option value="maximum">Большее значение</option><option value="minimum">Меньшее значение</option></select></label>}
+    </div>
+    <p className="text-sm text-slate-300">При нехватке монет остаток станет долгом игрока перед организацией. Владелец сможет отменить штраф; история сохранится. Сохранение предложения не начисляет штраф.</p>
+    <p className="text-sm text-slate-300">Для процента используется стоимость игрока на начало сессии. Более позднее изменение цены её не заменяет.</p>
+  </fieldset>;
+}
+
 export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
   const parsed = financialTermsSchema.safeParse(value);
   if (!parsed.success) return <p className="text-amber-200">Проверьте поля выплат: {parsed.error.issues[0].message}</p>;
@@ -46,6 +64,7 @@ export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
     <p>При первом подписании: {money(value.signingAmount)}. Приветственный бонус и оплата выкупа не повторяются при продлении. {value.salary ? `Зарплата ${money(value.salary.amount)} каждые ${value.salary.periodDays} суток от начала договора, в конце периода. Неполный последний период — пропорционально времени, с округлением вниз.` : "Регулярная зарплата не предусмотрена."}</p>
     <p>{Object.entries(rateLabels).map(([key, label]) => `${label}: ${money(value.rates[key as keyof typeof rateLabels])}`).join(" · ")}</p>
     <p>{describeTerminationCompensation(value.overdueCompensation)}</p>
+    <p>{describeNoShowPenalty(value.noShowPenalty ?? { kind: "none" })}</p>
     <p>При первоначальном подписании резервируются разовая оплата и первый период зарплаты. Продление не резервирует первоначальный бонус или оплату выкупа повторно. При долге договор продолжает действовать; погашение выбирает руководитель или владелец. Вывод организации при долге запрещён.</p>
     {value.rankingBonuses.map(row => <p key={row.id}>Бонус {money(row.amount)}: «{rankingLabels[row.ranking]}», топ-{row.top}, {rankingModes[row.mode].toLowerCase()}, {new Date(row.startsAt).toLocaleString("ru-RU")} — {new Date(row.endsAt).toLocaleString("ru-RU")}.</p>)}
     {value.eventOverrides.map((row, index) => <p key={row.eventId}>Исключение {index + 1} · <Link className="text-cyan-300 underline" href={`/tournaments/${row.eventId}`}>Открыть мероприятие</Link>: {Object.entries(row.values).map(([key, amount]) => `${overrideLabels[key as keyof typeof overrideLabels]}: ${key.endsWith("Bps") ? `${amount! / 100}%` : money(amount!)}`).join("; ")}. Заменяет только указанные общие условия.</p>)}
@@ -85,6 +104,7 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
     </fieldset>
     <div className="grid gap-3 sm:grid-cols-2">{Object.entries(rateLabels).map(([key, label]) => <Amount key={key} label={label} value={value.rates[key as keyof typeof rateLabels]} onChange={amount => onChange({ ...value, rates: { ...value.rates, [key]: amount } })} />)}</div>
     <OverdueEditor value={value.overdueCompensation} onChange={overdueCompensation => onChange({ ...value, overdueCompensation })} />
+    <NoShowEditor value={value.noShowPenalty ?? { kind: "none" }} onChange={noShowPenalty => onChange({ ...value, noShowPenalty })} />
     <fieldset className="space-y-3"><legend className="font-semibold">Бонусы за рейтинг своей организации</legend>
       {value.rankingBonuses.map((row, index) => {
         const patch = (fields: Partial<typeof row>) => onChange({ ...value, rankingBonuses: value.rankingBonuses.map((v, i) => i === index ? { ...v, ...fields } : v) });
