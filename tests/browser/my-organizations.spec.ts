@@ -5,9 +5,9 @@ const user = { id: userId, aud: "authenticated", role: "authenticated", email: "
   app_metadata: {}, user_metadata: { nickname: "Игрок" }, created_at: "2026-01-01T00:00:00Z" };
 const token = [{ alg: "HS256", typ: "JWT" }, { sub: userId, exp: 4102444800 }, "test-only"]
   .map(value => Buffer.from(typeof value === "string" ? value : JSON.stringify(value)).toString("base64url")).join(".");
-interface Organization { id: string; name: string; type: "team" | "guild"; avatar_url: string | null; dissolved_at: string | null; owner_user_id: string | null }
-const team: Organization = { id: "00000000-0000-4000-8000-000000009201", name: "Северная команда", type: "team", avatar_url: "/brand/omcite-emblem.jpg", dissolved_at: null, owner_user_id: null };
-const guild: Organization = { id: "00000000-0000-4000-8000-000000009202", name: "Гильдия арены", type: "guild", avatar_url: null, dissolved_at: null, owner_user_id: null };
+interface Organization { id: string; name: string; type: "team" | "guild"; avatar_url: string | null; dissolved_at: string | null; ultimate_owner_user_id: string | null }
+const team: Organization = { id: "00000000-0000-4000-8000-000000009201", name: "Северная команда", type: "team", avatar_url: "/brand/omcite-emblem.jpg", dissolved_at: null, ultimate_owner_user_id: null };
+const guild: Organization = { id: "00000000-0000-4000-8000-000000009202", name: "Гильдия арены", type: "guild", avatar_url: null, dissolved_at: null, ultimate_owner_user_id: null };
 type Membership = { teams: Organization | Organization[] | null };
 
 async function setup(page: Page, memberships: Membership[], authenticated = true) {
@@ -30,9 +30,9 @@ async function setup(page: Page, memberships: Membership[], authenticated = true
       // Returning nothing for an unscoped query also checks membership filtering.
       return rows(url.searchParams.get("user_id") === `eq.${userId}` ? state.memberships : []);
     }
-    if (url.pathname === "/rest/v1/teams" && url.searchParams.has("owner_user_id")) {
+    if (url.pathname === "/rest/v1/teams" && url.searchParams.has("ultimate_owner_user_id")) {
       state.ownerQueries.push(url);
-      return rows(url.searchParams.get("owner_user_id") === `eq.${userId}` ? state.owned : []);
+      return rows(url.searchParams.get("ultimate_owner_user_id") === `eq.${userId}` ? state.owned : []);
     }
     if (url.pathname === "/rest/v1/teams") return rows([team, guild].filter(organization => !url.searchParams.has("id") || `eq.${organization.id}` === url.searchParams.get("id")));
     if (url.pathname === "/rest/v1/profiles") return rows([{ id: userId, nickname: "Игрок" }]);
@@ -82,7 +82,7 @@ test("members see their team and guild with usable mobile cards, excluding disso
 });
 
 test("a sole off-roster owner is sent directly to the organization profile", async ({ page }) => {
-  const owned = { ...team, owner_user_id: userId };
+  const owned = { ...team, ultimate_owner_user_id: userId };
   const state = await setup(page, []);
   state.owned = [owned];
   await openFromMenu(page);
@@ -90,7 +90,7 @@ test("a sole off-roster owner is sent directly to the organization profile", asy
 });
 
 test("ownership and membership are combined without duplicate organization cards", async ({ page }) => {
-  const owned = { ...team, owner_user_id: userId };
+  const owned = { ...team, ultimate_owner_user_id: userId };
   const state = await setup(page, [{ teams: owned }, { teams: guild }]);
   state.owned = [owned];
   await page.goto("/my-organizations");

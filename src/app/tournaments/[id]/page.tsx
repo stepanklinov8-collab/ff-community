@@ -245,14 +245,14 @@ export default function EventPage() {
 
         const [{ data: memberships }, { data: ownedTeams }] = await Promise.all([
           supabase.from("team_members").select("team_id, role_in_team").eq("user_id", user.id),
-          supabase.from("teams").select("id,name,type,verified,owner_user_id,dissolved_at").eq("owner_user_id", user.id).is("dissolved_at", null),
+          supabase.from("teams").select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").eq("ultimate_owner_user_id", user.id).is("dissolved_at", null),
         ]);
 
         const membershipRows = memberships ?? [];
         const organizationIds = [...new Set([...membershipRows.map((membership) => membership.team_id), ...(ownedTeams ?? []).map((team) => team.id)])];
         if (organizationIds.length) {
           const { data: membershipTeams } = await supabase.from("teams")
-            .select("id,name,type,verified,owner_user_id,dissolved_at").in("id", organizationIds);
+            .select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").in("id", organizationIds);
           const eligibleTeamIds = new Set((membershipTeams ?? [])
             .filter((team) => (team.type === "team" || team.type === "guild") && team.verified && !team.dissolved_at)
             .map((team) => team.id));

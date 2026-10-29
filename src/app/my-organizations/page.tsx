@@ -14,7 +14,7 @@ interface Organization {
   type: "team" | "guild";
   avatar_url: string | null;
   dissolved_at: string | null;
-  owner_user_id: string | null;
+  ultimate_owner_user_id: string | null;
   isOwner: boolean;
 }
 
@@ -40,18 +40,18 @@ export default function MyOrganizationsPage() {
 
       const [{ data, error }, { data: owned, error: ownerError }] = await Promise.all([
         supabase.from("team_members")
-          .select("teams(id,name,type,avatar_url,dissolved_at,owner_user_id)")
+          .select("teams(id,name,type,avatar_url,dissolved_at,ultimate_owner_user_id)")
           .eq("user_id", user.id).abortSignal(controller.signal),
         supabase.from("teams")
-          .select("id,name,type,avatar_url,dissolved_at,owner_user_id")
-          .eq("owner_user_id", user.id).abortSignal(controller.signal),
+          .select("id,name,type,avatar_url,dissolved_at,ultimate_owner_user_id")
+          .eq("ultimate_owner_user_id", user.id).abortSignal(controller.signal),
       ]);
       if (error || ownerError) throw error ?? ownerError;
       if (controller.signal.aborted) return;
       const memberships = (data ?? []) as unknown as { teams: Organization | Organization[] | null }[];
       const memberOrganizations = memberships.flatMap(row => {
         const organization = Array.isArray(row.teams) ? row.teams[0] : row.teams;
-        return organization && !organization.dissolved_at ? [{ ...organization, isOwner: organization.owner_user_id === user.id }] : [];
+        return organization && !organization.dissolved_at ? [{ ...organization, isOwner: organization.ultimate_owner_user_id === user.id }] : [];
       });
       const byId = new Map(memberOrganizations.map(organization => [organization.id, organization]));
       for (const organization of (owned ?? []) as Omit<Organization, "isOwner">[]) {

@@ -20,9 +20,9 @@ export async function GET(request: Request) {
       .eq("team_id", teamId)
       .eq("user_id", auth.user.id)
       .maybeSingle(),
-      supabaseAdmin.from("teams").select("owner_user_id").eq("id", teamId).maybeSingle(),
+      supabaseAdmin.from("teams").select("ultimate_owner_user_id").eq("id", teamId).maybeSingle(),
     ]);
-    if (!membership && organization?.owner_user_id !== auth.user.id) {
+    if (!membership && organization?.ultimate_owner_user_id !== auth.user.id) {
       return Response.json({ error: "Недостаточно прав" }, { status: 403 });
     }
   }

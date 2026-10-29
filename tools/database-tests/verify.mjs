@@ -19,6 +19,9 @@ import {verifyTrainingSchedule} from './training-schedule.mjs';
 import {verifyChat} from './chat.mjs';
 import {verifyLeaveOrganization} from './leave-organization.mjs';
 import {verifyOrganizationOwnership} from './organization-ownership.mjs';
+import {verifyOrganizationHierarchy} from './organization-hierarchy.mjs';
+import {verifyContractProposals} from './contracts.mjs';
+import {verifyContractPrizeAllocation} from './contract-prize-allocation.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -200,6 +203,9 @@ try {
  await verifyChat(db,id);
  await verifyMainCoins(db,id,config);
  await verifyOrganizationOwnership(db,id);
+ await verifyOrganizationHierarchy(db,id);
+ await verifyContractProposals(db,id);
+ await verifyContractPrizeAllocation(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

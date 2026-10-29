@@ -12,6 +12,7 @@ import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import TeamMapStatistics from "@/components/TeamMapStatistics";
 import LeaveOrganizationControl from "@/components/LeaveOrganizationControl";
+import ModuleLink from "@/components/ModuleLink";
 
 interface Team {
   id: string;
@@ -26,7 +27,8 @@ interface Team {
   main_rating: number | null;
   reputation_score: number;
   dissolved_at: string | null;
-  owner_user_id: string | null;
+  ultimate_owner_user_id: string | null;
+  owner_team_id: string | null;
 }
 
 interface LeadershipTransfer {
@@ -95,6 +97,7 @@ export default function TeamPage() {
   const [isLeader, setIsLeader] = useState(false);
   const [isOrganizationOwner, setIsOrganizationOwner] = useState(false);
   const [ownerNickname, setOwnerNickname] = useState("");
+  const [parentOrganization, setParentOrganization] = useState<{ id: string; name: string } | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isMember, setIsMember] = useState(false);
@@ -144,6 +147,14 @@ export default function TeamPage() {
       setEditType(data.type);
       setEditSocial(data.social_link || "");
       setAvatarUrl(data.avatar_url || "");
+      if (data.ultimate_owner_user_id) {
+        const { data: owner } = await supabase.from("profiles").select("nickname").eq("id", data.ultimate_owner_user_id).maybeSingle();
+        setOwnerNickname(owner?.nickname || "Игрок");
+      } else setOwnerNickname("");
+      if (data.owner_team_id) {
+        const { data: parent } = await supabase.from("teams").select("id,name").eq("id", data.owner_team_id).maybeSingle();
+        setParentOrganization(parent);
+      } else setParentOrganization(null);
       return data;
     }
     return null;
@@ -201,15 +212,11 @@ export default function TeamPage() {
         const membership = loadedMembers.find((member) => member.user_id === user.id);
         const organizationIsActive = !teamData?.dissolved_at;
         const leader = organizationIsActive && (teamData?.leader_id === user.id || membership?.role_in_team === "leader");
-        const owner = organizationIsActive && teamData?.owner_user_id === user.id;
+        const owner = organizationIsActive && teamData?.ultimate_owner_user_id === user.id;
         const manager = organizationIsActive && (owner || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? ""));
         setIsLeader(leader);
         setIsOrganizationOwner(owner);
         setCanManage(manager);
-        if (teamData?.owner_user_id) {
-          const { data: ownerProfile } = await supabase.from("profiles").select("nickname").eq("id", teamData.owner_user_id).maybeSingle();
-          setOwnerNickname(ownerProfile?.nickname || "Игрок");
-        }
         if (owner) {
           const { data: accessRows, error: accessError } = await supabase.from("organization_contract_access")
             .select("user_id,granted_at").eq("team_id", id).order("granted_at", { ascending: true });
@@ -377,7 +384,7 @@ export default function TeamPage() {
     const [updatedTeam, updatedMembers] = await Promise.all([fetchTeam(), fetchMembers()]);
     const membership = updatedMembers.find(member => member.user_id === currentUser.id);
     setIsLeader(updatedTeam?.leader_id === currentUser.id || membership?.role_in_team === "leader");
-    setCanManage(updatedTeam?.owner_user_id === currentUser.id || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? ""));
+    setCanManage(updatedTeam?.ultimate_owner_user_id === currentUser.id || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? ""));
     setOwnerNewLeaderId("");
     setRemovePreviousLeader(false);
     setInviteMessage(removePreviousLeader
@@ -570,7 +577,8 @@ export default function TeamPage() {
             </div>
             <p className="text-gray-300 mb-4">{team.description || "Нет описания"}</p>
             <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {team.main_rating == null ? "—" : formatNumber(Number(team.main_rating), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
-            <p className="mb-4 text-sm text-slate-300">Владелец: {team.owner_user_id ? <Link href={`/profile/${team.owner_user_id}`} className="text-cyan-300 hover:underline">{ownerNickname || "Загрузка…"}</Link> : <span>не назначен</span>}</p>
+            <p className="mb-2 text-sm text-slate-300">Владелец: {team.ultimate_owner_user_id ? <Link href={`/profile/${team.ultimate_owner_user_id}`} className="text-cyan-300 hover:underline">{ownerNickname || "Загрузка…"}</Link> : <span>не назначен</span>}</p>
+            {parentOrganization && <p className="mb-4 text-sm text-slate-300">Принадлежит организации: <Link href={`/teams/${parentOrganization.id}`} className="text-cyan-300 hover:underline">{parentOrganization.name}</Link></p>}
             {team.social_link && <a href={team.social_link} target="_blank" className="text-blue-400 block mb-4">Сообщество →</a>}
             {isLeader && (
               <div className="flex gap-2 flex-wrap">
@@ -613,6 +621,8 @@ export default function TeamPage() {
         )}
       </div>
 
+      {currentUser && (isMember || isOrganizationOwner || isLeader) && !team.dissolved_at && <ModuleLink moduleId="contracts" href={`/contracts?organizationId=${team.id}`} userId={currentUser.id}>Контракты организации</ModuleLink>}
+
       {isOrganizationOwner && !team.dissolved_at && (
         <section className="mt-6 space-y-5 rounded-xl border border-amber-400/30 bg-slate-900/90 p-5">
           <div>
@@ -642,7 +652,7 @@ export default function TeamPage() {
             <div className="flex flex-wrap gap-2">
               <select className="min-w-48 flex-1 rounded bg-slate-800 p-2 text-white" value={contractAccessUserId} onChange={event => setContractAccessUserId(event.target.value)}>
                 <option value="">Выберите участника</option>
-                {members.filter(member => member.user_id !== team.leader_id && member.user_id !== team.owner_user_id && !contractAccess.some(access => access.user_id === member.user_id)).map(member => <option key={member.user_id} value={member.user_id}>{member.nickname}</option>)}
+                {members.filter(member => member.user_id !== team.leader_id && member.user_id !== team.ultimate_owner_user_id && !contractAccess.some(access => access.user_id === member.user_id)).map(member => <option key={member.user_id} value={member.user_id}>{member.nickname}</option>)}
               </select>
               <button type="button" onClick={() => void setContractAccessForMember(contractAccessUserId, true)} disabled={!contractAccessUserId || organizationBusy} className="rounded bg-cyan-700 px-4 py-2 disabled:opacity-50">Выдать доступ</button>
             </div>
