@@ -62,7 +62,7 @@ export async function verifyContinuity(db,id,base){
  await db.query(`select u2_cancel_event($1,$2,'Retry')`,[id(1),event]);
  assert.equal(Number(await scalar('select balance from site_wallets where user_id=$1',[id(2)])),balance-10);
  // Fifth player's exact rating overtakes fourth while both still display 60.0.
- // Use a team with a published game: a new team stays unranked until it plays.
+ // Membership uses exact best-four ratings, including players with the same displayed value.
  await db.query(`insert into teams(id,name,reputation_score) values($1,'Best four',50)`,[id(6106)]);
  for(let n=0;n<5;n++){
   await db.query(`insert into auth.users(id) values($1)`,[id(6100+n)]);
@@ -75,7 +75,7 @@ export async function verifyContinuity(db,id,base){
  const beforeExact=Number(await scalar(`select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'`,[id(110)]));
  await db.query(`update competition_ratings set exact_rating=60.049 where target_type='player' and target_id=$1 and mode='main'`,[id(6104)]);
  const afterExact=Number(await scalar(`select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'`,[id(110)]));
- assert.ok(Math.abs((afterExact-beforeExact)-.55*.009/4)<1e-10);
+ assert.ok(Math.abs((afterExact-beforeExact)-.009/4)<1e-10);
  assert.equal(Number(await scalar(`select reputation_score from teams where id=$1`,[id(6106)])),50);
  assert.equal(Number(await scalar(`select count(*) from organization_participation_history where organization_id=$1`,[id(6106)])),0);
  await db.query(`insert into organization_participation_history(id,organization_id,organization_name,mode,place,kills,result_status) values($1,$2,'Best four','tournament',1,10,'completed')`,[id(6107),id(6106)]);

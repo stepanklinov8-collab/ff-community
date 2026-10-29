@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCoins } from "@/lib/economy/currency";
 import Image from "next/image";
 import Link from "next/link";
 import {getPublicStatistics, type PublicStatistics} from "@/lib/competition/public-statistics";
@@ -10,7 +11,6 @@ import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
-import { competitionCost } from "@/lib/competition/cost";
 import { playerRoles, type PlayerRoleId } from "@/lib/profile/roles";
 import { normalizeContactSocialUrl } from "@/lib/profile/contact-social";
 import ProfileContactButton from "@/components/ProfileContactButton";
@@ -90,7 +90,7 @@ function roleLabel(role: string, type: Team["type"]) {
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
-  const { setLocale, formatNumber } = useLanguage();
+  const { locale, setLocale } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -156,7 +156,7 @@ export default function ProfilePage() {
       const mainStats = statsResult?.summaries.find(row => row.mode === "main");
       setStatistics(statsResult ?? undefined);
       const kills = mainStats?.kills ?? 0, matches = mainStats?.games ?? 0;
-      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? competitionCost({kills, deaths: mainStats?.deaths, games: matches, wins: mainStats?.wins ?? 0, rating: 50, reputation: 50})) });
+      setStats({ kills, matches, ratio: matches > 0 ? Number((kills / matches).toFixed(2)) : 0, cost: Number(mainStats?.cost ?? 0) });
 
       const memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
       const currentTeams = memberships.flatMap((membership) => {
@@ -331,7 +331,7 @@ export default function ProfilePage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating === null ? "—" : profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", `${formatNumber(stats.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`], ["Монеты", profileMeta.balance], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
+        {[["Уровень", profileMeta.level], ["Рейтинг", profileMeta.rating === null ? "—" : profileMeta.rating.toFixed(0)], ["Репутация", profileMeta.reputationEvents < 3 ? "Новый" : profileMeta.reputation.toFixed(0)], ["Стоимость", formatCoins(stats.cost, locale)], ["Баланс", formatCoins(profileMeta.balance, locale)], ["Киллы", stats.kills], ["Матчи", stats.matches], ["У/С", stats.ratio]].map(([label, value]) => (
           <div key={label} className="stat-card"><p className="text-xs uppercase tracking-[.18em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{value}</p></div>
         ))}
       </section>

@@ -7,7 +7,7 @@ const {emptyDraft,publishResults,mayEditResults,draftSchema,defaultPlacePoints}=
 const {mainRating,withReputation,organizationRating,soloRating,compareLeaderboard,teamDuelRating,playerDuelRating}=await import('../../src/lib/competition/ratings.ts');
 const {parseCsv,tabularRecords,importRecords,mergeRecognizedRows}=await import('../../src/lib/competition/import.ts');
 const {eventConfiguration}=await import('../../src/lib/competition/event-schema.ts');
-const {competitionCost,competitionOrganizationCost}=await import('../../src/lib/competition/cost.ts');
+const {playerValue,organizationValue,utilityPrice,bonusPrice,prizePrice}=await import('../../src/lib/economy/valuation.ts');
 const {archiveCards}=await import('../../src/lib/competition/archive.ts');
 const {replaceWithGuest}=await import('../../src/lib/competition/result-editor.ts');
 const {deliverPushTokens}=await import('../../src/lib/firebase/delivery.ts');
@@ -179,18 +179,26 @@ test('event schema normalizes Supabase timestamp format before saving',()=>{
  const parsed=eventConfiguration.parse(config);
  assert.equal(parsed.publishAt,'2026-09-21T06:00:00.000Z');assert.equal(parsed.sessions[0].startTime,'2026-10-01T12:00:00.000Z');
 });
-test('competition cost uses useful utility, diminishing confidence, and hundredth-ruble scale',()=>{
- const one=competitionCost({kills:24,deaths:12,games:3,wins:1,rating:60,reputation:50,utility:.8,weightedSessions:1});
- const three=competitionCost({kills:24,deaths:12,games:9,wins:3,rating:60,reputation:50,utility:.8,weightedSessions:3});
- const many=competitionCost({kills:240,deaths:120,games:30,wins:10,rating:60,reputation:50,utility:.8,weightedSessions:30});
- assert.ok(one>0&&three>one&&many>three);assert.ok(three<one*3&&many<100);
- assert.equal(competitionCost({kills:0,games:0,wins:0,rating:80,reputation:80}),0);
+test('new values use independent useful rating, capped extra points and diminishing prize growth',()=>{
+ assert.equal(playerValue(0,0,0),0);
+ assert.equal(playerValue(500,499,0),100000000);
+ assert.equal(playerValue(999,499,0),100000000);
+ assert.ok(Math.abs(utilityPrice(300)-45000000)<.001);
+ assert.equal(bonusPrice(.5),50);
+ assert.equal(bonusPrice(1.5),100.5);
+ assert.ok(prizePrice(20000)-prizePrice(10000)<prizePrice(10000));
+ const input={memberValues:[100,200,300,400,500],base:0,bonus:0,rating:0,totalRating:0,prizes:0};
+ assert.equal(organizationValue(input),1500);
+ assert.equal(organizationValue({...input,base:500,bonus:499,rating:999,totalRating:999}),2000001500);
 });
-test('organization cost adds roster and organization merits above member value',()=>{
- const player=competitionCost({kills:24,deaths:12,games:3,wins:1,rating:60,reputation:50,utility:.8,weightedSessions:2});
- const organization=competitionOrganizationCost({memberCosts:[player,player],rating:80,results:70,achievements:65,reputation:75,memberRatings:[60,60],memberReputations:[50,50],weightedSessions:6,winRate:.5});
- assert.ok(organization>player*2);
+
+test('prizes require a played organization, non-negative whole amounts and no duplicates',()=>{
+ const {context,draft}=fixture();draft.prizes=[{registrationId:context.entrants[0].id,amount:250}];
+ assert.deepEqual(publishResults(context,draft,true).prizes,draft.prizes);
+ draft.prizes.push({...draft.prizes[0]});assert.throws(()=>publishResults(context,draft,true));
+ draft.prizes=[{registrationId:context.entrants[0].id,amount:1.5}];assert.equal(draftSchema.safeParse(draft).success,false);
 });
+
 test('K25: elapsed sessions archive separately then collapse without requiring results',()=>{
  const sessions=[{id:id(9100),start_time:'2026-09-20T12:00:00Z',end_time:'2026-09-20T13:00:00Z'},{id:id(9101),start_time:'2026-09-25T12:00:00Z',end_time:'2026-09-25T13:00:00Z'}];
  const events=[{id:id(9000),sessions}];const middle=archiveCards(events,Date.parse('2026-09-22T12:00:00Z'));

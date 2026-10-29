@@ -1,3 +1,6 @@
+import {verifyEconomySnapshot} from './economy-snapshot.mjs';
+import {verifyReserveQueue} from './reserve-queue.mjs';
+import {verifyEconomyValues} from './economy-values.mjs';
 import {verifySessionAwards} from './session-awards.mjs';
 import {verifyPlayerRating999} from './player-rating-999.mjs';
 import {PGlite} from '@electric-sql/pglite';
@@ -48,6 +51,7 @@ try {
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}
  }
+ if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  await db.query(`insert into auth.users(id) values($1),($2),($3)`,[id(1),id(2),id(3)]);
  await db.query(`insert into public.user_roles values($1,'admin')`,[id(1)]);
@@ -176,6 +180,9 @@ try {
  await verifyLeaveOrganization(db,id);
  await verifySessionAwards(db,id,config);
  await verifyPlayerRating999(db,id,config);
+ await verifyEconomyValues(db,id,config);
+ await verifyReserveQueue(db,id,config);
  await verifyChat(db,id);
+}
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

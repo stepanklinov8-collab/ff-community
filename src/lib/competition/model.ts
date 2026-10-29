@@ -29,6 +29,7 @@ export const draftSchema = z.object({
   })),
   manualOrder: z.array(z.string().uuid()).default([]),
   mvpUserId: z.string().uuid().nullable().optional(),
+  prizes: z.array(z.object({registrationId:z.string().uuid(),amount:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)})).optional(),
 });
 export type Draft = z.infer<typeof draftSchema>;
 export type ResultInput = z.infer<typeof resultInputSchema>;
@@ -60,7 +61,7 @@ export interface Standing {
   place: number; kills: number; points: number; placeSum: number; wins: number; gamesPlayed: number;
   bonus: number; manual: boolean;
 }
-export interface PublishedResults { rows: GameResult[]; standings: Standing[]; rules: Rules; mvps: string[] }
+export interface PublishedResults { rows: GameResult[]; standings: Standing[]; rules: Rules; mvps: string[]; prizes?: Array<{registrationId:string;amount:number}> }
 export interface ValidationIssue { code: string; registrationId?: string; gameId?: string; message: string; candidateUserIds?: string[] }
 export class CompetitionError extends Error {
   issues: ValidationIssue[];
@@ -204,7 +205,17 @@ export function publishResults(context: CompetitionContext, draft: Draft, allowM
     }
     mvps = candidates.length > 1 ? [draft.mvpUserId!] : candidates;
   }
-  return { rows, standings, rules: context.rules, mvps };
+  const prizes = (draft.prizes ?? []).filter(prize => prize.amount > 0);
+  const prizeIds = new Set<string>();
+  for (const prize of prizes) {
+    const standing = standings.find(row => row.registrationId === prize.registrationId);
+    if (prizeIds.has(prize.registrationId) || !standing?.teamId || !standing.gamesPlayed
+      || !Number.isSafeInteger(prize.amount) || !["training","tournament"].includes(context.rules.mode)) {
+      throw new CompetitionError([{code:"invalid_prize",message:"Проверьте призовые: одна сумма на игравшую команду"}]);
+    }
+    prizeIds.add(prize.registrationId);
+  }
+  return { rows, standings, rules: context.rules, mvps, prizes };
 }
 
 /** A fair comparison needs personal statistics for every played team. Guests cannot earn account awards. */

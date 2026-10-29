@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCoins } from "@/lib/economy/currency";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -50,6 +51,8 @@ interface Session {
 }
 
 interface Registration {
+  queue_position?: number | null;
+  is_own?: boolean;
   id: string;
   session_id: string | null;
   team_id: string | null;
@@ -67,6 +70,7 @@ interface Registration {
 }
 
 interface RegistrationCount {
+  waiting?: number;
   session_id: string;
   registered: number;
   capacity: number | null;
@@ -515,7 +519,7 @@ export default function EventPage() {
   const selectedCount = registrationCounts[selectedSessionId];
   const registrationSummary = selectedSession && (
     <p className="mb-3 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200" aria-live="polite">
-      <span className="sr-only">Зарегистрировано / всего мест: </span>{selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "…"}
+      <span className="sr-only">Зарегистрировано / всего мест: </span>{selectedCount ? `${selectedCount.registered}/${selectedCount.capacity ?? "∞"}` : "…"}{!!selectedCount?.waiting&&<span className="ml-3 text-amber-200">Запас: {selectedCount.waiting}</span>}
     </p>
   );
   const renderSession = (s: Session) => {
@@ -575,7 +579,7 @@ export default function EventPage() {
         )}
 
         <div className="grid grid-cols-2 gap-4 mt-6 text-sm">
-          {event.cost > 0 && <div><span className="text-gray-400">Стоимость:</span> {event.cost} ₽</div>}
+          {event.cost > 0 && <div><span className="text-gray-400">Стоимость:</span> {formatCoins(event.cost, locale)}</div>}
           {event.organizer && <div><span className="text-gray-400">Организатор:</span> {event.organizer}</div>}
           {event.max_teams > 0 && <div><span className="text-gray-400">Лимит команд:</span> {event.max_teams}</div>}
           <div><span className="text-gray-400">Мин. игроков:</span> {event.min_players || 4}</div>
@@ -756,6 +760,7 @@ export default function EventPage() {
         </div>
       )}
 
+      {waiting.filter(row=>row.is_own&&!((canManageTeam||row.participant_user_id===currentUser?.id)&&row.id===selectedRegistration?.id)).map(row=><p key={`own-reserve:${row.id}`} className="my-4 rounded-lg border border-amber-400/30 p-4" role="status">{row.team_name}: запас №{row.queue_position??"—"}. При освобождении места до закрытия регистрации заявка автоматически попадёт в основной состав.</p>)}
       {alreadyRegistered && (canManageTeam || selectedRegistration?.participant_user_id === currentUser?.id) && (
         <div className="mt-6 bg-gray-800 p-4 rounded">
           <label className="text-sm text-gray-300 block mb-2">Выбранное время</label>
@@ -771,7 +776,7 @@ export default function EventPage() {
           {registrationSummary}
           <p className="mb-2">
             {selectedRegistration?.participant_user_id ? "Личная заявка: " : "Заявка команды: "}
-            {registrationStatus === "confirmed" ? "✅ участие подтверждено" : "⏳ лист ожидания"}
+            {registrationStatus === "confirmed" ? "✅ участие подтверждено" : `⏳ Запас №${selectedRegistration?.queue_position??"—"}`}
           </p>
 
           {selectedRegistration?.team_id && canManageTeam && (
@@ -908,7 +913,7 @@ export default function EventPage() {
               <button onClick={() => setSelectedRegistrationId(selectedRegistrationId === r.id ? null : r.id)} className="text-blue-400 hover:underline">
                 {r.team_name_override || r.team_name}
               </button>
-              <span className="text-yellow-400">⏳</span>
+              <span className="text-yellow-400">Запас №{r.queue_position??"—"}</span>
             </div>
           ))}
         </div>

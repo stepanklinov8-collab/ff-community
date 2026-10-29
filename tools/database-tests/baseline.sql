@@ -10,7 +10,7 @@ create table public.profiles(id uuid primary key references auth.users(id),nickn
 create table public.user_roles(user_id uuid references auth.users(id),role text);
 create function public.is_full_admin(p_user uuid) returns boolean language sql stable as $$select exists(select 1 from public.user_roles where user_id=p_user and role in('admin','superadmin'))$$;
 create function public.is_owner(p_user uuid) returns boolean language sql stable as $$select exists(select 1 from public.user_roles where user_id=p_user and role='superadmin')$$;
-create table public.teams(id uuid primary key,name text,type text default 'team',main_rating numeric default 1,results_score numeric default 1,achievements_score numeric default 1,reputation_score numeric default 50);
+create table public.teams(id uuid primary key,name text,dissolved_at timestamptz,type text default 'team',main_rating numeric default 1,results_score numeric default 1,achievements_score numeric default 1,reputation_score numeric default 50);
 create table public.team_members(team_id uuid references public.teams(id),user_id uuid references public.profiles(id),role_in_team text default 'member',primary key(team_id,user_id));
 create function public.can_manage_team(p_team uuid,p_user uuid) returns boolean language sql stable as $$select public.is_full_admin(p_user) or exists(select 1 from public.team_members where team_id=p_team and user_id=p_user and role_in_team in('leader','senior_deputy','deputy'))$$;
 create table public.events(id uuid primary key default gen_random_uuid(),title text,type text,organizer_user_id uuid references auth.users(id),max_teams integer default 12,min_players integer default 4,cost integer default 0,
@@ -51,7 +51,7 @@ grant select on public.events to anon,authenticated;
 alter table public.clan_wars add column is_hidden boolean default false;
 alter table public.betting_markets add column subject_team_name text,add column model_snapshot jsonb default '{}',add column locks_at timestamptz,add column created_at timestamptz default now();
 alter table public.site_bets add column quote_id uuid,add column placed_at timestamptz default now();
-create table public.economy_settings(singleton boolean primary key default true,minimum_stake bigint default 10,maximum_stake bigint default 200,maximum_odds numeric default 15);
+create table public.economy_settings(singleton boolean primary key default true,currency_name text not null default 'Монеты Арены',minimum_stake bigint default 10,maximum_stake bigint default 200,maximum_odds numeric default 15);
 insert into public.economy_settings(singleton) values(true);
 
 alter table public.clan_wars add column cancelled_at timestamptz,add column cancelled_by uuid,add column cancellation_reason text;

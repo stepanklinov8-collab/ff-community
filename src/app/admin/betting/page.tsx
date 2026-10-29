@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCoins, SITE_CURRENCY_NAME } from "@/lib/economy/currency";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -87,7 +88,7 @@ export default function AdminBettingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "settings",
-        currencyName: read("currency-name"),
+        currencyName: SITE_CURRENCY_NAME,
         startingBalance: Number(read("starting-balance")),
         minimumStake: Number(read("minimum-stake")),
         maximumStake: Number(read("maximum-stake")),
@@ -112,10 +113,10 @@ export default function AdminBettingPage() {
         <h2 className="mb-3 text-lg font-bold">{t("adminBetting.currencyTitle")}</h2>
         <p className="mb-4 text-xs text-slate-500">{t("adminBetting.currencyNote")}</p>
         <div className="grid gap-3 md:grid-cols-5">
-          <label className="text-xs text-slate-400">{t("adminBetting.name")}<input id="currency-name" defaultValue={data.settings.currency_name} /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.startBalance")}<input id="starting-balance" type="number" min="0" defaultValue={data.settings.starting_balance} /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.minStake")}<input id="minimum-stake" type="number" min="1" defaultValue={data.settings.minimum_stake} /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.maxStake")}<input id="maximum-stake" type="number" min="1" defaultValue={data.settings.maximum_stake} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.name")}<input id="currency-name" value={SITE_CURRENCY_NAME} readOnly /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.startBalance")}, {SITE_CURRENCY_NAME}<input id="starting-balance" type="number" min="0" defaultValue={data.settings.starting_balance} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.minStake")}, {SITE_CURRENCY_NAME}<input id="minimum-stake" type="number" min="1" defaultValue={data.settings.minimum_stake} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.maxStake")}, {SITE_CURRENCY_NAME}<input id="maximum-stake" type="number" min="1" defaultValue={data.settings.maximum_stake} /></label>
           <label className="text-xs text-slate-400">{t("adminBetting.maxOdds")}<input id="maximum-odds" type="number" min="1.10" step=".01" defaultValue={data.settings.maximum_odds} /></label>
         </div>
         <button className="secondary-button mt-4" type="button" onClick={() => void saveSettings()}>{t("adminBetting.save")}</button>
@@ -189,7 +190,7 @@ export default function AdminBettingPage() {
           const outcomeLabel=market.outcome==="won"?"исход состоялся":market.outcome==="lost"?"исход не состоялся":market.outcome==="void"?"возврат":"";
           return <article key={market.id} className="cyber-card p-4 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><strong>{market.subject_team_name || t("adminBetting.outcome")}</strong><p className="mt-1 text-slate-400">{market.mode} · {market.market_type} · {market.line ?? market.selection_value} · ×{Number(market.odds).toFixed(2)}</p></div><span className={`rounded-full border px-3 py-1 text-xs font-bold ${settled?"border-emerald-400/30 bg-emerald-400/[.07] text-emerald-200":"border-amber-400/25 bg-amber-400/[.06] text-amber-200"}`}>{statusLabel}{outcomeLabel?` · ${outcomeLabel}`:""}</span></div>
-            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставок</span><p className="mt-1 font-bold">{market.bets.length}</p></div><div><span className="text-xs text-slate-500">Общая сумма</span><p className="mt-1 font-bold">{totalStake}</p></div><div><span className="text-xs text-slate-500">Выплачено</span><p className="mt-1 font-bold">{settled?totalPayout:"—"}</p></div><div><span className="text-xs text-slate-500">Ожидают расчёта</span><p className={`mt-1 font-bold ${pendingCount?"text-amber-300":"text-emerald-300"}`}>{pendingCount}</p></div></div>
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставок</span><p className="mt-1 font-bold">{market.bets.length}</p></div><div><span className="text-xs text-slate-500">Общая сумма</span><p className="mt-1 font-bold">{formatCoins(totalStake, locale)}</p></div><div><span className="text-xs text-slate-500">Выплачено</span><p className="mt-1 font-bold">{settled ? formatCoins(totalPayout, locale) : "—"}</p></div><div><span className="text-xs text-slate-500">Ожидают расчёта</span><p className={`mt-1 font-bold ${pendingCount?"text-amber-300":"text-emerald-300"}`}>{pendingCount}</p></div></div>
           </article>;
         })}</div>
       </section>

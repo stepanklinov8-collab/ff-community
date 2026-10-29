@@ -22,7 +22,7 @@ export async function verifyLegacyRegistration(db,id,base){
   }
   await db.query(`update event_sessions set start_time=now()+interval '9 minutes' where id=$1`,[id(6200)]);
   await assert.rejects(()=>db.query('select cancel_session_registration($1)',[registrations[2]]),/Состав уже закрыт/);
-  await db.query('update event_sessions set start_time=$2 where id=$1',[id(6200),config.sessions[0].startTime]);
+  await db.query('update event_sessions set start_time=$2,registration_close_time=$2 where id=$1',[id(6200),config.sessions[0].startTime]);
   await db.query(`select set_config('request.jwt.claim.sub',$1,false)`,[id(6210)]);
   const promoted=(await db.query('select cancel_session_registration($1) id',[registrations[0]])).rows[0].id;
   assert.equal(promoted,registrations[2]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCoins } from "@/lib/economy/currency";
 import Image from "next/image";
 import {archiveCards} from "@/lib/competition/archive";
 import {competitionText} from "@/i18n/competition";
@@ -51,7 +52,7 @@ function registrationStatus(session: EventSession | undefined) {
 
 export default function TournamentsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { t, locale, formatDate, formatNumber } = useLanguage();
+  const { t, locale, formatDate } = useLanguage();
   const [events, setEvents] = useState<EventWithSessions[]>([]);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -153,7 +154,7 @@ export default function TournamentsPage() {
                   {event.image_url ? <Image src={event.image_url} alt={event.title} fill sizes="(max-width: 1024px) 100vw, 50vw" unoptimized className="object-cover transition duration-500 group-hover:scale-105" /> : <Image src="/brand/omcite-hero.jpg" alt="" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover opacity-35 transition duration-500 group-hover:scale-105" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#071019] via-[#071019]/20 to-transparent" />
                   <span className="badge badge-blue absolute left-4 top-4">{typeLabels[event.type] || event.type}</span>
-                  {event.cost && event.cost > 0 ? <span className="badge badge-yellow absolute right-4 top-4">{formatNumber(event.cost)} ₽</span> : <span className="badge badge-green absolute right-4 top-4">{t("tournaments.free")}</span>}
+                  {event.cost && event.cost > 0 ? <span className="badge badge-yellow absolute right-4 top-4">{formatCoins(event.cost, locale)}</span> : <span className="badge badge-green absolute right-4 top-4">{t("tournaments.free")}</span>}
                 </div>
                 <div className="p-5">
                   <h2 className="text-2xl font-black transition group-hover:text-cyan-300">{event.title}</h2>

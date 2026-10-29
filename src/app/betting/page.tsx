@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCoinAmount, formatCoins, SITE_CURRENCY_NAME } from "@/lib/economy/currency";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -59,7 +60,7 @@ type PageData = {
 
 const initialData: PageData = {
   balance: 0,
-  currencyName: "Монеты Арены",
+  currencyName: SITE_CURRENCY_NAME,
   minimumStake: 10,
   maximumStake: 200,
   sources: [],
@@ -257,7 +258,7 @@ export default function BettingPage() {
           <h1 className="mt-2 text-3xl font-black">{t("betting.title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">{t("betting.description")}</p>
         </div>
-        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">{t("betting.balance")}</span><p className="text-2xl font-black text-amber-300">{data.balance} {data.currencyName}</p></div>
+        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">{t("betting.balance")}</span><p className="text-2xl font-black text-amber-300">{formatCoins(data.balance, locale)}</p></div>
       </div>
 
       {message && <p className="mb-4 rounded-xl border border-cyan-800/40 bg-cyan-950/20 p-3 text-sm">{message}</p>}
@@ -304,8 +305,8 @@ export default function BettingPage() {
           {quote && <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/[.05] p-4">
             {quote.available && quote.odds != null ? <>
               <div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-sm text-slate-400">{t("betting.yourOdds")}</span><p className="text-3xl font-black text-amber-300">×{Number(quote.odds).toFixed(2)}</p></div><span className={secondsLeft > 10 ? "text-sm text-emerald-300" : "text-sm text-red-300"}>{secondsLeft > 0 ? t("betting.validFor", { seconds: secondsLeft }) : t("betting.quoteExpired")}</span></div>
-              <div className="mt-4 flex flex-wrap gap-2"><input className="max-w-56" type="number" min={data.minimumStake} max={data.maximumStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} placeholder={`${data.minimumStake}–${data.maximumStake}`} /><button className="primary-button" type="button" disabled={busy || secondsLeft <= 0} onClick={() => void confirmBet()}>{t("betting.confirm")}</button></div>
-              {stake && Number(stake) > 0 && <p className="mt-2 text-xs text-slate-400">{t("betting.potentialPayout", { amount: Math.floor(Number(stake) * Number(quote.odds)), currency: data.currencyName })}</p>}
+              <div className="mt-4 flex flex-wrap gap-2"><input className="max-w-56" type="number" min={data.minimumStake} max={data.maximumStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} placeholder={`${data.minimumStake}–${data.maximumStake} ${SITE_CURRENCY_NAME}`} aria-label={SITE_CURRENCY_NAME} /><button className="primary-button" type="button" disabled={busy || secondsLeft <= 0} onClick={() => void confirmBet()}>{t("betting.confirm")}</button></div>
+              {stake && Number(stake) > 0 && <p className="mt-2 text-xs text-slate-400">{t("betting.potentialPayout", { amount: formatCoinAmount(Math.floor(Number(stake) * Number(quote.odds)), locale), currency: SITE_CURRENCY_NAME })}</p>}
             </> : <p className="text-amber-300">{t("betting.unavailable")}</p>}
           </div>}
         </section>
@@ -314,21 +315,21 @@ export default function BettingPage() {
       {data.bets.length > 0 && <section className="mt-8 space-y-6">
         <div><h2 className="text-xl font-bold">{t("betting.myBets")}</h2><p className="mt-1 text-sm text-slate-400">{locale === "ru" ? "Фактическая выплата показывается отдельно от возможной. У проигранной ставки выплата равна нулю." : locale === "kk" ? "Нақты төлем ықтимал төлемнен бөлек көрсетіледі." : "Чыныгы төлөм мүмкүн болгон төлөмдөн өзүнчө көрсөтүлөт."}</p></div>
         <div><h3 className="mb-3 text-base font-bold text-amber-200">{locale === "ru" ? "Активные ставки" : locale === "kk" ? "Белсенді бәстер" : "Активдүү коюмдар"}</h3>
-          {activeBets.length === 0 ? <p className="rounded-xl border border-white/10 bg-white/[.03] p-4 text-sm text-slate-500">{locale === "ru" ? "Нет ставок, ожидающих результата." : locale === "kk" ? "Нәтижені күтіп тұрған бәстер жоқ." : "Жыйынтык күтүп жаткан коюмдар жок."}</p> : <BetCards bets={activeBets} currencyName={data.currencyName} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} />}
+          {activeBets.length === 0 ? <p className="rounded-xl border border-white/10 bg-white/[.03] p-4 text-sm text-slate-500">{locale === "ru" ? "Нет ставок, ожидающих результата." : locale === "kk" ? "Нәтижені күтіп тұрған бәстер жоқ." : "Жыйынтык күтүп жаткан коюмдар жок."}</p> : <BetCards bets={activeBets} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} />}
         </div>
-        {settledBets.length > 0 && <div><h3 className="mb-3 text-base font-bold text-emerald-200">{locale === "ru" ? "Результаты ставок" : locale === "kk" ? "Бәс нәтижелері" : "Коюмдардын жыйынтыгы"}</h3><BetCards bets={settledBets} currencyName={data.currencyName} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} /></div>}
+        {settledBets.length > 0 && <div><h3 className="mb-3 text-base font-bold text-emerald-200">{locale === "ru" ? "Результаты ставок" : locale === "kk" ? "Бәс нәтижелері" : "Коюмдардын жыйынтыгы"}</h3><BetCards bets={settledBets} statusLabels={statusLabels} marketLabels={marketLabels} formatDate={formatDate} /></div>}
       </section>}
     </div>
   );
 }
 
-function BetCards({ bets, currencyName, statusLabels, marketLabels, formatDate }: {
+function BetCards({ bets, statusLabels, marketLabels, formatDate }: {
   bets: Bet[];
-  currencyName: string;
   statusLabels: Record<string, string>;
   marketLabels: Record<MarketType, string>;
   formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string;
 }) {
+  const { locale } = useLanguage();
   return <div className="grid gap-3 lg:grid-cols-2">{bets.map((bet) => {
     const market = firstRelated(bet.betting_markets);
     const event = firstRelated(market?.events ?? null);
@@ -342,7 +343,7 @@ function BetCards({ bets, currencyName, statusLabels, marketLabels, formatDate }
     const selection = marketType?.startsWith("kills_") ? `${marketLabels[marketType]} ${market?.line}` : marketType === "exact_place" ? `${marketLabels.exact_place}: ${market?.selection_value}` : marketType ? `${marketLabels[marketType]}${market?.selection_value && !["win", "loss"].includes(marketType) ? `: ${market.selection_value}` : ""}` : "Исход";
     return <article key={bet.id} className="cyber-card overflow-hidden p-4 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs text-slate-500">{event?.title ?? "Ставка"}{session ? ` · Сессия ${session.public_number}` : ""}{game ? ` · Игра ${game.game_number}` : ""}</p><h4 className="mt-1 text-base font-bold text-white">{market?.subject_team_name || "Участник"}</h4><p className="mt-1 text-slate-300">{selection}{game?.map_name ? ` · ${mapTitle(game.map_name)}` : ""}</p></div><span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusTone}`}>{statusLabels[bet.status] ?? bet.status}</span></div>
-      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставка</span><p className="mt-1 font-bold">{bet.stake} {currencyName}</p></div><div><span className="text-xs text-slate-500">Коэффициент</span><p className="mt-1 font-bold">×{Number(bet.odds).toFixed(2)}</p></div><div><span className="text-xs text-slate-500">Возможная</span><p className="mt-1 font-bold">{bet.potential_payout}</p></div><div><span className="text-xs text-slate-500">{resultLabel}</span><p className={`mt-1 font-black ${bet.status === "lost" ? "text-red-300" : "text-emerald-300"}`}>{resultAmount} {currencyName}</p></div></div>
+      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4"><div><span className="text-xs text-slate-500">Ставка</span><p className="mt-1 font-bold">{formatCoins(bet.stake, locale)}</p></div><div><span className="text-xs text-slate-500">Коэффициент</span><p className="mt-1 font-bold">×{Number(bet.odds).toFixed(2)}</p></div><div><span className="text-xs text-slate-500">Возможная</span><p className="mt-1 font-bold">{formatCoins(bet.potential_payout, locale)}</p></div><div><span className="text-xs text-slate-500">{resultLabel}</span><p className={`mt-1 font-black ${bet.status === "lost" ? "text-red-300" : "text-emerald-300"}`}>{formatCoins(resultAmount, locale)}</p></div></div>
       <p className="mt-3 text-xs text-slate-600">Принята: {formatDate(bet.placed_at, { dateStyle: "short", timeStyle: "short" })}{bet.settled_at ? ` · Рассчитана: ${formatDate(bet.settled_at, { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
     </article>;
   })}</div>;

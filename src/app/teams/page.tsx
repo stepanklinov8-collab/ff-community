@@ -1,12 +1,12 @@
 "use client";
 
+import { formatCoins } from "@/lib/economy/currency";
 import Image from "next/image";
 import Link from "next/link";
 import { Search, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useLanguage } from "@/components/LanguageProvider";
-import { competitionCost } from "@/lib/competition/cost";
 
 interface TeamRow {
   id: string;
@@ -34,7 +34,7 @@ const PAGE_SIZE = 12;
 
 export default function TeamsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { t, formatNumber } = useLanguage();
+  const { t, locale, formatNumber } = useLanguage();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,7 +64,7 @@ export default function TeamsPage() {
 
       const rows = (data ?? []) as TeamQueryRow[];
       const leaderboard = leaderboardResponse?.ok ? await leaderboardResponse.json() as {items?: Array<{id: string; cost?: number; kills: number; games: number}>} : {items: []};
-      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? competitionCost({kills: item.kills, games: item.games, wins: 0, rating: 1, reputation: 50}))]));
+      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? 0)]));
       setTeams(rows.map((team) => ({ ...team, membersCount: Number(team.team_members?.[0]?.count ?? 0), cost: costById.get(team.id) ?? 0 })));
       setLoading(false);
     };
@@ -161,8 +161,8 @@ export default function TeamsPage() {
                 <p className="mt-2 min-h-10 line-clamp-2 text-sm text-slate-400">{team.description || t("teams.noDescription")}</p>
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
                   <div><strong className="block text-white">{team.membersCount}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.roster")}</span></div>
-                  <div><strong className="block text-cyan-300">{team.main_rating == null ? "—" : formatNumber(Number(team.main_rating), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
-                  <div><strong className="block text-amber-300">{formatNumber(team.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
+                  <div><strong className="block text-cyan-300">{team.main_rating == null ? "—" : formatNumber(Number(team.main_rating), { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
+                  <div><strong className="block text-amber-300">{formatCoins(team.cost, locale)}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
                 </div>
               </div>
             </Link>

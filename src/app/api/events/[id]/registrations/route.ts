@@ -63,14 +63,21 @@ export async function GET(request: Request, context: RouteContext) {
       .order("id")
       .range(a, b));
     const activeCounts = new Map<string, number>();
+    const waitingCounts = new Map<string, number>();
+    const queuePositions = new Map<string, number>();
     for (const row of rows ?? []) {
-      if (row.session_id && (row.status === "confirmed" || row.status === "waiting")) {
+      if (row.session_id && row.status === "waiting") {
+        const position=(waitingCounts.get(row.session_id)??0)+1;
+        waitingCounts.set(row.session_id,position);queuePositions.set(row.id,position);
+      }
+      if (row.session_id && row.status === "confirmed") {
         activeCounts.set(row.session_id, (activeCounts.get(row.session_id) ?? 0) + 1);
       }
     }
     const registrationCounts = (sessions ?? []).map((session) => ({
       session_id: session.id,
       registered: activeCounts.get(session.id) ?? 0,
+      waiting: waitingCounts.get(session.id) ?? 0,
       capacity: session.max_teams ?? event.max_teams ?? null,
     }));
 
@@ -113,6 +120,8 @@ export async function GET(request: Request, context: RouteContext) {
         team_rating: Number(team?.main_rating ?? (row.participant_user_id ? participantById.get(row.participant_user_id)?.main_rating : 1) ?? 1),
         registration_kind: row.participant_user_id ? "individual" : "team",
         status: row.status,
+        queue_position: queuePositions.get(row.id) ?? null,
+        is_own: Boolean((row.team_id && ownTeamIds.has(row.team_id)) || row.participant_user_id === auth?.user.id),
         is_winner: row.is_winner,
         created_at: row.created_at,
         roster,

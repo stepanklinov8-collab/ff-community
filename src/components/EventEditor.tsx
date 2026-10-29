@@ -1,4 +1,5 @@
 "use client";
+import { SITE_CURRENCY_NAME } from "@/lib/economy/currency";
 import EventLifecycle from "./EventLifecycle";
 import TrainingScheduleTemplate from "./TrainingScheduleTemplate";
 import Link from "next/link";
@@ -41,7 +42,7 @@ export default function EventEditor({eventId}:{eventId?:string}){
   setModerationStatus(value.pending?(id?moderationStatus:"pending"):"approved");setId(value.eventId);setRevision(value.revision);saved.current=JSON.stringify(config);dirtyRef.current=false;setDirty(false);setImage(null);setReview(null);setPending(value.pending?config:null);setMessage(value.pending?t("review"):t("saved"));
  }catch(error){setMessage(error instanceof Error?error.message:t("error"));}finally{setBusy(false);}};
  const ruleChange=(patch:Partial<EventConfiguration["rules"]>)=>change({rules:{...config.rules,...patch}});
- const numberField=(key:"cost"|"maxTeams"|"minPlayers",label:Parameters<typeof eventText>[1],min=0,max=1024)=><Field label={t(label)}><input type="number" min={min} max={max} required value={config[key]} onChange={e=>change({[key]:Number(e.target.value)})}/></Field>;
+ const numberField=(key:"cost"|"maxTeams"|"minPlayers",label:Parameters<typeof eventText>[1],min=0,max=1024)=><Field label={key === "cost" ? `${t(label)}, ${SITE_CURRENCY_NAME}` : t(label)}><input type="number" min={min} max={max} required value={config[key]} onChange={e=>change({[key]:Number(e.target.value)})}/></Field>;
  return <main className="page-shell space-y-6"><Link href="/tournaments/manage" className="text-cyan-300">← {t("back")}</Link><h1 className="text-3xl font-black">{t(id?"edit":"create")}</h1><p className="text-white/60">{t("msk")} · {t("lock")}</p>
  {message&&<p role="status" className="whitespace-pre-line rounded-xl border border-white/20 p-4">{message}</p>}
  {pending&&<aside className="cyber-card space-y-3 p-4"><p>{t("pending")}: {pending.title}</p><button className="secondary-button" onClick={()=>{setConfig(pending);setDirty(true);}}>{t("loadPending")}</button></aside>}

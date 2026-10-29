@@ -20,12 +20,14 @@ export async function GET(request:Request,route:Route){
     if(!sessionId)return Response.json({event,sessions,context:null});
     if(!sessions.some(s=>s.id===sessionId))return Response.json({error:"Нет прав на эту сессию"},{status:403});
     const loaded=await loadSession(db,sessionId,auth);
+    const {data:prizesAllowed,error:prizeError}=await db.rpc("u5_session_prizes_allowed",{p_session:sessionId});
+    if(prizeError)throw new Error(prizeError.message);
     const seed=loaded.publication?.draft?{draft:loaded.publication.draft,seeded:0}:await legacySessionDraft(db,sessionId,loaded.context);
     return Response.json({event,sessions,session:loaded.session,groups:loaded.groups,publicId:loaded.publicId,context:loaded.context,
       draft:seed.draft,legacySeeded:seed.seeded,published:loaded.publication?.published??null,
       revision:loaded.publication?.revision??0,configurationRevision:loaded.session.configuration_revision,
       firstPublishedAt:loaded.publication?.first_published_at??null,correctedAt:loaded.publication?.corrected_at??null,
-      canEdit:mayEditResults(loaded.role,loaded.publication?.first_published_at??null),canRank:loaded.role!=="responsible",isAdmin});
+      canEdit:mayEditResults(loaded.role,loaded.publication?.first_published_at??null),canRank:loaded.role!=="responsible",isAdmin,prizesAllowed:!!prizesAllowed});
   }catch(error){return competitionErrorResponse(error);}
 }
 export async function POST(request:Request,route:Route){
@@ -37,6 +39,16 @@ export async function POST(request:Request,route:Route){
     if(loaded.event.id!==id)return Response.json({error:"Сессия другого мероприятия"},{status:403});
     if(!mayEditResults(loaded.role,loaded.publication?.first_published_at??null))return Response.json({error:"Срок исправления результатов истёк"},{status:403});
     if(loaded.role==="responsible"&&(input.draft.mvpUserId??null)!==(loaded.publication?.draft?.mvpUserId??null))return Response.json({error:"MVP при полном равенстве выбирает организатор или администратор"},{status:403});
+    const previousPrizes=loaded.publication?.draft?.prizes??[];
+    input.draft.prizes ??= previousPrizes;
+    const canonicalPrizes=(items:Array<{registrationId:string;amount:number}>)=>JSON.stringify(items.filter(p=>p.amount>0).sort((a,b)=>a.registrationId.localeCompare(b.registrationId)));
+    if(canonicalPrizes(input.draft.prizes??[])!==canonicalPrizes(previousPrizes)&&loaded.role!=="admin")
+      return Response.json({error:"Призовые подтверждает администратор"},{status:403});
+    if(input.draft.prizes?.some(p=>p.amount>0)){
+      const {data:allowed,error}=await db.rpc("u5_session_prizes_allowed",{p_session:input.sessionId});
+      if(error)throw new Error(error.message);
+      if(!allowed)return Response.json({error:"Призовые многоэтапного турнира пока не учитываются"},{status:400});
+    }
     for(const warning of input.draft.warnings)if(warning.targetType==="player")await assertCanManageUserTarget(auth,warning.targetId);
     if(input.removedRegistrationIds.length){
       if(loaded.role!=="admin"||!input.approveRemoval||input.action==="draft")return Response.json({error:"Удаление опубликованного участника требует подтверждения администратора"},{status:403});
@@ -44,7 +56,7 @@ export async function POST(request:Request,route:Route){
       if(input.removedRegistrationIds.some(id=>!oldEntrants.some(e=>e.id===id)))return Response.json({error:"Проверьте удаляемые заявки"},{status:400});
       loaded.context.entrants=oldEntrants.filter(e=>!removed.has(e.id));
       const remainingTargets=new Set(loaded.context.entrants.flatMap(e=>[e.teamId,e.userId,...e.roster.map(p=>p.id)].filter(Boolean)));
-      input.draft={...input.draft,rows:input.draft.rows.filter(r=>!removed.has(r.registrationId)),manualOrder:input.draft.manualOrder.filter(id=>!removed.has(id)),warnings:input.draft.warnings.filter(w=>remainingTargets.has(w.targetId))};
+      input.draft={...input.draft,prizes:input.draft.prizes?.filter(p=>!removed.has(p.registrationId)),rows:input.draft.rows.filter(r=>!removed.has(r.registrationId)),manualOrder:input.draft.manualOrder.filter(id=>!removed.has(id)),warnings:input.draft.warnings.filter(w=>remainingTargets.has(w.targetId))};
     }
     const published=input.action==="draft"?null:publishResults(loaded.context,input.draft,loaded.role!=="responsible" || JSON.stringify(input.draft.manualOrder)===JSON.stringify(loaded.publication?.draft?.manualOrder));
     if(input.action==="validate")return Response.json({results:published,warnings:input.draft.warnings,affectsBets:true});

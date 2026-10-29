@@ -1,11 +1,11 @@
 "use client";
+import { formatCoins } from "@/lib/economy/currency";
 import {useEffect, useState} from "react";
 import Link from "next/link";
 import {useLanguage} from "./LanguageProvider";
 import {awardText} from "@/i18n/competition-awards";
 import {statisticsText} from "@/i18n/competition-statistics";
 import {getPublicStatistics, type CompetitionMode, type PublicStatistics} from "@/lib/competition/public-statistics";
-import {competitionCost} from "@/lib/competition/cost";
 
 export default function CompetitionStatistics({id, type = "player", initialData}: {id: string; type?: "player" | "team"; initialData?: PublicStatistics}) {
   const {locale} = useLanguage(), t = statisticsText(locale);
@@ -34,7 +34,7 @@ function StatisticsRows({id, type, mode, initialData}: {id: string; type: "playe
   }, [id, type, mode, offset, retry, initialData]);
   const summary = data?.summaries.find(item => item.mode === mode), duel = mode === "bo" || mode === "kv";
   const mainSummary = data?.summaries.find(item => item.mode === "main");
-  const metrics = summary ? [[t.rating, summary.rating === null ? "—" : formatNumber(summary.rating, {minimumFractionDigits: type === "player" ? 1 : 2, maximumFractionDigits: type === "player" ? 1 : 2})], ...(mode === "main" ? [[t.cost, `${formatNumber(Number(summary.cost ?? mainSummary?.cost ?? competitionCost({kills: summary.kills, deaths: summary.deaths, games: summary.games, wins: summary.wins, rating: summary.rating ?? 0, reputation: 50})), {minimumFractionDigits: 2, maximumFractionDigits: 2})} ₽`]] : []), [t.games, summary.games], [t.kills, summary.kills], [t.wins, summary.wins], [t.ratio, summary.games ? formatNumber(summary.kills / summary.games, {maximumFractionDigits: 2}) : "—"], ...(duel ? [[t.series, summary.series], [t.deaths, summary.deaths ?? "—"], [t.assists, summary.assists ?? "—"], ["KDA", summary.deaths !== null && summary.assists !== null ? formatNumber((summary.kills + summary.assists) / Math.max(1, summary.deaths), {maximumFractionDigits: 2}) : "—"]] : [])] : [];
+  const metrics = summary ? [[t.rating, summary.rating === null ? "—" : formatNumber(summary.rating, {minimumFractionDigits: mode === "main" ? 0 : type === "player" ? 1 : 2, maximumFractionDigits: mode === "main" ? 0 : type === "player" ? 1 : 2})], ...(mode === "main" ? [[t.cost, formatCoins(Number(summary.cost ?? mainSummary?.cost ?? 0), locale)]] : []), [t.games, summary.games], [t.kills, summary.kills], [t.wins, summary.wins], [t.ratio, summary.games ? formatNumber(summary.kills / summary.games, {maximumFractionDigits: 2}) : "—"], ...(duel ? [[t.series, summary.series], [t.deaths, summary.deaths ?? "—"], [t.assists, summary.assists ?? "—"], ["KDA", summary.deaths !== null && summary.assists !== null ? formatNumber((summary.kills + summary.assists) / Math.max(1, summary.deaths), {maximumFractionDigits: 2}) : "—"]] : [])] : [];
   return <div className="space-y-4" aria-busy={loading}>
     {data?.goldOrganizer && <p className="text-amber-300">★ {t.gold}</p>}
     {summary && <><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{metrics.map(([label, value]) => <div key={String(label)} className="rounded-lg bg-white/5 p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>)}</div>{!summary.ranked && <p className="text-slate-400">{t.unranked}</p>}</>}

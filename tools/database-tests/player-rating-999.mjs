@@ -8,6 +8,7 @@ export async function verifyPlayerRating999(db,id,base){
   await db.query('insert into profiles(id,nickname) values($1,$2)',[uid,name]);
  }
  await db.query("insert into teams(id,name) values($1,'Rating A'),($2,'Rating B')",[team,opponent]);
+ await db.query('insert into team_members(team_id,user_id) values($1,$2)',[team,user]);
  const config=structuredClone(base);config.type='training';config.rules={...base.rules,mode:'training',mvpEnabled:false};
  const startTime=new Date(Date.now()+86400000).toISOString();
  config.sessions=[{...base.sessions[0],id:session,startTime,endTime:new Date(Date.parse(startTime)+3600000).toISOString(),groups:[{id:group,name:'Rating',capacity:12,games:Array.from({length:10},(_,i)=>({id:id(97010+i),map:i%2?'solara':'bermuda'}))}]}];
@@ -41,11 +42,11 @@ export async function verifyPlayerRating999(db,id,base){
  const personalStats=await scalar('select u4_player_main_statistics($1)',[user]);
  assert.equal(Number(personalStats.games),10);assert.equal(Number(personalStats.kills),50);assert.equal(Number(personalStats.wins),1);
  const teamRating=()=>scalar("select exact_rating from competition_ratings where target_type='team' and target_id=$1 and mode='main'",[team]);
- assert.ok(Math.abs(Number(await teamRating())-200.2995)<.000001,'One session contributes once, with D=0 when no map history exists');
+ assert.ok(Math.abs(Number(await teamRating())-15.15)<.000001,'Base=30.1/4, ten expected training wins add base, podium adds .1');
  await db.exec('begin');
  await db.query('insert into competition_game_forecasts(game_id,team_id,map_name,strength,expected_place) values($1,$2,$3,10,0)',[id(97010),team,'bermuda']);
- assert.ok(Math.abs(Number(await scalar('select recalculate_organization_rating($1)',[team]))-217.782)<.000001,
-  'One forecast among ten games changes only one tenth of the session expectation');
+ assert.ok(Math.abs(Number(await scalar('select recalculate_organization_rating($1)',[team]))-(7.525+7.525*((9+Math.sqrt(2))/10)**2+.1))<.000001,
+  'One changed forecast affects the root mean of ten game results');
  await db.exec('rollback');
  await db.exec('begin');
  const noKill=structuredClone(published);

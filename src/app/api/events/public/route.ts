@@ -13,7 +13,7 @@ export async function GET(){try{
   const ids=sessions.slice(i,i+100).map(s=>s.id);
   if(!ids.length) continue;
   const activeRegistrations=await allRows((a,b)=>db.from("event_registrations").select("session_id")
-   .in("session_id",ids).in("status",["confirmed","waiting"]).range(a,b));
+   .in("session_id",ids).eq("status","confirmed").range(a,b));
   for(const row of activeRegistrations){if(row.session_id) registeredBySession.set(row.session_id,(registeredBySession.get(row.session_id)??0)+1);}
  }
  const publications=[];
