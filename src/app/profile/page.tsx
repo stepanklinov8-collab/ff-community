@@ -339,7 +339,7 @@ export default function ProfilePage() {
       <Link href="/wallet" className="btn-secondary">Кошелёк: переводы, резервы и вывод →</Link>
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="panel p-5 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="section-title">Команда и гильдия</h2>{teams.length < 2 && <Link href="/teams/create" className="btn-secondary text-sm">Создать</Link>}</div>
+          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="section-title"><Link href="/my-organizations" className="hover:text-cyan-300">Мои организации →</Link></h2>{teams.length < 2 && <Link href="/teams/create" className="btn-secondary text-sm">Создать</Link>}</div>
           {teams.length === 0 ? <p className="text-slate-400">Вы пока не состоите в команде или гильдии.</p> : (
             <div className="space-y-3">{teams.map((team) => (
               <Link key={team.id} href={`/teams/${team.id}`} className="card-link flex items-center justify-between gap-3 p-4">

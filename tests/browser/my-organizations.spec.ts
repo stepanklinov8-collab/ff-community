@@ -42,7 +42,7 @@ async function setup(page: Page, memberships: Membership[], authenticated = true
 async function openFromMenu(page: Page) {
   await page.goto("/privacy");
   await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
-  await page.locator(".site-drawer").getByRole("link", { name: "Твои организации", exact: true }).click();
+  await page.locator(".site-drawer").getByRole("link", { name: "Мои организации", exact: true }).click();
 }
 
 for (const organization of [team, guild]) {
@@ -61,7 +61,7 @@ test("members see their team and guild with usable mobile cards, excluding disso
   await page.setViewportSize({ width: 375, height: 812 });
   await openFromMenu(page);
   await expect(page).toHaveURL("/my-organizations");
-  await expect(page.getByRole("heading", { name: "Твои организации", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Мои организации", exact: true })).toBeVisible();
   const teamLink = page.getByRole("link", { name: `${team.name} Команда`, exact: true });
   const guildLink = page.getByRole("link", { name: `${guild.name} Гильдия`, exact: true });
   await expect(teamLink).toBeVisible();
@@ -94,7 +94,7 @@ test("guests have no personal menu item and direct access redirects to sign in",
   await page.goto("/privacy");
   await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
   await expect(page.locator(".site-drawer").getByRole("link", { name: "Войти", exact: true })).toBeVisible();
-  await expect(page.locator(".site-drawer").getByRole("link", { name: "Твои организации", exact: true })).toHaveCount(0);
+  await expect(page.locator(".site-drawer").getByRole("link", { name: "Мои организации", exact: true })).toHaveCount(0);
   await page.goto("/my-organizations");
   await expect(page).toHaveURL("/auth");
   expect(state.queries).toHaveLength(0);

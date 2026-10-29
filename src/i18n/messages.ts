@@ -8,7 +8,7 @@ const ru = {
   installShortcut: "Значок на телефон",
   home: "Главная",
   teams: "Команды и гильдии",
-  myOrganizations: "Твои организации",
+  myOrganizations: "Мои организации",
   "myOrganizations.description": "Команды и гильдии, в которых ты состоишь.",
   "myOrganizations.empty": "Ты пока не состоишь в команде или гильдии.",
   "myOrganizations.browse": "Найти команду или гильдию",
@@ -401,7 +401,7 @@ type Dictionary = Record<MessageKey, string>;
 
 const kk: Dictionary = {
   installShortcut: "Телефонға белгіше",
-  myOrganizations: "Сенің ұйымдарың",
+  myOrganizations: "Менің ұйымдарым",
   "myOrganizations.description": "Сен мүше болған командалар мен гильдиялар.",
   "myOrganizations.empty": "Сен әзірге командаға немесе гильдияға кірмегенсің.",
   "myOrganizations.browse": "Команда немесе гильдия табу",
@@ -430,7 +430,7 @@ const kk: Dictionary = {
 
 const ky: Dictionary = {
   installShortcut: "Телефонго белги",
-  myOrganizations: "Сенин уюмдарың",
+  myOrganizations: "Менин уюмдарым",
   "myOrganizations.description": "Сен мүчө болгон командалар жана гильдиялар.",
   "myOrganizations.empty": "Сен азырынча командага же гильдияга мүчө эмессиң.",
   "myOrganizations.browse": "Команда же гильдия табуу",
