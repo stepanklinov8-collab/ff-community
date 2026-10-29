@@ -56,6 +56,7 @@ export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("pay"), requestId: uuid, obligationId: uuid, amount: coins.min(1) }).strict(),
   z.object({ action: z.literal("save"), requestId: uuid, contractId: uuid, expectedRevision: z.number().int().nonnegative(), organizationId: uuid, playerId: uuid,
     kind: z.enum(["main", "guest"]), eventId: uuid.nullable(), sessionId: uuid.nullable(), terms: contractTermsSchema }).strict()
     .superRefine((input, ctx) => {
@@ -70,9 +71,11 @@ export const querySchema = z.object({
   search: z.string().trim().max(80).optional(),
   searchKind: z.enum(["players", "events"]).default("players"),
   history: z.literal("true").optional(),
+  payments: z.literal("true").optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
   if (input.history && (!input.contractId || input.search !== undefined)) ctx.addIssue({ code: "custom", message: "Для истории выберите один договор без поиска" });
+  if (input.payments && (!input.contractId || input.history || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для выплат выберите один договор без дополнительных фильтров" });
 });
 
 export const defaultTerms = (now = new Date()): ConstructorTerms => ({

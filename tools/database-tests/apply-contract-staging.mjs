@@ -22,6 +22,7 @@ const inspectionSql=`select
  to_regprocedure('public.contract_history(uuid,uuid,integer)') is not null as history_ready,
  to_regprocedure('public.contract_prize_allocation(bigint,integer,jsonb)') is not null as allocation_ready,
  to_regprocedure('public.contract_validate_overdue_compensation(jsonb)') is not null as constructor_ready,
+ to_regprocedure('public.contract_obligation_query(uuid,uuid,integer)') is not null as obligations_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -31,7 +32,7 @@ const before=(await query(inspectionSql,true))[0];
 if(!before?.ownership_ready)throw new Error('Apply the preceding ownership migration before this update');
 console.log(JSON.stringify({project,before}));
 if(!process.argv.includes('--apply'))process.exit(0);
-const names=[...(!before.hierarchy_ready?['202610290006_organization_hierarchy.sql']:[]),...(!before.proposals_ready?['202610290007_contract_proposals.sql']:[]),...(!before.history_ready?['202610290008_contract_history_validation.sql']:[]),...(!before.allocation_ready?['202610290009_contract_prize_allocation.sql']:[]),...(!before.constructor_ready?['202610290010_contract_constructor.sql']:[])];
+const names=[...(!before.hierarchy_ready?['202610290006_organization_hierarchy.sql']:[]),...(!before.proposals_ready?['202610290007_contract_proposals.sql']:[]),...(!before.history_ready?['202610290008_contract_history_validation.sql']:[]),...(!before.allocation_ready?['202610290009_contract_prize_allocation.sql']:[]),...(!before.constructor_ready?['202610290010_contract_constructor.sql']:[]),...(!before.obligations_ready?['202610290011_contract_obligations.sql']:[])];
 if(!names.length){console.log('The staging schema is already installed');process.exit(0);}
 const sources=await Promise.all(names.map(async name=>({name,sql:await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8')})));
 const body=sources.map(({sql})=>sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,'')).join('\n');
@@ -44,7 +45,7 @@ if(JSON.stringify(rollback)!==JSON.stringify(before))throw new Error('Staging dr
 await query(`begin;set local lock_timeout='5s';set local statement_timeout='45s';${body}\ncommit;`);
 await query("notify pgrst, 'reload schema';");
 const after=(await query(inspectionSql,true))[0];
-if(!after.hierarchy_ready||!after.proposals_ready||!after.history_ready||!after.allocation_ready||!after.constructor_ready)throw new Error('Staging schema verification failed');
+if(!after.hierarchy_ready||!after.proposals_ready||!after.history_ready||!after.allocation_ready||!after.constructor_ready||!after.obligations_ready)throw new Error('Staging schema verification failed');
 for(const key of ['organizations','members','balances','reserved','leaders_hash'])if(after[key]!==before[key])throw new Error(`Unexpected change to ${key}`);
 const owners=(await query('select count(*)::int n from teams where owner_team_id is null and ultimate_owner_user_id is distinct from owner_user_id',true))[0];
 if(owners.n!==0)throw new Error('Unexpected ultimate ownership backfill');

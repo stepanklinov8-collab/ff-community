@@ -6,12 +6,16 @@ const errors: Record<string, [number, string]> = {
   CONTRACT_AUTH: [401, "Войдите в аккаунт"],
   CONTRACT_INPUT: [422, "Проверьте условия договора"],
   CONTRACT_SCHEMA: [422, "Создайте новую версию договора через конструктор. Старые пояснения сохраняются в истории"],
+  CONTRACT_FUNDS: [422, "Недостаточно доступных монет. Резервы других выплат использовать нельзя"],
+  CONTRACT_NOT_DUE: [422, "Срок этой выплаты ещё не наступил"],
+  CONTRACT_PAYMENT_AMOUNT: [409, "Проверьте остаток долга: выплата уже выполнена полностью или частично"],
+  CONTRACT_OBLIGATION_CONFLICT: [409, "Начисление уже существует с другими условиями"],
   CONTRACT_FORBIDDEN: [403, "Нет прав на этот договор"],
   CONTRACT_NOT_FOUND: [404, "Договор не найден или недоступен"],
   CONTRACT_CONFLICT: [409, "Условия уже изменились. Обновите договор и проверьте новую версию"],
   CONTRACT_PARTIES: [422, "Для других сторон или мероприятия создайте отдельный договор"],
   CONTRACT_MEMBER: [422, "Основной договор доступен участнику состава. Для выступления гостя выберите гостевой договор"],
-  CONTRACT_FINANCE: [403, "Направить финансовые условия игроку может владелец или руководитель организации"],
+  CONTRACT_FINANCE: [403, "Подтверждать финансовые условия и выполнять выплаты может владелец или руководитель организации"],
   CONTRACT_DATES: [422, "Проверьте даты: окончание должно быть позже начала и ещё не наступить"],
   CONTRACT_SHARE: [422, "Доля должна быть от 0 до 100%"],
   CONTRACT_LIMIT: [422, "Проверьте количество выступлений"],
@@ -32,7 +36,17 @@ async function handle(request: Request, write: boolean) {
     catch { return json({ error: "Проверьте данные запроса" }, 400); }
     const parsed = (write ? mutationSchema : querySchema).safeParse(input);
     if (!parsed.success) return json({ error: parsed.error.issues[0]?.message ?? "Проверьте условия" }, 422);
-    const { data, error } = await createAdminClient().rpc(write ? "contract_mutate" : "contract_query", { p_actor: user.id, p_input: parsed.data });
+    const value = parsed.data;
+    let rpc = write ? "contract_mutate" : "contract_query";
+    let args: Record<string, unknown> = { p_actor: user.id, p_input: value };
+    if ("action" in value && value.action === "pay") {
+      rpc = "contract_debt_pay";
+      args = { p_actor: user.id, p_request: value.requestId, p_obligation: value.obligationId, p_amount: value.amount };
+    } else if ("payments" in value && value.payments) {
+      rpc = "contract_obligation_query";
+      args = { p_actor: user.id, p_contract: value.contractId, p_offset: value.offset };
+    }
+    const { data, error } = await createAdminClient().rpc(rpc, args);
     if (error) {
       const known = errors[error.message];
       if (known) return json({ error: known[1] }, known[0]);

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const auth=await requireUser(request),{requestId,operation}=walletRequestSchema.parse(await request.json());
     const {action,...input}=operation;
     const {data,error}=await createAdminClient().rpc("u6_coin_action",{p_actor:auth.user.id,p_request:requestId,p_action:action,p_input:input});
-    if(error) throw new Error(error.message);
+    if(error) throw new Error(error.message === "CONTRACT_DEBT_WITHDRAWAL" ? "Сначала погасите задолженность организации по договорам. При долге вывод недоступен." : error.message);
     return Response.json(data,{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message??"Проверьте данные"},{status:400});return competitionErrorResponse(error);}
 }

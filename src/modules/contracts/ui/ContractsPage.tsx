@@ -6,6 +6,7 @@ import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
 import { contractTermsSchema, defaultTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
 import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
+import ContractPayments from "./ContractPayments";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -213,6 +214,7 @@ export default function ContractsPage() {
         {contract.isPlayer && contract.status === "offered" && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "reject", contractId: contract.id, revision: contract.revision })}>Отклонить условия</button>}
       </div>
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />
+      <ContractPayments key={`${contract.id}:payments`} contractId={contract.id} />
     </article>)}</div>}
     <div className="flex justify-between gap-3">{offset > 0 && <button type="button" className="secondary-button" onClick={() => setOffset(value => Math.max(0, value - 30))}>Предыдущие</button>}{hasMore && <button type="button" className="secondary-button" onClick={() => setOffset(value => value + 30)}>Следующие</button>}</div>
   </div>;

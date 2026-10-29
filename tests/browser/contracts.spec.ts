@@ -156,3 +156,67 @@ test("disabled contracts module hides its page and API", async ({ request }) => 
   expect(html).not.toContain("Условия участия, доли призовых");
   expect(html).toContain("NEXT_HTTP_ERROR_FALLBACK;404");
 });
+
+test("contract debt payment is explicit, partial and retry-safe after a lost response", async ({ page }) => {
+  await setup(page, [contract]);
+  const obligationId = "00000000-0000-4000-8000-000000009705";
+  const attempts: Record<string, unknown>[] = [];
+  let paid = 0;
+  await page.route("**/api/contracts**", route => {
+    const req = route.request(), url = new URL(req.url());
+    if (req.method() === "GET" && url.searchParams.get("payments") === "true") return route.fulfill({ json: {
+      canPay: true, hasMore: false, obligations: [{ id: obligationId, revision: 1, kind: "salary", amount: 600, paid, held: 0, remaining: 600 - paid, dueAt: "2026-10-01T12:00:00Z", debt: true, overdueSevenDays: true }],
+    } });
+    if (req.method() === "POST" && req.postDataJSON().action === "pay") {
+      attempts.push(req.postDataJSON()); paid = 200;
+      if (attempts.length === 1) return route.abort("failed");
+      return route.fulfill({ json: { success: true, remaining: 400 } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Начисления и выплаты", exact: true }).click();
+  await page.getByRole("button", { name: "Оплатить начисление", exact: true }).click();
+  await page.getByLabel("Сумма выплаты, OC", { exact: true }).fill("200");
+  await page.getByRole("button", { name: "Подтвердить выплату", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Начисления по договору" }).getByRole("alert")).toContainText("Нет связи");
+  await page.getByRole("button", { name: "Подтвердить выплату", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Выплачено 200 OC");
+  expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0]);
+  expect(attempts[0]).toMatchObject({ action: "pay", obligationId, amount: 200 });
+  expect(attempts[0]).not.toHaveProperty("actorId"); expect(attempts[0]).not.toHaveProperty("recipientId");
+});
+
+test("recipient sees liabilities without payment controls", async ({ page }) => {
+  await setup(page, [{ ...contract, canEdit: false, canOffer: false, isPlayer: true }]);
+  await page.route("**/api/contracts?**", route => {
+    if (new URL(route.request().url()).searchParams.get("payments") !== "true") return route.fallback();
+    return route.fulfill({ json: { canPay: false, hasMore: false, obligations: [{ id: "00000000-0000-4000-8000-000000009705", revision: 1, kind: "salary", amount: 100, paid: 20, held: 0, remaining: 80, dueAt: "2026-10-01T12:00:00Z", debt: true, overdueSevenDays: true }] } });
+  });
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Начисления и выплаты", exact: true }).click();
+  await expect(page.getByText("80 OC", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Оплатить начисление", exact: true })).toHaveCount(0);
+});
+
+test("confirmed payment with a failed list refresh never offers retrying that transfer", async ({ page }) => {
+  await setup(page, [contract]);
+  let paid = false;
+  await page.route("**/api/contracts**", route => {
+    const req = route.request(), url = new URL(req.url());
+    if (req.method() === "GET" && url.searchParams.get("payments") === "true") {
+      if (paid) return route.abort("failed");
+      return route.fulfill({ json: { canPay: true, hasMore: false, obligations: [{ id: "00000000-0000-4000-8000-000000009705", revision: 1, kind: "salary", amount: 100, paid: 0, held: 0, remaining: 100, dueAt: "2026-10-01T12:00:00Z", debt: true, overdueSevenDays: true }] } });
+    }
+    if (req.method() === "POST" && req.postDataJSON().action === "pay") { paid = true; return route.fulfill({ json: { success: true, remaining: 0 } }); }
+    return route.fallback();
+  });
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Начисления и выплаты", exact: true }).click();
+  await page.getByRole("button", { name: "Оплатить начисление", exact: true }).click();
+  await page.getByRole("button", { name: "Подтвердить выплату", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Выплачено 100 OC");
+  await expect(page.getByRole("region", { name: "Начисления по договору" }).getByRole("alert")).toContainText("Выплата подтверждена");
+  await expect(page.getByRole("button", { name: "Подтвердить выплату", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Оплатить начисление", exact: true })).toHaveCount(0);
+});

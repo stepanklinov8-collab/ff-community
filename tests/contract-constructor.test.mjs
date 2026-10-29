@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contractTermsSchema, legacyContractTermsSchema, defaultTerms, toConstructorTerms } from "../src/modules/contracts/model.ts";
+import { contractTermsSchema, legacyContractTermsSchema, defaultTerms, toConstructorTerms, mutationSchema, querySchema } from "../src/modules/contracts/model.ts";
 import { resolveEventConditions } from "../src/modules/contracts/financial-terms.ts";
 
 const eventId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
 const terms = () => defaultTerms(new Date("2026-11-01T12:00:00+03:00"));
+
+test("manual payment cannot supply a recipient, actor, automatic mode or fractional amount", () => {
+  const valid = { action: "pay", requestId: eventId, obligationId: otherId, amount: 100 };
+  assert.equal(mutationSchema.safeParse(valid).success, true);
+  for (const input of [{ ...valid, actorId: eventId }, { ...valid, recipientId: eventId },
+    { ...valid, automatic: true }, { ...valid, amount: 0 }, { ...valid, amount: 0.5 }]) {
+    assert.equal(mutationSchema.safeParse(input).success, false);
+  }
+  assert.equal(querySchema.safeParse({ contractId: eventId, payments: "true" }).success, true);
+  assert.equal(querySchema.safeParse({ payments: "true" }).success, false);
+  assert.equal(querySchema.safeParse({ contractId: eventId, payments: "true", history: "true" }).success, false);
+});
 
 test("new constructor stores explicit structured terms without arbitrary prose", () => {
   assert.equal(contractTermsSchema.safeParse(terms()).success, true);
