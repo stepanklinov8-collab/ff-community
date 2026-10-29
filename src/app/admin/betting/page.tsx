@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCoins, SITE_CURRENCY_NAME } from "@/lib/economy/currency";
+import { formatCoins, SITE_CURRENCY_NAME, SITE_CURRENCY_SYMBOL } from "@/lib/economy/currency";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -113,10 +113,10 @@ export default function AdminBettingPage() {
         <h2 className="mb-3 text-lg font-bold">{t("adminBetting.currencyTitle")}</h2>
         <p className="mb-4 text-xs text-slate-500">{t("adminBetting.currencyNote")}</p>
         <div className="grid gap-3 md:grid-cols-5">
-          <label className="text-xs text-slate-400">{t("adminBetting.name")}<input id="currency-name" value={SITE_CURRENCY_NAME} readOnly /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.startBalance")}, {SITE_CURRENCY_NAME}<input id="starting-balance" type="number" min="0" defaultValue={data.settings.starting_balance} /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.minStake")}, {SITE_CURRENCY_NAME}<input id="minimum-stake" type="number" min="1" defaultValue={data.settings.minimum_stake} /></label>
-          <label className="text-xs text-slate-400">{t("adminBetting.maxStake")}, {SITE_CURRENCY_NAME}<input id="maximum-stake" type="number" min="1" defaultValue={data.settings.maximum_stake} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.name")}<input id="currency-name" value={SITE_CURRENCY_SYMBOL} readOnly /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.startBalance")}, {SITE_CURRENCY_SYMBOL}<input id="starting-balance" type="number" min="0" defaultValue={data.settings.starting_balance} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.minStake")}, {SITE_CURRENCY_SYMBOL}<input id="minimum-stake" type="number" min="1" defaultValue={data.settings.minimum_stake} /></label>
+          <label className="text-xs text-slate-400">{t("adminBetting.maxStake")}, {SITE_CURRENCY_SYMBOL}<input id="maximum-stake" type="number" min="1" defaultValue={data.settings.maximum_stake} /></label>
           <label className="text-xs text-slate-400">{t("adminBetting.maxOdds")}<input id="maximum-odds" type="number" min="1.10" step=".01" defaultValue={data.settings.maximum_odds} /></label>
         </div>
         <button className="secondary-button mt-4" type="button" onClick={() => void saveSettings()}>{t("adminBetting.save")}</button>

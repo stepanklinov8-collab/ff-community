@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCoinAmount, formatCoins, SITE_CURRENCY_NAME } from "@/lib/economy/currency";
+import { formatCoinAmount, formatCoins, SITE_CURRENCY_NAME, SITE_CURRENCY_SYMBOL } from "@/lib/economy/currency";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "@/utils/api/auth-fetch";
@@ -258,7 +258,7 @@ export default function BettingPage() {
           <h1 className="mt-2 text-3xl font-black">{t("betting.title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">{t("betting.description")}</p>
         </div>
-        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">{t("betting.balance")}</span><p className="text-2xl font-black text-amber-300">{formatCoins(data.balance, locale)}</p></div>
+        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">{t("betting.balance")}</span><p className="text-2xl font-black text-amber-300">{formatCoins(data.balance, locale, "full")}</p></div>
       </div>
 
       {message && <p className="mb-4 rounded-xl border border-cyan-800/40 bg-cyan-950/20 p-3 text-sm">{message}</p>}
@@ -305,8 +305,8 @@ export default function BettingPage() {
           {quote && <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/[.05] p-4">
             {quote.available && quote.odds != null ? <>
               <div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-sm text-slate-400">{t("betting.yourOdds")}</span><p className="text-3xl font-black text-amber-300">×{Number(quote.odds).toFixed(2)}</p></div><span className={secondsLeft > 10 ? "text-sm text-emerald-300" : "text-sm text-red-300"}>{secondsLeft > 0 ? t("betting.validFor", { seconds: secondsLeft }) : t("betting.quoteExpired")}</span></div>
-              <div className="mt-4 flex flex-wrap gap-2"><input className="max-w-56" type="number" min={data.minimumStake} max={data.maximumStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} placeholder={`${data.minimumStake}–${data.maximumStake} ${SITE_CURRENCY_NAME}`} aria-label={SITE_CURRENCY_NAME} /><button className="primary-button" type="button" disabled={busy || secondsLeft <= 0} onClick={() => void confirmBet()}>{t("betting.confirm")}</button></div>
-              {stake && Number(stake) > 0 && <p className="mt-2 text-xs text-slate-400">{t("betting.potentialPayout", { amount: formatCoinAmount(Math.floor(Number(stake) * Number(quote.odds)), locale), currency: SITE_CURRENCY_NAME })}</p>}
+              <div className="mt-4 flex flex-wrap gap-2"><input className="max-w-56" type="number" min={data.minimumStake} max={data.maximumStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} placeholder={`${data.minimumStake}–${data.maximumStake} ${SITE_CURRENCY_SYMBOL}`} aria-label={SITE_CURRENCY_NAME} /><button className="primary-button" type="button" disabled={busy || secondsLeft <= 0} onClick={() => void confirmBet()}>{t("betting.confirm")}</button></div>
+              {stake && Number(stake) > 0 && <p className="mt-2 text-xs text-slate-400">{t("betting.potentialPayout", { amount: formatCoinAmount(Math.floor(Number(stake) * Number(quote.odds)), locale), currency: SITE_CURRENCY_SYMBOL })}</p>}
             </> : <p className="text-amber-300">{t("betting.unavailable")}</p>}
           </div>}
         </section>

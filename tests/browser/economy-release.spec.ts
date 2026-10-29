@@ -22,7 +22,7 @@ test('prize field stays local until explicit save and survives reload; other org
   return route.fulfill({json:data});
  });
  await page.goto(`/tournaments/${event}/manage-results`);
- await page.getByText('Подтверждённые призовые · OMCITE Coins',{exact:true}).click();
+ await page.getByText('Подтверждённые призовые · 🪙',{exact:true}).click();
  await page.getByLabel('Призовые: Север').fill('250');
  await expect(page.getByLabel('Призовые: Север')).toHaveValue('250');
  expect(writes).toHaveLength(0);
@@ -30,10 +30,10 @@ test('prize field stays local until explicit save and survives reload; other org
  await expect.poll(()=>writes.length).toBe(1);
  expect(writes[0]).toMatchObject({action:'draft',draft:{prizes:[{registrationId:reg,amount:250}]}});
  await page.reload();
- await page.getByText('Подтверждённые призовые · OMCITE Coins',{exact:true}).click();
+ await page.getByText('Подтверждённые призовые · 🪙',{exact:true}).click();
  await expect(page.getByLabel('Призовые: Север')).toHaveValue('250');
  data.isAdmin=false;await page.reload();
- await page.getByText('Подтверждённые призовые · OMCITE Coins',{exact:true}).click();
+ await page.getByText('Подтверждённые призовые · 🪙',{exact:true}).click();
  await expect(page.getByLabel('Призовые: Север')).toBeDisabled();
 });
 

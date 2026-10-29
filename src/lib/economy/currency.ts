@@ -1,5 +1,6 @@
 /** Shared display unit. Keep full precision in calculations and round only for display. */
 export const SITE_CURRENCY_NAME = "OMCITE Coins";
+export const SITE_CURRENCY_SYMBOL = "🪙";
 
 const numberFormats = new Map<string, Intl.NumberFormat>();
 
@@ -16,6 +17,6 @@ export function formatCoinAmount(amount: number, locale = "ru"): string {
   return formatter.format(Math.round(amount));
 }
 
-export function formatCoins(amount: number, locale = "ru"): string {
-  return `${formatCoinAmount(amount, locale)} ${SITE_CURRENCY_NAME}`;
+export function formatCoins(amount: number, locale = "ru", display: "compact" | "full" = "compact"): string {
+  return `${formatCoinAmount(amount, locale)} ${display === "full" ? SITE_CURRENCY_NAME : SITE_CURRENCY_SYMBOL}`;
 }
