@@ -243,20 +243,22 @@ export default function EventPage() {
 
         if (ev?.organizer_user_id === user.id) setIsOrganizer(true);
 
-        const { data: memberships } = await supabase
-          .from("team_members")
-          .select("team_id, role_in_team")
-          .eq("user_id", user.id);
+        const [{ data: memberships }, { data: ownedTeams }] = await Promise.all([
+          supabase.from("team_members").select("team_id, role_in_team").eq("user_id", user.id),
+          supabase.from("teams").select("id,name,type,verified,owner_user_id,dissolved_at").eq("owner_user_id", user.id).is("dissolved_at", null),
+        ]);
 
-        if (memberships?.length) {
+        const membershipRows = memberships ?? [];
+        const organizationIds = [...new Set([...membershipRows.map((membership) => membership.team_id), ...(ownedTeams ?? []).map((team) => team.id)])];
+        if (organizationIds.length) {
           const { data: membershipTeams } = await supabase.from("teams")
-            .select("id,name,type,verified").in("id", memberships.map((membership) => membership.team_id));
+            .select("id,name,type,verified,owner_user_id,dissolved_at").in("id", organizationIds);
           const eligibleTeamIds = new Set((membershipTeams ?? [])
-            .filter((team) => (team.type === "team" || team.type === "guild") && team.verified)
+            .filter((team) => (team.type === "team" || team.type === "guild") && team.verified && !team.dissolved_at)
             .map((team) => team.id));
-          const manageableTeamIds = new Set(memberships
+          const manageableTeamIds = new Set(membershipRows
             .filter((membership) => ["leader", "senior_deputy", "deputy"].includes(membership.role_in_team))
-            .map((membership) => membership.team_id));
+            .map((membership) => membership.team_id).concat((ownedTeams ?? []).map((team) => team.id)));
           const manageableTeams = (membershipTeams ?? [])
             .filter((team): team is typeof team & { type: "team" | "guild" } =>
               eligibleTeamIds.has(team.id) && manageableTeamIds.has(team.id) &&

@@ -18,11 +18,15 @@ export async function GET(request: Request) {
       if (error || teamError) throw new Error((error ?? teamError)!.message);
       return Response.json({ players, teams }, { headers: { "Cache-Control": "private, no-store" } });
     }
-    const memberships = await allRows((a,b) => db.from("team_members").select("team_id,role_in_team").eq("user_id", auth.user.id).range(a,b));
-    const teams = memberships.length ? await db.from("teams").select("id,name,type").in("id",memberships.map(m=>m.team_id)) : { data: [], error: null };
+    const [memberships, ownedOrganizations] = await Promise.all([
+      allRows((a,b) => db.from("team_members").select("team_id,role_in_team").eq("user_id", auth.user.id).range(a,b)),
+      allRows((a,b) => db.from("teams").select("id,name,type,leader_id,owner_user_id").eq("owner_user_id", auth.user.id).is("dissolved_at", null).range(a,b)),
+    ]);
+    const organizationIds = [...new Set([...memberships.map(m=>m.team_id), ...ownedOrganizations.map(t=>t.id)])];
+    const teams = organizationIds.length ? await db.from("teams").select("id,name,type,leader_id,owner_user_id,dissolved_at").in("id",organizationIds) : { data: [], error: null };
     if (teams.error) throw new Error(teams.error.message);
     const accounts = await allRows((a,b) => db.from("coin_accounts").select("id,user_id,team_id,balance,reserved")
-      .or(`user_id.eq.${auth.user.id}${memberships.length ? `,team_id.in.(${memberships.map(m=>m.team_id).join(",")})` : ""}`).order("id").range(a,b));
+      .or(`user_id.eq.${auth.user.id}${organizationIds.length ? `,team_id.in.(${organizationIds.join(",")})` : ""}`).order("id").range(a,b));
     const ids = accounts.map(a=>a.id);
     const [ledger, withdrawals, demo, admin] = await Promise.all([
       ids.length ? db.from("coin_entries").select("id,account_id,amount,reserved_change,balance_after,created_at,operation:coin_operations(id,action,description)").in("account_id",ids).order("id",{ascending:false}).limit(100) : {data:[],error:null},
@@ -34,7 +38,7 @@ export async function GET(request: Request) {
     const own = accounts.find(a=>a.user_id===auth.user.id);
     return Response.json({userId:auth.user.id,canManage:!!admin.data,
       accounts:[{...own,id:own?.id??null,user_id:auth.user.id,team_id:null,balance:own?.balance??0,reserved:own?.reserved??0,name:"Личный баланс",canSpend:true},
-        ...accounts.filter(a=>a.team_id).map(a=>({...a,name:teams.data?.find(t=>t.id===a.team_id)?.name??"Организация",canSpend:memberships.some(m=>m.team_id===a.team_id&&m.role_in_team==="leader")}))],
+        ...accounts.filter(a=>a.team_id).map(a=>{const organization=teams.data?.find(t=>t.id===a.team_id);return {...a,name:organization?.name??"Организация",canSpend:!organization?.dissolved_at&&(organization?.owner_user_id===auth.user.id||organization?.leader_id===auth.user.id||memberships.some(m=>m.team_id===a.team_id&&m.role_in_team==="leader"))};})],
       demoBalance:demo.data?.balance??0,ledger:ledger.data,withdrawals:withdrawals.data,
     },{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){return competitionErrorResponse(error);}

@@ -18,6 +18,7 @@ import {verifyRegistrations} from './registrations.mjs';
 import {verifyTrainingSchedule} from './training-schedule.mjs';
 import {verifyChat} from './chat.mjs';
 import {verifyLeaveOrganization} from './leave-organization.mjs';
+import {verifyOrganizationOwnership} from './organization-ownership.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -47,10 +48,23 @@ try {
  }
 
  // baseline.sql already represents the pre-update schema; replay only update 2 and later migrations.
+ const migrationId=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>/^\d{12}_.+\.sql$/.test(n)&&n>='202609220001').sort()){
+  if(name==='202610290005_organization_ownership.sql'){
+   const legacyLeader=migrationId(9951),legacyTeam=migrationId(9952);
+   await db.query(`insert into auth.users(id) values($1)`,[legacyLeader]);
+   await db.query(`insert into public.profiles(id,nickname) values($1,'Legacy leader')`,[legacyLeader]);
+   await db.query(`insert into public.teams(id,name,type,leader_id) values($1,'Backfill organization','team',$2)`,[legacyTeam,legacyLeader]);
+   await db.query(`insert into public.team_members(team_id,user_id,role_in_team) values($1,$2,'leader')`,[legacyTeam,legacyLeader]);
+  }
   const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}
+  if(name==='202610290005_organization_ownership.sql'){
+   const legacyOwner=(await db.query(`select owner_user_id from public.teams where id=$1`,[migrationId(9952)])).rows[0].owner_user_id;
+   assert.equal(legacyOwner,migrationId(9951),'existing organizations must preserve their leader as initial owner');
+   assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
+  }
  }
  if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -185,6 +199,7 @@ try {
  await verifyReserveQueue(db,id,config);
  await verifyChat(db,id);
  await verifyMainCoins(db,id,config);
+ await verifyOrganizationOwnership(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

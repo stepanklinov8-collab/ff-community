@@ -10,9 +10,10 @@ create table public.profiles(id uuid primary key references auth.users(id),nickn
 create table public.user_roles(user_id uuid references auth.users(id),role text);
 create function public.is_full_admin(p_user uuid) returns boolean language sql stable as $$select exists(select 1 from public.user_roles where user_id=p_user and role in('admin','superadmin'))$$;
 create function public.is_owner(p_user uuid) returns boolean language sql stable as $$select exists(select 1 from public.user_roles where user_id=p_user and role='superadmin')$$;
-create table public.teams(id uuid primary key,name text,dissolved_at timestamptz,type text default 'team',main_rating numeric default 1,results_score numeric default 1,achievements_score numeric default 1,reputation_score numeric default 50);
-create table public.team_members(team_id uuid references public.teams(id),user_id uuid references public.profiles(id),role_in_team text default 'member',primary key(team_id,user_id));
-create function public.can_manage_team(p_team uuid,p_user uuid) returns boolean language sql stable as $$select public.is_full_admin(p_user) or exists(select 1 from public.team_members where team_id=p_team and user_id=p_user and role_in_team in('leader','senior_deputy','deputy'))$$;
+create function public.is_app_admin(check_user_id uuid default auth.uid()) returns boolean language sql stable as $$select exists(select 1 from public.user_roles where user_id=check_user_id and role in('moderator','superadmin','admin'))$$;
+create table public.teams(id uuid primary key,name text,dissolved_at timestamptz,type text default 'team',leader_id uuid,updated_at timestamptz default now(),main_rating numeric default 1,results_score numeric default 1,achievements_score numeric default 1,reputation_score numeric default 50);
+create table public.team_members(team_id uuid references public.teams(id),user_id uuid references public.profiles(id),role_in_team text default 'member',position text default 'main',primary key(team_id,user_id));
+create function public.can_manage_team(check_team_id uuid,check_user_id uuid default auth.uid()) returns boolean language sql stable as $$select public.is_app_admin(check_user_id) or exists(select 1 from public.team_members where team_id=check_team_id and user_id=check_user_id and role_in_team in('leader','senior_deputy','deputy'))$$;
 create table public.events(id uuid primary key default gen_random_uuid(),title text,type text,organizer_user_id uuid references auth.users(id),max_teams integer default 12,min_players integer default 4,cost integer default 0,
  description text,organizer text,stream_url text,payment_url text,image_url text,roster_lock_minutes integer default 10,publish_at timestamptz,is_published boolean default true,
  comments_enabled boolean default true,allow_individual_registration boolean default false,created_by uuid,created_at timestamptz default now(),updated_at timestamptz default now());
@@ -113,3 +114,4 @@ create table public.clan_war_responses(id uuid primary key default gen_random_uu
 alter table public.teams add column verified boolean default true;
 alter table public.event_registrations add column registered_by uuid,add column roster jsonb,add column promoted_at timestamptz;
 create table public.activity_log(id uuid primary key default gen_random_uuid(),user_id uuid,team_id uuid,event_id uuid,action text,details text,activity_type text,description text);
+create table public.leadership_transfers(id uuid primary key default gen_random_uuid(),team_id uuid references public.teams(id),from_user_id uuid,to_user_id uuid,status text default 'pending',responded_at timestamptz,created_at timestamptz default now());

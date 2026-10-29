@@ -9,7 +9,7 @@ const ru = {
   home: "Главная",
   teams: "Команды и гильдии",
   myOrganizations: "Мои организации",
-  "myOrganizations.description": "Команды и гильдии, в которых ты состоишь.",
+  "myOrganizations.description": "Команды и гильдии, в которых ты состоишь или которыми владеешь.",
   "myOrganizations.empty": "Ты пока не состоишь в команде или гильдии.",
   "myOrganizations.browse": "Найти команду или гильдию",
   "myOrganizations.error": "Не удалось загрузить твои организации.",
@@ -402,7 +402,7 @@ type Dictionary = Record<MessageKey, string>;
 const kk: Dictionary = {
   installShortcut: "Телефонға белгіше",
   myOrganizations: "Менің ұйымдарым",
-  "myOrganizations.description": "Сен мүше болған командалар мен гильдиялар.",
+  "myOrganizations.description": "Сен мүше болған немесе иесі болып табылатын командалар мен гильдиялар.",
   "myOrganizations.empty": "Сен әзірге командаға немесе гильдияға кірмегенсің.",
   "myOrganizations.browse": "Команда немесе гильдия табу",
   "myOrganizations.error": "Сенің ұйымдарыңды жүктеу мүмкін болмады.",
@@ -431,7 +431,7 @@ const kk: Dictionary = {
 const ky: Dictionary = {
   installShortcut: "Телефонго белги",
   myOrganizations: "Менин уюмдарым",
-  "myOrganizations.description": "Сен мүчө болгон командалар жана гильдиялар.",
+  "myOrganizations.description": "Сен мүчө болгон же ээси болгон командалар жана гильдиялар.",
   "myOrganizations.empty": "Сен азырынча командага же гильдияга мүчө эмессиң.",
   "myOrganizations.browse": "Команда же гильдия табуу",
   "myOrganizations.error": "Сенин уюмдарыңды жүктөө мүмкүн болгон жок.",

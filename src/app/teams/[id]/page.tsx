@@ -26,6 +26,7 @@ interface Team {
   main_rating: number | null;
   reputation_score: number;
   dissolved_at: string | null;
+  owner_user_id: string | null;
 }
 
 interface LeadershipTransfer {
@@ -92,6 +93,8 @@ export default function TeamPage() {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLeader, setIsLeader] = useState(false);
+  const [isOrganizationOwner, setIsOrganizationOwner] = useState(false);
+  const [ownerNickname, setOwnerNickname] = useState("");
   const [canManage, setCanManage] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isMember, setIsMember] = useState(false);
@@ -116,6 +119,10 @@ export default function TeamPage() {
   // Передача лидерства
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferUserId, setTransferUserId] = useState("");
+  const [ownerNewLeaderId, setOwnerNewLeaderId] = useState("");
+  const [removePreviousLeader, setRemovePreviousLeader] = useState(false);
+  const [contractAccess, setContractAccess] = useState<{ user_id: string; granted_at: string }[]>([]);
+  const [contractAccessUserId, setContractAccessUserId] = useState("");
   const [pendingTransfer, setPendingTransfer] = useState<LeadershipTransfer | null>(null);
   const [organizationBusy, setOrganizationBusy] = useState(false);
 
@@ -194,9 +201,23 @@ export default function TeamPage() {
         const membership = loadedMembers.find((member) => member.user_id === user.id);
         const organizationIsActive = !teamData?.dissolved_at;
         const leader = organizationIsActive && (teamData?.leader_id === user.id || membership?.role_in_team === "leader");
-        const manager = organizationIsActive && ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
+        const owner = organizationIsActive && teamData?.owner_user_id === user.id;
+        const manager = organizationIsActive && (owner || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? ""));
         setIsLeader(leader);
+        setIsOrganizationOwner(owner);
         setCanManage(manager);
+        if (teamData?.owner_user_id) {
+          const { data: ownerProfile } = await supabase.from("profiles").select("nickname").eq("id", teamData.owner_user_id).maybeSingle();
+          setOwnerNickname(ownerProfile?.nickname || "Игрок");
+        }
+        if (owner) {
+          const { data: accessRows, error: accessError } = await supabase.from("organization_contract_access")
+            .select("user_id,granted_at").eq("team_id", id).order("granted_at", { ascending: true });
+          if (accessError) setInviteMessage("Не удалось загрузить выданные допуски: " + accessError.message);
+          setContractAccess(accessRows ?? []);
+        } else {
+          setContractAccess([]);
+        }
         if (organizationIsActive) {
           const { data: transfer } = await supabase
             .from("leadership_transfers")
@@ -331,6 +352,62 @@ export default function TeamPage() {
     setInviteMessage("Лидерство передано. Новый лидер уже получил права управления.");
     setShowTransfer(false);
     setTransferUserId("");
+  };
+
+  const ownerSetLeader = async () => {
+    if (!ownerNewLeaderId || !currentUser || !isOrganizationOwner || organizationBusy) return;
+    const previousLeader = members.find(member => member.user_id === team?.leader_id);
+    const nextLeader = members.find(member => member.user_id === ownerNewLeaderId);
+    const choice = removePreviousLeader
+      ? `Назначить ${nextLeader?.nickname ?? "выбранного участника"} руководителем и удалить ${previousLeader?.nickname ?? "прежнего руководителя"} из состава?`
+      : `Назначить ${nextLeader?.nickname ?? "выбранного участника"} руководителем, оставив прежнего руководителя в составе?`;
+    if (!window.confirm(choice)) return;
+
+    setOrganizationBusy(true);
+    const { error } = await supabase.rpc("organization_owner_set_leader", {
+      p_team_id: id,
+      p_new_leader_id: ownerNewLeaderId,
+      p_remove_previous_member: removePreviousLeader,
+    });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось сменить руководителя: " + error.message);
+      return;
+    }
+    const [updatedTeam, updatedMembers] = await Promise.all([fetchTeam(), fetchMembers()]);
+    const membership = updatedMembers.find(member => member.user_id === currentUser.id);
+    setIsLeader(updatedTeam?.leader_id === currentUser.id || membership?.role_in_team === "leader");
+    setCanManage(updatedTeam?.owner_user_id === currentUser.id || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? ""));
+    setOwnerNewLeaderId("");
+    setRemovePreviousLeader(false);
+    setInviteMessage(removePreviousLeader
+      ? "Руководитель заменён, прежний руководитель удалён из состава."
+      : "Руководитель заменён, прежний руководитель остался в составе.");
+  };
+
+  const setContractAccessForMember = async (userId: string, enabled: boolean) => {
+    if (!currentUser || !isOrganizationOwner || organizationBusy) return;
+    setOrganizationBusy(true);
+    const { error } = await supabase.rpc("organization_owner_set_contract_access", {
+      p_team_id: id,
+      p_user_id: userId,
+      p_enabled: enabled,
+    });
+    setOrganizationBusy(false);
+    if (error) {
+      setInviteMessage("Не удалось изменить допуск к контрактам: " + error.message);
+      return;
+    }
+    const { data, error: readError } = await supabase.from("organization_contract_access")
+      .select("user_id,granted_at").eq("team_id", id).order("granted_at", { ascending: true });
+    if (readError) {
+      setInviteMessage("Допуск изменён, но список обновить не удалось: " + readError.message);
+      return;
+    }
+    setContractAccess(data ?? []);
+    setContractAccessUserId("");
+    const nickname = members.find(member => member.user_id === userId)?.nickname ?? "участнику";
+    setInviteMessage(enabled ? `Доступ к контрактам выдан: ${nickname}.` : `Доступ к контрактам отозван: ${nickname}.`);
   };
 
   const respondLeadership = async (accept: boolean) => {
@@ -493,6 +570,7 @@ export default function TeamPage() {
             </div>
             <p className="text-gray-300 mb-4">{team.description || "Нет описания"}</p>
             <div className="mb-4 flex flex-wrap gap-2 text-sm"><span className="rounded bg-cyan-950 px-3 py-1 text-cyan-200">Рейтинг {team.main_rating == null ? "—" : formatNumber(Number(team.main_rating), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><span className="rounded bg-emerald-950 px-3 py-1 text-emerald-200">Репутация {Number(team.reputation_score ?? 50).toFixed(0)}</span></div>
+            <p className="mb-4 text-sm text-slate-300">Владелец: {team.owner_user_id ? <Link href={`/profile/${team.owner_user_id}`} className="text-cyan-300 hover:underline">{ownerNickname || "Загрузка…"}</Link> : <span>не назначен</span>}</p>
             {team.social_link && <a href={team.social_link} target="_blank" className="text-blue-400 block mb-4">Сообщество →</a>}
             {isLeader && (
               <div className="flex gap-2 flex-wrap">
@@ -534,6 +612,47 @@ export default function TeamPage() {
           </>
         )}
       </div>
+
+      {isOrganizationOwner && !team.dissolved_at && (
+        <section className="mt-6 space-y-5 rounded-xl border border-amber-400/30 bg-slate-900/90 p-5">
+          <div>
+            <h2 className="text-xl font-semibold text-amber-200">Управление владельца</h2>
+            <p className="mt-1 text-sm text-slate-300">Вы можете управлять доступом к контрактам, менять руководителя, распоряжаться балансом и записывать организацию на мероприятия. Владение не занимает место в составе.</p>
+          </div>
+          <div className="space-y-3 rounded-lg border border-white/10 p-4">
+            <h3 className="font-semibold">Сменить руководителя</h3>
+            <label className="block space-y-2 text-sm">
+              <span>Новый руководитель — только из текущего состава</span>
+              <select className="w-full rounded bg-slate-800 p-2 text-white" value={ownerNewLeaderId} onChange={event => setOwnerNewLeaderId(event.target.value)}>
+                <option value="">Выберите участника</option>
+                {members.filter(member => member.user_id !== team.leader_id).map(member => <option key={member.user_id} value={member.user_id}>{member.nickname}</option>)}
+              </select>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-slate-200">
+              <input type="checkbox" checked={removePreviousLeader} onChange={event => setRemovePreviousLeader(event.target.checked)} className="mt-1" />
+              <span>После назначения удалить прежнего руководителя из состава</span>
+            </label>
+            <button type="button" onClick={ownerSetLeader} disabled={!ownerNewLeaderId || organizationBusy} className="rounded bg-amber-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">
+              {organizationBusy ? "Обработка…" : "Назначить руководителя"}
+            </button>
+          </div>
+          <div className="space-y-3 rounded-lg border border-white/10 p-4">
+            <h3 className="font-semibold">Доступ к контрактам</h3>
+            <p className="text-sm text-slate-400">Руководитель и владелец уже имеют доступ. Выданный участнику доступ автоматически отзывается, если он покинет состав.</p>
+            <div className="flex flex-wrap gap-2">
+              <select className="min-w-48 flex-1 rounded bg-slate-800 p-2 text-white" value={contractAccessUserId} onChange={event => setContractAccessUserId(event.target.value)}>
+                <option value="">Выберите участника</option>
+                {members.filter(member => member.user_id !== team.leader_id && member.user_id !== team.owner_user_id && !contractAccess.some(access => access.user_id === member.user_id)).map(member => <option key={member.user_id} value={member.user_id}>{member.nickname}</option>)}
+              </select>
+              <button type="button" onClick={() => void setContractAccessForMember(contractAccessUserId, true)} disabled={!contractAccessUserId || organizationBusy} className="rounded bg-cyan-700 px-4 py-2 disabled:opacity-50">Выдать доступ</button>
+            </div>
+            {contractAccess.length > 0 ? <ul className="space-y-2">{contractAccess.map(access => <li key={access.user_id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-800 p-3">
+              <span>{members.find(member => member.user_id === access.user_id)?.nickname ?? "Участник"}</span>
+              <button type="button" onClick={() => void setContractAccessForMember(access.user_id, false)} disabled={organizationBusy} className="text-sm text-rose-300 hover:underline disabled:opacity-50">Отозвать</button>
+            </li>)}</ul> : <p className="text-sm text-slate-500">Дополнительные допуски не выданы.</p>}
+          </div>
+        </section>
+      )}
 
       {/* Состав */}
       <div className="mt-6">
@@ -595,7 +714,7 @@ export default function TeamPage() {
       </section>
 
       {/* Предупреждения команды (видны только лидеру) */}
-      {isLeader && teamWarnings.warningCount > 0 && (
+      {(isLeader || isOrganizationOwner) && teamWarnings.warningCount > 0 && (
         <div className="mt-6 bg-gray-800 p-4 rounded border border-yellow-600">
           <h3 className="text-lg font-semibold mb-2">Предупреждения команды ({teamWarnings.warningCount})</h3>
           {teamWarnings.activeBan && (
@@ -649,7 +768,7 @@ export default function TeamPage() {
         </div>
       )}
 
-      {currentUser && !isMember && !hasPendingRequest && (
+      {currentUser && !isMember && !isOrganizationOwner && !hasPendingRequest && (
         <div className="mt-6">
           <button onClick={sendJoinRequest} className="px-4 py-2 bg-green-500 rounded">Подать заявку</button>
         </div>
