@@ -121,6 +121,8 @@ export default function EventPage() {
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [prizePlans,setPrizePlans]=useState<Record<string,number[]>>({});
+  useEffect(()=>{let active=true;void fetch(`/api/events/${id}/prizes`).then(async r=>{if(!r.ok)return;const d=await r.json();if(active)setPrizePlans(Object.fromEntries((d.funds??[]).map((f:{sessionId:string;plan:number[]})=>[f.sessionId,f.plan])));}).catch(()=>undefined);return()=>{active=false;};},[id]);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const [pastLimit, setPastLimit] = useState(10);
   const [showFutureSessions, setShowFutureSessions] = useState(false);
@@ -528,6 +530,7 @@ export default function EventPage() {
           return (
             <div key={s.id} data-session-id={s.id} className="bg-gray-800 p-4 rounded mb-2">
               <p><span className="text-gray-400">Начало:</span> {new Date(s.start_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>
+              {prizePlans[s.id]&&<p className="mt-2 text-amber-300">Призы: {prizePlans[s.id].map((sum,i)=>`${i+1}-е место — ${sum.toLocaleString("ru-RU")} 🪙`).join(" · ")}</p>}
               {s.end_time && <p><span className="text-gray-400">Конец:</span> {new Date(s.end_time).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) + " МСК"}</p>}
               {registrationCount && <p className="mt-2 w-fit rounded-full border border-cyan-400/25 bg-cyan-950/40 px-3 py-1 text-sm font-semibold tabular-nums text-cyan-200"><span className="sr-only">Зарегистрировано / всего мест: </span>{registrationCount.registered}/{registrationCount.capacity ?? "∞"}</p>}
               {games.some((game) => game.session_id === s.id) && <div className="mt-3 flex flex-wrap gap-2">{games.filter((game) => game.session_id === s.id).map((game) => <span key={game.id} className="rounded bg-cyan-950 px-3 py-1 text-xs text-cyan-200">Игра {game.game_number}: {mapTitle(game.map_name)}</span>)}</div>}

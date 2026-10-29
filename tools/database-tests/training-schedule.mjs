@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 export async function verifyTrainingSchedule(db,id,base){
+ await db.query(`insert into public.coin_accounts(user_id,balance) values($1,1000000) on conflict(user_id) do update set balance=1000000`,[id(1)]);
  const config=structuredClone(base);
  config.type='training';config.rules.mode='training';config.organizerUserId=id(1);
  config.trainingSchedule={enabled:true,startsOn:'2026-10-05'};

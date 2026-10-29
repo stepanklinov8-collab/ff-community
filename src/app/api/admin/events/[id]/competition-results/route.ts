@@ -22,12 +22,13 @@ export async function GET(request:Request,route:Route){
     const loaded=await loadSession(db,sessionId,auth);
     const {data:prizesAllowed,error:prizeError}=await db.rpc("u5_session_prizes_allowed",{p_session:sessionId});
     if(prizeError)throw new Error(prizeError.message);
+    const {data:prizeFund,error:fundError}=await db.from("event_prize_funds").select("plan,total,held,cancelled").eq("session_id",sessionId).maybeSingle();if(fundError)throw new Error(fundError.message);
     const seed=loaded.publication?.draft?{draft:loaded.publication.draft,seeded:0}:await legacySessionDraft(db,sessionId,loaded.context);
     return Response.json({event,sessions,session:loaded.session,groups:loaded.groups,publicId:loaded.publicId,context:loaded.context,
       draft:seed.draft,legacySeeded:seed.seeded,published:loaded.publication?.published??null,
       revision:loaded.publication?.revision??0,configurationRevision:loaded.session.configuration_revision,
       firstPublishedAt:loaded.publication?.first_published_at??null,correctedAt:loaded.publication?.corrected_at??null,
-      canEdit:mayEditResults(loaded.role,loaded.publication?.first_published_at??null),canRank:loaded.role!=="responsible",isAdmin,prizesAllowed:!!prizesAllowed});
+      canEdit:mayEditResults(loaded.role,loaded.publication?.first_published_at??null),canRank:loaded.role!=="responsible",isAdmin,prizeFund,prizesAllowed:!!prizesAllowed});
   }catch(error){return competitionErrorResponse(error);}
 }
 export async function POST(request:Request,route:Route){
@@ -39,10 +40,11 @@ export async function POST(request:Request,route:Route){
     if(loaded.event.id!==id)return Response.json({error:"Сессия другого мероприятия"},{status:403});
     if(!mayEditResults(loaded.role,loaded.publication?.first_published_at??null))return Response.json({error:"Срок исправления результатов истёк"},{status:403});
     if(loaded.role==="responsible"&&(input.draft.mvpUserId??null)!==(loaded.publication?.draft?.mvpUserId??null))return Response.json({error:"MVP при полном равенстве выбирает организатор или администратор"},{status:403});
+    const {data:prizeFund,error:fundError}=await db.from("event_prize_funds").select("session_id").eq("session_id",input.sessionId).maybeSingle();if(fundError)throw new Error(fundError.message);
     const previousPrizes=loaded.publication?.draft?.prizes??[];
     input.draft.prizes ??= previousPrizes;
     const canonicalPrizes=(items:Array<{registrationId:string;amount:number}>)=>JSON.stringify(items.filter(p=>p.amount>0).sort((a,b)=>a.registrationId.localeCompare(b.registrationId)));
-    if(canonicalPrizes(input.draft.prizes??[])!==canonicalPrizes(previousPrizes)&&loaded.role!=="admin")
+    if(!prizeFund&&canonicalPrizes(input.draft.prizes??[])!==canonicalPrizes(previousPrizes)&&loaded.role!=="admin")
       return Response.json({error:"Призовые подтверждает администратор"},{status:403});
     if(input.draft.prizes?.some(p=>p.amount>0)){
       const {data:allowed,error}=await db.rpc("u5_session_prizes_allowed",{p_session:input.sessionId});
@@ -58,7 +60,9 @@ export async function POST(request:Request,route:Route){
       const remainingTargets=new Set(loaded.context.entrants.flatMap(e=>[e.teamId,e.userId,...e.roster.map(p=>p.id)].filter(Boolean)));
       input.draft={...input.draft,prizes:input.draft.prizes?.filter(p=>!removed.has(p.registrationId)),rows:input.draft.rows.filter(r=>!removed.has(r.registrationId)),manualOrder:input.draft.manualOrder.filter(id=>!removed.has(id)),warnings:input.draft.warnings.filter(w=>remainingTargets.has(w.targetId))};
     }
+    if(prizeFund)input.draft.prizes=[];
     const published=input.action==="draft"?null:publishResults(loaded.context,input.draft,loaded.role!=="responsible" || JSON.stringify(input.draft.manualOrder)===JSON.stringify(loaded.publication?.draft?.manualOrder));
+    if(prizeFund&&published){const {data,error}=await db.rpc("u6_calculate_prizes",{p_session:input.sessionId,p_published:published});if(error)throw new Error(error.message);published.prizes=data;input.draft.prizes=data;}
     if(input.action==="validate")return Response.json({results:published,warnings:input.draft.warnings,affectsBets:true});
     const contributions:Array<{userId:string;nomination:string;place:number;participants:number}>=[];
     if(published&&loaded.context.rules.mode==="solo"&&loaded.context.rules.ratingEnabled){

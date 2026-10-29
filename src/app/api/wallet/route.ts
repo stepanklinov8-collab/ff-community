@@ -1,0 +1,50 @@
+import { createAdminClient } from "@/utils/supabase/admin";
+import { requireUser } from "@/utils/supabase/server-auth";
+import { competitionErrorResponse, allRows } from "@/lib/competition/server";
+import { walletRequestSchema } from "@/lib/economy/wallet-schema";
+import { z } from "zod";
+
+export async function GET(request: Request) {
+  try {
+    const auth = await requireUser(request), db = createAdminClient(), url = new URL(request.url);
+    const search = url.searchParams.get("search");
+    if (search !== null) {
+      const q = search.trim().slice(0, 80).replace(/[,%_()]/g, "");
+      if (q.length < 2) return Response.json({ players: [], teams: [] });
+      const [{ data: players, error }, { data: teams, error: teamError }] = await Promise.all([
+        db.from("profiles").select("id,nickname").ilike("nickname", `%${q}%`).order("nickname").limit(20),
+        db.from("teams").select("id,name,type").ilike("name", `%${q}%`).order("name").limit(20),
+      ]);
+      if (error || teamError) throw new Error((error ?? teamError)!.message);
+      return Response.json({ players, teams }, { headers: { "Cache-Control": "private, no-store" } });
+    }
+    const memberships = await allRows((a,b) => db.from("team_members").select("team_id,role_in_team").eq("user_id", auth.user.id).range(a,b));
+    const teams = memberships.length ? await db.from("teams").select("id,name,type").in("id",memberships.map(m=>m.team_id)) : { data: [], error: null };
+    if (teams.error) throw new Error(teams.error.message);
+    const accounts = await allRows((a,b) => db.from("coin_accounts").select("id,user_id,team_id,balance,reserved")
+      .or(`user_id.eq.${auth.user.id}${memberships.length ? `,team_id.in.(${memberships.map(m=>m.team_id).join(",")})` : ""}`).order("id").range(a,b));
+    const ids = accounts.map(a=>a.id);
+    const [ledger, withdrawals, demo, admin] = await Promise.all([
+      ids.length ? db.from("coin_entries").select("id,account_id,amount,reserved_change,balance_after,created_at,operation:coin_operations(id,action,description)").in("account_id",ids).order("id",{ascending:false}).limit(100) : {data:[],error:null},
+      db.from("coin_withdrawals").select("id,account_id,user_id,amount,status,note,admin_note,created_at").eq("user_id",auth.user.id).order("created_at",{ascending:false}).limit(100),
+      db.from("site_wallets").select("balance").eq("user_id",auth.user.id).maybeSingle(),
+      db.rpc("u6_coin_admin",{p_actor:auth.user.id}),
+    ]);
+    for(const result of [ledger,withdrawals,demo,admin]) if(result.error) throw new Error(result.error.message);
+    const own = accounts.find(a=>a.user_id===auth.user.id);
+    return Response.json({userId:auth.user.id,canManage:!!admin.data,
+      accounts:[{...own,id:own?.id??null,user_id:auth.user.id,team_id:null,balance:own?.balance??0,reserved:own?.reserved??0,name:"Личный баланс",canSpend:true},
+        ...accounts.filter(a=>a.team_id).map(a=>({...a,name:teams.data?.find(t=>t.id===a.team_id)?.name??"Организация",canSpend:memberships.some(m=>m.team_id===a.team_id&&m.role_in_team==="leader")}))],
+      demoBalance:demo.data?.balance??0,ledger:ledger.data,withdrawals:withdrawals.data,
+    },{headers:{"Cache-Control":"private, no-store"}});
+  }catch(error){return competitionErrorResponse(error);}
+}
+export async function POST(request: Request) {
+  try {
+    const auth=await requireUser(request),{requestId,operation}=walletRequestSchema.parse(await request.json());
+    const {action,...input}=operation;
+    const {data,error}=await createAdminClient().rpc("u6_coin_action",{p_actor:auth.user.id,p_request:requestId,p_action:action,p_input:input});
+    if(error) throw new Error(error.message);
+    return Response.json(data,{headers:{"Cache-Control":"private, no-store"}});
+  }catch(error){if(error instanceof z.ZodError)return Response.json({error:error.issues[0]?.message??"Проверьте данные"},{status:400});return competitionErrorResponse(error);}
+}

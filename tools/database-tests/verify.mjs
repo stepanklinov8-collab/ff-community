@@ -1,3 +1,4 @@
+import {verifyMainCoins} from './main-coins.mjs';
 import {verifyEconomySnapshot} from './economy-snapshot.mjs';
 import {verifyReserveQueue} from './reserve-queue.mjs';
 import {verifyEconomyValues} from './economy-values.mjs';
@@ -77,7 +78,7 @@ try {
  assert.equal((await db.query(`select count(*)::integer n from public.competition_sanctions where target_id=$1`,[id(2)])).rows[0].n,1);
  console.log('PASS: fixed warning cycle, immediate reputation restoration and no reused warnings');
  const future=new Date(Date.now()+86400000).toISOString(),endFuture=new Date(Date.now()+90000000).toISOString();
- const config={title:'Test event',type:'tournament',cost:0,organizer:'Admin',organizerUserId:id(1),description:'',rulesText:'',streamUrl:'',paymentUrl:'',imageUrl:'',
+ const config={prizePlan:[],title:'Test event',type:'tournament',cost:0,organizer:'Admin',organizerUserId:id(1),description:'',rulesText:'',streamUrl:'',paymentUrl:'',imageUrl:'',
  maxTeams:1024,minPlayers:1,publishAt:null,commentsEnabled:true,allowIndividualRegistration:false,finalSessionId:null,
  rules:{mode:'tournament',criterion:'points',placePoints:[12,9,8,7,6,5,4,3,2,1],killPoints:1,bonuses:{},nominations:['points'],ratingEnabled:true,winsRequired:1},
  sessions:[{id:id(101),startTime:future,endTime:endFuture,registrationOpenTime:null,registrationCloseTime:null,maxTeams:1024,responsibleUserId:id(3),description:'',stage:'ordinary',sourceSessionId:null,qualification:{},reminderMinutes:[60],groups:[{id:id(102),name:'A',capacity:12,games:[{id:id(103),map:'bermuda'},{id:id(104),map:'kalahari'}]}]}]};
@@ -183,6 +184,7 @@ try {
  await verifyEconomyValues(db,id,config);
  await verifyReserveQueue(db,id,config);
  await verifyChat(db,id);
+ await verifyMainCoins(db,id,config);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

@@ -17,6 +17,7 @@ export const sessionConfiguration=z.object({id:z.string().uuid().optional(),star
  .refine(s=>!s.registrationCloseTime||Date.parse(s.registrationCloseTime)<Date.parse(s.startTime),"Регистрация должна закрываться до начала")
  .refine(s=>!s.registrationOpenTime||!s.registrationCloseTime||Date.parse(s.registrationOpenTime)<Date.parse(s.registrationCloseTime),"Проверьте время регистрации");
 export const eventConfiguration=z.object({
+ prizePlan:z.array(z.number().int().nonnegative().max(1_000_000_000_000)).max(3).optional(),
  trainingSchedule:z.object({enabled:z.literal(true),startsOn:z.string().date()}).nullable().default(null),
  title:z.string().trim().min(2).max(160),type:z.enum(["training","bo","tournament","kv","solo"]),cost:z.number().int().min(0).max(10000000),
  organizer:z.string().trim().max(160),organizerUserId:z.string().uuid().nullable(),description:z.string().max(10000),rulesText:z.string().max(10000).default(""),
