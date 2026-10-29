@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
-import { contractTermsSchema, defaultTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
+import { contractTermsSchema, defaultTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
+import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
-type Editor = { id: string; revision: number; organizationId: string; playerId: string; playerName: string; kind: "main" | "guest"; eventId: string | null; eventTitle: string; sessionId: string | null; terms: ContractTerms };
+type Editor = { id: string; revision: number; organizationId: string; playerId: string; playerName: string; kind: "main" | "guest"; eventId: string | null; eventTitle: string; sessionId: string | null; terms: ConstructorTerms };
 const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
 const statusNames = { draft: "Черновик", offered: "Предложен игроку", rejected: "Отклонён", cancelled: "Отозван", superseded: "Заменён новой версией" };
 const number = (value: number) => value.toLocaleString("ru-RU");
@@ -41,7 +42,8 @@ function TermsSummary({ terms }: { terms: ContractTerms }) {
     <div><dt className="text-slate-400">Выход по инициативе игрока</dt><dd>{feeText(terms.playerExit, "от стоимости игрока на момент оплаты")}</dd></div>
     <div><dt className="text-slate-400">Расторжение организацией</dt><dd>{feeText(terms.organizationTermination, "от стоимости игрока на момент оплаты")} игроку. По обоюдному согласию — без штрафа.</dd></div>
     <div><dt className="text-slate-400">Гостевые выступления</dt><dd>{{ forbidden: "Запрещены", allowed: "Разрешены", consent: "С согласия организации" }[terms.guestPolicy]} · {feeText(terms.guestCompensation, "от выплаты игроку")}</dd></div>
-    {terms.note && <div className="sm:col-span-2"><dt className="text-slate-400">Дополнительные пояснения</dt><dd className="whitespace-pre-wrap break-words">{terms.note}</dd></div>}
+    {"note" in terms && terms.note && <div className="sm:col-span-2"><dt className="text-slate-400">Историческое пояснение — не переносится в новые условия</dt><dd className="whitespace-pre-wrap break-words">{terms.note}</dd></div>}
+    {"financial" in terms && <div className="sm:col-span-2"><dt className="mb-2 font-semibold">Оплата и бонусы</dt><dd><FinancialTermsSummary value={terms.financial} /></dd></div>}
   </dl>;
 }
 
@@ -136,7 +138,7 @@ export default function ContractsPage() {
     finally { setBusy(false); }
   }
   const terms = editor?.terms;
-  function updateTerms(patch: Partial<ContractTerms>) { setEditor(current => current ? { ...current, terms: { ...current.terms, ...patch } } : null); }
+  function updateTerms(patch: Partial<ConstructorTerms>) { setEditor(current => current ? { ...current, terms: { ...current.terms, ...patch } } : null); }
   return <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6">
     <section className="cyber-card space-y-3 p-5 sm:p-8">
       <h1 className="section-title">Контракты</h1>
@@ -196,7 +198,7 @@ export default function ContractsPage() {
         <label>Выступления за другие коллективы<select className={inputClass} value={terms.guestPolicy} onChange={event => updateTerms({ guestPolicy: event.target.value as ContractTerms["guestPolicy"], ...(event.target.value === "forbidden" ? { guestCompensation: { kind: "none" } as const } : {}) })}><option value="forbidden">Запрещены</option><option value="allowed">Разрешены</option><option value="consent">Требуют согласия организации</option></select></label>
         {terms.guestPolicy !== "forbidden" && <FeeInput label="Компенсация основной организации за гостя" value={terms.guestCompensation} basis="от выплаты игроку" onChange={guestCompensation => updateTerms({ guestCompensation })} />}
       </div>
-      <label className="block">Пояснения к условиям<textarea className={inputClass} maxLength={4000} rows={3} value={terms.note} onChange={event => updateTerms({ note: event.target.value })} /><span className="text-sm text-slate-400">Суммы и удержания задаются полями выше. Текстовое пояснение не создаёт автоматическое списание.</span></label>
+      <FinancialTermsEditor key={editor.organizationId} value={terms.financial} onChange={financial => updateTerms({ financial })} startsAt={terms.startsAt} endsAt={terms.endsAt} organizationId={editor.organizationId} />
       <div className="rounded border border-cyan-700 p-4"><h3 className="mb-3 font-semibold">Проверьте условия перед сохранением</h3><TermsSummary terms={terms} /></div>
       <div className="flex flex-wrap gap-3"><button type="submit" disabled={busy} className="primary-button">{busy ? "Сохранение…" : "Сохранить черновик"}</button><button type="button" disabled={busy} className="secondary-button" onClick={() => setConfirmClose(true)}>Закрыть</button></div>
       {confirmClose && <div className="space-y-3 rounded border border-amber-600 p-4"><p>Закрыть форму без сохранения изменений?</p><div className="flex flex-wrap gap-3"><button type="button" className="secondary-button" onClick={() => { setEditor(null); setConfirmClose(false); }}>Да, закрыть</button><button type="button" className="secondary-button" onClick={() => setConfirmClose(false)}>Продолжить заполнение</button></div></div>}
@@ -205,8 +207,8 @@ export default function ContractsPage() {
       <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold"><Link href={`/teams/${contract.organizationId}`} className="text-cyan-200">{contract.organizationName}</Link> → <Link href={`/profile/${contract.playerId}`}>{contract.playerName}</Link></h2><p className="text-sm text-slate-400">{contract.kind === "main" ? "Основной договор" : `Гостевое выступление · ${contract.eventTitle ?? "Мероприятие"}`} · Версия {contract.revision}</p></div><span className="text-amber-200">{statusNames[contract.status]}</span></div>
       <TermsSummary terms={contract.terms} />
       <div className="flex flex-wrap gap-3">
-        {contract.canEdit && ["draft", "offered", "rejected"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: contract.terms }); setChoices([]); }}>Изменить условия</button>}
-        {contract.canOffer && contract.status === "draft" && <button type="button" disabled={busy} className="primary-button" onClick={() => void mutate({ action: "offer", contractId: contract.id, revision: contract.revision })}>Направить игроку</button>}
+        {contract.canEdit && ["draft", "offered", "rejected"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : ""); }}>Изменить условия</button>}
+        {contract.canOffer && contract.status === "draft" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => void mutate({ action: "offer", contractId: contract.id, revision: contract.revision })}>Направить игроку</button>}
         {contract.canEdit && ["draft", "offered"].includes(contract.status) && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "cancel", contractId: contract.id, revision: contract.revision })}>Отозвать</button>}
         {contract.isPlayer && contract.status === "offered" && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "reject", contractId: contract.id, revision: contract.revision })}>Отклонить условия</button>}
       </div>

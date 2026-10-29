@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { financialTermsSchema, emptyFinancialTerms } from "./financial-terms.ts";
 
 const uuid = z.string().uuid();
 const coins = z.number().int().min(0).max(1_000_000_000_000);
@@ -9,7 +10,7 @@ export const compensationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("fixed"), amount: coins }).strict(),
   z.object({ kind: z.literal("percent"), basisPoints }).strict(),
 ]);
-export const contractTermsSchema = z.object({
+const termsObject = z.object({
   startsAt: date,
   endsAt: date.nullable(),
   limit: z.object({ unit: z.enum(["games", "trainings", "tournaments"]), count: z.number().int().min(1).max(1_000_000) }).strict().nullable(),
@@ -28,11 +29,30 @@ export const contractTermsSchema = z.object({
   guestPolicy: z.enum(["forbidden", "allowed", "consent"]),
   guestCompensation: compensationSchema,
   note: z.string().trim().max(4000),
-}).strict().superRefine((terms, ctx) => {
+}).strict();
+function validateTerms(terms: z.infer<typeof termsObject>, ctx: z.RefinementCtx) {
   if (terms.endsAt && Date.parse(terms.endsAt) <= Date.parse(terms.startsAt)) ctx.addIssue({ code: "custom", message: "Окончание должно быть позже начала", path: ["endsAt"] });
   if (terms.guestPolicy === "forbidden" && terms.guestCompensation.kind !== "none") ctx.addIssue({ code: "custom", message: "При запрете гостевых выступлений компенсация не назначается", path: ["guestCompensation"] });
+}
+export const legacyContractTermsSchema = termsObject.superRefine(validateTerms);
+export const contractTermsSchema = termsObject.omit({ note: true }).extend({
+  schemaVersion: z.literal(2), financial: financialTermsSchema,
+}).strict().superRefine((terms, ctx) => {
+  validateTerms({ ...terms, note: "" }, ctx);
+  terms.financial.rankingBonuses.forEach((bonus, index) => {
+    if (Date.parse(bonus.startsAt) < Date.parse(terms.startsAt) || (terms.endsAt && Date.parse(bonus.endsAt) > Date.parse(terms.endsAt))) {
+      ctx.addIssue({ code: "custom", path: ["financial", "rankingBonuses", index], message: "Период бонуса должен входить в срок договора" });
+    }
+  });
 });
-export type ContractTerms = z.infer<typeof contractTermsSchema>;
+export type ConstructorTerms = z.infer<typeof contractTermsSchema>;
+export type ContractTerms = ConstructorTerms | z.infer<typeof legacyContractTermsSchema>;
+export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
+  if ("schemaVersion" in terms) return terms;
+  const { note: _historicalNote, ...fields } = terms;
+  void _historicalNote; // The old prose stays in history, never in new executable terms.
+  return { ...fields, schemaVersion: 2, financial: emptyFinancialTerms() };
+}
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
@@ -55,12 +75,12 @@ export const querySchema = z.object({
   if (input.history && (!input.contractId || input.search !== undefined)) ctx.addIssue({ code: "custom", message: "Для истории выберите один договор без поиска" });
 });
 
-export const defaultTerms = (now = new Date()): ContractTerms => ({
+export const defaultTerms = (now = new Date()): ConstructorTerms => ({
   startsAt: now.toISOString(), endsAt: null, limit: null,
   trainingShareBps: 2000, tournamentShareBps: 2000, personalShareBps: 10000,
   participation: { mode: "any" }, transfer: { kind: "none" }, transferRequiresConsent: true,
   playerExit: { kind: "none" }, organizationTermination: { kind: "none" },
-  guestPolicy: "consent", guestCompensation: { kind: "none" }, note: "",
+  guestPolicy: "consent", guestCompensation: { kind: "none" }, schemaVersion: 2, financial: emptyFinancialTerms(),
 });
 
 export interface ContractListItem {

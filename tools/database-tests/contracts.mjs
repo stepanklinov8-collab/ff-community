@@ -13,6 +13,12 @@ export async function verifyContractProposals(db,id){
  await db.query('insert into organization_contract_access(team_id,user_id,granted_by) values($1,$2,$3)',[team,delegate,owner]);
  await db.query("insert into events(id,title,type,organizer_user_id,is_published) values($1,'Contract guest event','training',$2,true)",[guestEvent,owner]);
  const terms=defaultTerms(new Date('2026-12-01T10:00:00Z'));
+ terms.financial.signingAmount=300;
+ terms.financial.salary={amount:1000,periodDays:9};
+ terms.financial.rates.perKill=5;
+ terms.financial.overdueCompensation={kind:'combined',amount:1000,basisPoints:1000,base:{kind:'player_value'},selection:'maximum'};
+ terms.financial.eventOverrides=[{eventId:guestEvent,values:{tournamentShareBps:3000,perKill:0}}];
+ terms.financial.rankingBonuses=[{id:id(9022),ranking:'organizations',mode:'throughout',top:3,startsAt:terms.startsAt,endsAt:'2026-12-10T10:00:00Z',amount:500}];
  let operation=9050;
  const save={action:'save',requestId:id(operation++),contractId:id(9030),expectedRevision:0,organizationId:team,playerId:player,kind:'main',eventId:null,sessionId:null,terms};
  const mutate=async(actor,input)=> (await db.query('select contract_mutate($1,$2::jsonb) value',[actor,JSON.stringify(input)])).rows[0].value;
@@ -20,6 +26,7 @@ export async function verifyContractProposals(db,id){
  assert(mutationSchema.safeParse(save).success);
  await assert.rejects(()=>mutate(stranger,save),/CONTRACT_FORBIDDEN/);
  const created=await mutate(delegate,save);
+ assert.deepEqual((await query(delegate)).contracts[0].terms,terms,'constructor fields round-trip through SQL unchanged');
  assert.equal(created.revision,1);assert.deepEqual(await mutate(delegate,save),created,'replayed request returns original version');
  await assert.rejects(()=>mutate(delegate,{...save,terms:{...terms,trainingShareBps:5000}}),/CONTRACT_CONFLICT/);
  assert.equal((await query(player)).contracts.length,0,'draft private to organization managers');
@@ -57,6 +64,37 @@ export async function verifyContractProposals(db,id){
   assert.equal(mutationSchema.safeParse({...save,terms:invalid}).success,false,'API rejects malformed structured terms');
   await assert.rejects(()=>mutate(owner,{...save,contractId:id(operation++),requestId:id(operation++),terms:invalid}));
  }
+ const financial=terms.financial;
+ for(const changed of [
+   {...financial,salary:{amount:10,periodDays:0}}, {...financial,salary:{amount:10,periodDays:1.5}},
+   {...financial,salary:{amount:null,periodDays:1}}, {...financial,signingAmount:'100'},
+   {...financial,rates:{...financial.rates,perKill:-1}}, {...financial,note:'hidden prose'},
+   {...financial,overdueCompensation:{...financial.overdueCompensation,selection:'sum'}},
+   {...financial,overdueCompensation:{...financial.overdueCompensation,base:{kind:'player_value',amount:999}}},
+   {...financial,eventOverrides:[{eventId:guestEvent,values:{}}]},
+   {...financial,eventOverrides:[...financial.eventOverrides,...financial.eventOverrides]},
+   {...financial,eventOverrides:[{eventId:guestEvent,values:{perKill:null}}]},
+   {...financial,rankingBonuses:[...financial.rankingBonuses,...financial.rankingBonuses]},
+   {...financial,rankingBonuses:[{...financial.rankingBonuses[0],startsAt:'2026-01-01T00:00:00Z'}]},
+ ]){
+  const invalid={...terms,financial:changed};
+  assert.equal(mutationSchema.safeParse({...save,terms:invalid}).success,false);
+  await assert.rejects(()=>mutate(owner,{...save,contractId:id(operation++),requestId:id(operation++),terms:invalid}),/CONTRACT_/);
+ }
+ for(const base of [{kind:'specified',amount:5000},{kind:'player_value'},{kind:'contract_debt'}]){
+  for(const selection of ['maximum','minimum']){
+   const valid={...terms,financial:{...financial,overdueCompensation:{kind:'combined',amount:300,basisPoints:1000,base,selection}}};
+   assert.equal(mutationSchema.safeParse({...save,terms:valid}).success,true);
+   await db.query('select contract_validate_terms($1::jsonb)',[JSON.stringify(valid)]);
+  }
+ }
+ const {schemaVersion,financial:unusedFinancial,...oldFields}=terms;void schemaVersion;void unusedFinancial;
+ const historical={...oldFields,note:'Keep historical prose verbatim'};
+ await db.query('insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,$4,$5)',[id(9035),team,player,'main',owner]);
+ await db.query('insert into organization_contract_versions(contract_id,revision,terms,created_by) values($1,1,$2::jsonb,$3)',[id(9035),JSON.stringify(historical),owner]);
+ assert.equal((await query(owner,{contractId:id(9035)})).contracts[0].terms.note,historical.note);
+ await assert.rejects(()=>mutate(owner,{action:'offer',requestId:id(operation++),contractId:id(9035),revision:1}),/CONTRACT_SCHEMA/);
+ await assert.rejects(()=>mutate(owner,{...save,contractId:id(operation++),requestId:id(operation++),terms:historical}),/CONTRACT_SCHEMA/);
  await db.exec('set role authenticated');
  try{
   await assert.rejects(()=>db.query('select contract_query($1,$2::jsonb)',[owner,'{}']),/permission denied/);

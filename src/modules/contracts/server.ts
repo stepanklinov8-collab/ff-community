@@ -5,6 +5,7 @@ import { mutationSchema, querySchema } from "./model";
 const errors: Record<string, [number, string]> = {
   CONTRACT_AUTH: [401, "Войдите в аккаунт"],
   CONTRACT_INPUT: [422, "Проверьте условия договора"],
+  CONTRACT_SCHEMA: [422, "Создайте новую версию договора через конструктор. Старые пояснения сохраняются в истории"],
   CONTRACT_FORBIDDEN: [403, "Нет прав на этот договор"],
   CONTRACT_NOT_FOUND: [404, "Договор не найден или недоступен"],
   CONTRACT_CONFLICT: [409, "Условия уже изменились. Обновите договор и проверьте новую версию"],

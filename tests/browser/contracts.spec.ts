@@ -24,7 +24,7 @@ async function setup(page: Page, rows: object[] = [], canOffer = true) {
     const url = new URL(route.request().url());
     if (url.pathname !== "/api/contracts") return route.fulfill({ json: { modules: [], notifications: [], unreadCount: 0, canOpenAdmin: false } });
     if (route.request().method() === "POST") { mutations.push(route.request().postDataJSON()); return route.fulfill({ json: { success: true } }); }
-    if (url.searchParams.has("search")) return route.fulfill({ json: { items: [{ id: playerId, nickname: "Игрок договора" }] } });
+    if (url.searchParams.has("search")) return route.fulfill({ json: { items: url.searchParams.get("searchKind") === "events" ? [{ id: "00000000-0000-4000-8000-000000009704", title: "Турнир ноября" }] : [{ id: playerId, nickname: "Игрок договора" }] } });
     return route.fulfill({ json: { contracts: rows, organizations: [{ id: teamId, name: "Север", type: "team", canOffer }], hasMore: false } });
   });
   return mutations;
@@ -39,13 +39,61 @@ test("manager prepares a private contract with structured financial conditions",
   await page.getByRole("button", { name: "Игрок договора", exact: true }).click();
   await page.getByLabel("Тренировка, %", { exact: true }).fill("25");
   await page.getByRole("combobox", { name: "Правило участия", exact: true }).selectOption("proportional");
+  await page.getByLabel("Предусмотреть зарплату", { exact: true }).check();
+  await page.getByLabel("Зарплата за период, OC", { exact: true }).fill("1000");
+  await page.getByLabel("Период зарплаты, суток", { exact: true }).fill("9");
+  await page.getByLabel("За личный килл, OC", { exact: true }).fill("5");
+  await page.getByRole("combobox", { name: "Способ компенсации", exact: true }).selectOption("combined");
+  await page.getByLabel("Фиксированная компенсация, OC", { exact: true }).fill("1000");
+  await page.getByLabel("Процент компенсации", { exact: true }).fill("10");
+  await page.getByRole("combobox", { name: "База процента", exact: true }).selectOption("player_value");
+  await page.getByRole("combobox", { name: "Выбрать из суммы и процента", exact: true }).selectOption("minimum");
+  await expect(page.getByText(/меньшее из двух значений/)).toBeVisible();
+  await expect(page.locator("textarea")).toHaveCount(0);
   await page.screenshot({ path: "tools/database-tests/artifacts/contracts/form-desktop.png", fullPage: true });
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Черновик сохранён");
   expect(mutations).toHaveLength(1);
   expect(mutations[0]).toMatchObject({ action: "save", organizationId: teamId, playerId, expectedRevision: 0,
-    terms: { trainingShareBps: 2500, participation: { mode: "proportional" } } });
+    terms: { schemaVersion: 2, trainingShareBps: 2500, participation: { mode: "proportional" }, financial: {
+      salary: { amount: 1000, periodDays: 9 }, rates: { perKill: 5 },
+      overdueCompensation: { kind: "combined", amount: 1000, basisPoints: 1000, base: { kind: "player_value" }, selection: "minimum" },
+    } } });
+  expect(mutations[0].terms).not.toHaveProperty("note");
   expect(mutations[0]).not.toHaveProperty("actorId");
+});
+
+test("event exceptions require selected fields and keep an explicit zero", async ({ page }) => {
+  const mutations = await setup(page, [{ ...contract, status: "draft" }]);
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Изменить условия", exact: true }).click();
+  await page.getByLabel("Поиск мероприятия для исключения").fill("Турнир");
+  await page.getByRole("button", { name: "Найти мероприятие", exact: true }).click();
+  await page.getByRole("button", { name: "Турнир ноября", exact: true }).click();
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  expect(mutations).toHaveLength(0);
+  await expect(page.locator('p[role="alert"]').first()).toContainText("Выберите хотя бы одно");
+  await page.getByLabel("Заменить: Доля турнира, %", { exact: true }).check();
+  await page.getByLabel("Доля турнира, % — исключение", { exact: true }).fill("30");
+  await page.getByLabel("Заменить: За личный килл", { exact: true }).check();
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Черновик сохранён");
+  expect(mutations[0]).toMatchObject({ terms: { financial: { eventOverrides: [{ eventId: "00000000-0000-4000-8000-000000009704", values: { tournamentShareBps: 3000, perKill: 0 } }] } } });
+});
+
+test("legacy prose is displayed in history but excluded from a new constructor version", async ({ page }) => {
+  const { schemaVersion, financial, ...oldFields } = contract.terms;
+  expect(schemaVersion).toBe(2); expect(financial.salary).toBeNull();
+  const mutations = await setup(page, [{ ...contract, status: "draft", terms: { ...oldFields, note: "Историческое условие" } }]);
+  await page.goto("/contracts");
+  await expect(page.getByText("Историческое условие", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Направить игроку", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Изменить условия", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Старые пояснения остаются в истории");
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Черновик сохранён");
+  expect(mutations[0].terms).not.toHaveProperty("note");
+  expect(mutations[0].terms).toMatchObject({ schemaVersion: 2 });
 });
 
 test("contract delegate can edit but cannot send financial terms", async ({ page }) => {
