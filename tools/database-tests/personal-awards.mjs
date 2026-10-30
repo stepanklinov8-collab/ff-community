@@ -13,6 +13,10 @@ export async function verifyPersonalAwards(db,id){
  await db.query("insert into teams(id,name,type,leader_id,verified) values($1,'Personal award team','team',$2,true)",[team,owner]);
  const wallet=async(action,input)=>(await db.query('select u6_coin_action($1,$2,$3,$4::jsonb) value',[owner,randomUUID(),action,JSON.stringify(input)])).rows[0].value;
  const account=async()=>(await db.query('select balance::int,reserved::int from coin_accounts where user_id=$1',[owner])).rows[0];
+ const playerAccount=async(user)=>(await db.query('select balance::int,reserved::int from coin_accounts where user_id=$1',[user])).rows[0]??{balance:0,reserved:0};
+ const organizationBalance=async(org)=>Number((await db.query('select coalesce((select balance from coin_accounts where team_id=$1),0) n',[org])).rows[0].n);
+ const privateQuery=async(actor=owner,e=null,s=null)=>(await db.query('select personal_award_query($1,$2,$3) value',[actor,e??event,s??id(19810)])).rows[0].value;
+ const awardAction=async(action,kind=null,winner=null,actor=owner,key=randomUUID(),expected=null)=>(await db.query('select personal_award_action($1,$2,$3,$4,$5,$6,$7) value',[actor,key,fund,action,expected??(await privateQuery(actor)).fingerprint,kind,winner])).rows[0].value;
  await wallet('adjust',{kind:'player',ownerId:owner,amount:1000,reason:'Test organizer personal awards'});
  const config={prizePlan:[],personalPrizes:{mvp:20,maxKills:10},trainingSchedule:null,title:'Personal training',type:'training',cost:0,
   organizer:'Organizer',organizerUserId:owner,description:'',rulesText:'',streamUrl:'',paymentUrl:'',imageUrl:'',maxTeams:12,minPlayers:1,
@@ -67,10 +71,31 @@ export async function verifyPersonalAwards(db,id){
  assert.equal((await distribution()).playerAmount,20,'personal award without contract goes directly and entirely to the player');
  assert.equal((await distribution()).organizationAmount,0);
  await assert.rejects(()=>distribution('mvp','user:'+other),/PERSONAL_AWARD_WINNER/,'caller cannot substitute the runner-up');
- assert.equal((await account()).reserved,30,'candidate calculation never pays or releases promised awards');
- const tie=document();tie.rows[0].players[0].kills=4;tie.rows[0].players[1].kills=4;
+ assert.deepEqual(await account(),{balance:970,reserved:0});assert.equal((await playerAccount(player)).balance,30,'real publication pays both personal awards directly, without a contract');
+ const ledgerBefore=(await db.query('select count(*)::int n from coin_entries')).rows[0].n;await publish(document());
+ assert.equal((await db.query('select count(*)::int n from coin_entries')).rows[0].n,ledgerBefore,'identical publication cannot pay twice');
+ await assert.rejects(()=>privateQuery(player),/CONTRACT_FORBIDDEN/);
+ const officialTie=document();officialTie.rows[0].players[0].kills=4;officialTie.rows[0].players[1].kills=4;await publish(officialTie);
+ assert.equal((await db.query("select personal_award_current_plan($1,'mvp') value",[fund])).rows[0].value.winner.userId,player,'valid published session MVP remains the single source for the monetary award');
+ await assert.rejects(()=>awardAction('choose','mvp','user:'+other),/PERSONAL_AWARD_WINNER/,'personal money choice cannot create a second MVP different from the published results');
+ const protectedWithdrawal=(await db.query("select u6_coin_action($1,$2,'withdraw_request',$3::jsonb) value",[player,randomUUID(),JSON.stringify({amount:20,note:'Protected award withdrawal'})])).rows[0].value;
+ const tie=document();tie.mvps=[];tie.rows[0].players[0].kills=4;tie.rows[0].players[1].kills=4;
  await publish(tie);assert.equal((await distribution()).reason,'winner_choice_required');
+ assert.deepEqual(await playerAccount(player),{balance:20,reserved:20});
+ assert.equal((await db.query('select contract_player_debt_summary($1) value',[player])).rows[0].value.total,20,'correction only recovers free coins and leaves a recoverable debt');
+ await assert.rejects(()=>db.query("select u6_coin_action($1,$2,'withdraw_paid',$3::jsonb)",[owner,randomUUID(),JSON.stringify({withdrawalId:protectedWithdrawal.operationId,reason:'Must not spend protected funds while debt exists'})]),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
  assert.equal((await distribution('mvp','user:'+other)).playerAmount,20,'post-start contract cannot change personal prize ownership');
+ const choiceKey=randomUUID(),choiceFingerprint=(await privateQuery()).fingerprint;
+ await awardAction('choose','mvp','user:'+other,owner,choiceKey,choiceFingerprint);await awardAction('choose','mvp','user:'+other,owner,choiceKey,choiceFingerprint);
+ await awardAction('choose','maxKills','user:'+other);
+ assert.equal((await playerAccount(other)).balance,10,'only the already recovered reserve can pay; choosing a winner never advances fresh organizer funds');
+ assert.equal((await privateQuery()).additionalReserve,20);
+ await awardAction('settle',null,null,ordinaryAdmin);assert.equal((await playerAccount(other)).balance,10,'a result administrator without coin authority cannot advance someone else\'s free balance');
+ await awardAction('settle');
+ assert.equal((await playerAccount(other)).balance,30,'manual choice is limited to tied candidates and pays once');
+ await db.query("select u6_coin_action($1,$2,'withdraw_cancel',$3::jsonb)",[player,randomUUID(),JSON.stringify({withdrawalId:protectedWithdrawal.operationId})]);
+ assert.equal((await db.query('select contract_player_debt_summary($1) value',[player])).rows[0].value.total,0);
+ assert.deepEqual(await account(),{balance:970,reserved:0},'late recovery after replacement payout returns free coins without reserving a second prize');
  const incomplete=document();incomplete.rows[0].detail='team';incomplete.rows[0].players=[];await publish(incomplete);
  assert.equal((await candidates()).reason,'incomplete_player_statistics');
  const anonymous=document();for(const row of anonymous.rows){row.players=[{id:guest,userId:null,nickname:'Anonymous guest',played:true,kills:7,deaths:0,assists:0},{id:player,userId:player,nickname:'Player',played:true,kills:1,deaths:0,assists:0},{id:other,userId:other,nickname:'Other',played:false,kills:0,deaths:0,assists:0}];}
@@ -110,9 +135,11 @@ export async function verifyPersonalAwards(db,id){
  const guestPlan=(await db.query("select personal_award_distribution($1,'mvp',null) value",[scopedFund])).rows[0].value;
  assert.equal(guestPlan.ready,true);assert.equal(guestPlan.organizationAmount,10);assert.equal(guestPlan.playerGross,10);assert.equal(guestPlan.playerAmount,8);
  assert.deepEqual(guestPlan.homeShares,[{organizationId:home,amount:2}]);assert.equal(guestPlan.contractId,sc);
+ assert.equal((await playerAccount(player)).balance,12);assert.equal(await organizationBalance(home),3);assert.equal(await organizationBalance(team),15,'guest personal award is divided once into host, home and player receipts');
  const mainDoc=structuredClone(scopedDoc);mainDoc.rows[0].players[0].kills=2;mainDoc.rows[0].players[1].kills=6;mainDoc.mvps=[other];await publishScoped(1,mainDoc);
  const mainPlan=(await db.query("select personal_award_distribution($1,'mvp',null) value",[scopedFund])).rows[0].value;
  assert.equal(mainPlan.playerAmount,2);assert.equal(mainPlan.organizationAmount,18);assert.equal(mainPlan.contractId,id(19816));
+ assert.equal((await playerAccount(player)).balance,0);assert.equal(await organizationBalance(home),0);assert.equal((await playerAccount(other)).balance,3);assert.equal(await organizationBalance(team),27);
  await db.query("update event_sessions set status='cancelled' where id=$1",[scoped]);
  await db.query("update event_sessions set status='cancelled' where id=$1",[session]);assert.equal((await account()).reserved,0);
  const ledger=(await db.query('select count(*)::int n from coin_entries')).rows[0].n;
@@ -156,8 +183,35 @@ export async function verifyPersonalAwards(db,id){
  const tf=(await db.query('select id from personal_award_funds where event_id=$1 and session_id is null',[tournamentId])).rows[0].id;
  const tournamentPlan=(await db.query("select personal_award_distribution($1,'mvp',null) value",[tf])).rows[0].value;
  assert.equal(tournamentPlan.ready,true);assert.equal(tournamentPlan.revision,1);assert.equal(tournamentPlan.playerAmount,4);assert.equal(tournamentPlan.organizationAmount,16);
- await db.query("update event_sessions set status='cancelled' where id=$1",[tournament.sessions[0].id]);assert.equal((await account()).reserved,30,'one cancelled stage does not release the whole tournament award');
+ await db.query("update event_sessions set status='cancelled' where id=$1",[tournament.sessions[0].id]);assert.equal((await account()).reserved,0,'one cancelled stage does not revoke a still-valid paid whole-tournament award');
  await db.query("update event_sessions set status='cancelled' where id=$1",[tournament.sessions[1].id]);assert.equal((await account()).reserved,0);
+ // The organizer can win their own event. The ledger groups the payment so
+ // it is a release of reserve, never duplicate debit/credit on one account.
+ const ownConfig=structuredClone(config);ownConfig.title='Organizer wins';ownConfig.sessions[0].id=id(19890);ownConfig.sessions[0].groups[0].id=id(19891);ownConfig.sessions[0].groups[0].games=[{id:id(19892),map:'bermuda'}];
+ const ownEvent=(await save(ownConfig)).eventId,ownSession=id(19890),ownReg=id(19893);
+ await db.query('insert into event_registrations(id,event_id,session_id,team_id,group_id,roster_json) values($1,$2,$3,$4,$5,$6::jsonb)',[ownReg,ownEvent,ownSession,team,id(19891),JSON.stringify([owner])]);
+ await db.query("update event_sessions set start_time=now()-interval '1 day',end_time=now()-interval '23 hour' where id=$1",[ownSession]);
+ const ownDocument={rules:config.rules,mvps:[owner],rows:[{registrationId:ownReg,gameId:id(19892),groupId:id(19891),teamId:team,userId:null,name:'Own team',played:true,detail:'players',reason:'no_show',place:1,kills:1,points:13,fieldSize:2,rounds:null,
+  players:[{id:owner,userId:owner,nickname:'Organizer',played:true,kills:1,deaths:0,assists:0}]}],standings:[{registrationId:ownReg,teamId:team,userId:null,groupId:id(19891),name:'Own team',place:1,kills:1,points:13,placeSum:1,wins:1,gamesPlayed:1,bonus:0,manual:false}]};
+ const ownRevision=(await db.query('select configuration_revision from event_sessions where id=$1',[ownSession])).rows[0].configuration_revision;
+ const publishOwn=async(expected,doc)=>db.query('select u2_save_results($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb)',[owner,ownSession,expected,ownRevision,randomUUID(),JSON.stringify(doc),JSON.stringify({rows:doc.rows,warnings:[],manualOrder:[],snapshots:[]}),JSON.stringify(doc)]);
+ await db.exec(`create function test_personal_payout_fail() returns trigger language plpgsql as $$begin if exists(select 1 from coin_operations where id=new.operation_id and action='personal_award_payout') then raise exception 'TEST_PERSONAL_PAYOUT_FAILURE';end if;return new;end $$;
+ create trigger test_personal_payout_fail before insert on coin_entries for each row execute function test_personal_payout_fail();`);
+ try{await assert.rejects(()=>publishOwn(0,ownDocument),/TEST_PERSONAL_PAYOUT_FAILURE/);}finally{await db.exec('drop trigger test_personal_payout_fail on coin_entries;drop function test_personal_payout_fail();');}
+ assert.equal((await account()).reserved,30,'payout failure restores both old publication and reserve');
+ const beforeOwn=(await account()).balance;await publishOwn(0,ownDocument);assert.deepEqual(await account(),{balance:beforeOwn,reserved:0});
+ const ownFund=(await db.query('select id from personal_award_funds where event_id=$1',[ownEvent])).rows[0].id;
+ const ownQuery=async()=>(await db.query('select personal_award_query($1,$2,$3) value',[owner,ownEvent,ownSession])).rows[0].value;
+ const ownAction=async(action,actor=owner)=>(await db.query('select personal_award_action($1,$2,$3,$4,$5,null,null) value',[actor,randomUUID(),ownFund,action,(await ownQuery()).fingerprint])).rows[0].value;
+ await ownAction('close');assert.ok((await ownQuery()).fund.closed_at);
+ await assert.rejects(()=>ownAction('settle'),/PERSONAL_AWARD_CLOSED/);
+ const absentOwn=structuredClone(ownDocument);absentOwn.mvps=[];absentOwn.rows[0].played=false;absentOwn.rows[0].kills=0;absentOwn.rows[0].players[0].played=false;absentOwn.rows[0].players[0].kills=0;absentOwn.standings[0].gamesPlayed=0;
+ await publishOwn(1,absentOwn);assert.equal((await ownQuery()).fund.last_error,'closed_results_changed');
+ assert.equal((await db.query('select count(*)::int n from personal_award_payments where fund_id=$1 and reversed_at is null',[ownFund])).rows[0].n,2,'closed payouts do not silently change after an edit');
+ await assert.rejects(()=>ownAction('reopen',ordinaryAdmin),/CONTRACT_FINANCE/);
+ await ownAction('reopen');assert.equal((await account()).reserved,30);await ownAction('close');assert.deepEqual(await account(),{balance:beforeOwn,reserved:0},'explicit closure releases unused zero-kill awards exactly once');
+ await db.query("update events set cancelled_at=clock_timestamp() where id=$1",[ownEvent]);assert.equal((await account()).balance,beforeOwn);
+ console.log('PASS: direct/contract/guest payouts, protected withdrawal recovery, late repayment conservation, self-awards, atomic publication rollback, audited manual winner and closed-fund admin correction');
  // Scheduler shortage rolls back the newly generated session and both funds.
  await wallet('reset',{kind:'player',ownerId:owner,reason:'Recurring personal fund fixture'});
  await wallet('adjust',{kind:'player',ownerId:owner,amount:1050,reason:'Two funded sessions only'});

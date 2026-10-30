@@ -83,6 +83,8 @@ test('training template fills the two-week Moscow schedule and is included in th
   });
   await page.goto('/tournaments/propose');
   await page.getByLabel('Название',{exact:true}).first().fill('Регулярная тренировка');
+  await page.getByLabel('MVP, 🪙',{exact:true}).fill('40');
+  await page.getByLabel('Максимум киллов, 🪙',{exact:true}).fill('10');
   await page.getByLabel('Автоматически добавлять сессии каждую неделю').check();
   await expect(page.getByRole('heading',{name:/^Сессия \d+$/})).toHaveCount(8);
   await expect(page.getByLabel('Начало',{exact:true}).first()).toHaveValue('2026-10-05T19:00');
@@ -92,6 +94,7 @@ test('training template fills the two-week Moscow schedule and is included in th
   await page.getByRole('button',{name:'Сохранить',exact:true}).click();
   await expect(page.getByRole('status')).toHaveText('Мероприятие сохранено');
   expect(submitted).toMatchObject({trainingSchedule:{enabled:true,startsOn:'2026-10-05'}});
+  expect(submitted).toMatchObject({personalPrizes:{mvp:40,maxKills:10}});
   expect((submitted as unknown as {sessions:unknown[]}).sessions).toHaveLength(8);
   const firstCycle=(submitted as unknown as {sessions:{groups:{games:{map:string}[]}[]}[]}).sessions.slice(0,5).flatMap(s=>s.groups[0].games.map(g=>g.map));
   expect(firstCycle).toHaveLength(15);

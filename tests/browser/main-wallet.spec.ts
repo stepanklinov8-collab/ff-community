@@ -72,7 +72,7 @@ test('contract recovery debt blocks personal withdrawal and explains reserve rel
  state.withdrawals.push({id:id(998001),account_id:account,user_id:alice,amount:200,status:'pending',note:'Test withdrawal',created_at:'2026-10-29T08:00:00Z'});
  await page.route('**/api/wallet',route=>route.fulfill({json:state}));
  await page.goto('/wallet');
- const debt=page.getByRole('region',{name:'Долг перед организациями'});
+ const debt=page.getByRole('region',{name:'Задолженность по возвратам и штрафам'});
  await expect(debt).toContainText('850');
  await expect(debt).toContainText('Зарезервированные монеты не списываются');
  await expect(debt.getByRole('link')).toHaveAttribute('href','/contracts');

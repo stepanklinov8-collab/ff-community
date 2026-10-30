@@ -53,6 +53,8 @@ const inspectionSql=`select
  to_regprocedure('public.contract_guest_settle(uuid,integer)') is not null as guest_payments_ready,
  to_regclass('public.personal_award_funds') is not null
    and to_regprocedure('public.personal_award_distribution(uuid,text,text)') is not null as personal_award_funds_ready,
+ to_regprocedure('public.personal_award_settle(uuid,boolean)') is not null as personal_award_settlement_ready,
+ to_regprocedure('public.podium_fund_action(uuid,uuid,uuid,text,text)') is not null as prize_fund_closure_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -92,6 +94,8 @@ const migrations=[
  ['guest_lifecycle_ready','202610300011_contract_guest_lifecycle.sql'],
  ['guest_payments_ready','202610300012_contract_guest_payments.sql'],
  ['personal_award_funds_ready','202610300013_personal_award_funds.sql'],
+ ['personal_award_settlement_ready','202610300014_personal_award_settlement.sql'],
+ ['prize_fund_closure_ready','202610300015_prize_fund_closure.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');
