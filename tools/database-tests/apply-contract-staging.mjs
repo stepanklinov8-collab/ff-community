@@ -39,6 +39,9 @@ const inspectionSql=`select
  to_regclass('public.contract_session_valuations') is not null
    and to_regprocedure('public.contract_no_show_cancel(uuid,uuid,uuid,text)') is not null as no_show_settlement_ready,
  coalesce(position('hasSignedHistory' in pg_get_functiondef(to_regprocedure('public.contract_query(uuid,jsonb)')))>0,false) as renewal_controls_ready,
+ to_regprocedure('public.contract_limit_progress(uuid,integer)') is not null as limit_constructor_ready,
+ to_regclass('public.contract_limit_closures') is not null
+   and to_regprocedure('public.contract_limit_finalize(uuid,integer)') is not null as limit_execution_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -67,6 +70,8 @@ const migrations=[
  ['freeze_guards_ready','202610290021_contract_freeze_guards.sql'],
  ['no_show_settlement_ready','202610300001_contract_no_show_settlement.sql'],
  ['renewal_controls_ready','202610300002_contract_renewal_controls.sql'],
+ ['limit_constructor_ready','202610300003_contract_limit_constructor.sql'],
+ ['limit_execution_ready','202610300004_contract_limit_execution.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');
@@ -76,7 +81,16 @@ if(!names.length){console.log('The staging schema is already installed');process
 const sources=await Promise.all(names.map(async name=>({name,sql:await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8')})));
 const body=sources.map(({sql})=>sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,'')).join('\n');
 const stamp=new Date().toISOString().replace(/[:.]/g,'-');
-const signatures=await query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and proname in('is_organization_owner','set_initial_organization_owner','prevent_direct_organization_owner_change','can_manage_organization_contracts','organization_owner_set_leader','organization_owner_set_contract_access','u6_coin_action','contract_query','contract_mutate','contract_validate_terms','contract_history','contract_obligation_create','contract_obligation_pay','contract_obligation_identity_guard','contract_obligation_query','contract_obligation_cancel_internal','contract_has_debt','contract_signature_guard','contract_maintenance_run','contract_session_publish_settle','contract_freeze_before_roster_change','contract_session_freeze','contract_session_no_show_assessment','contract_player_has_debt','contract_recover_player_claims','contract_player_debt_summary')`,true);
+const backupFunctions=[
+ 'is_organization_owner','set_initial_organization_owner','prevent_direct_organization_owner_change','can_manage_organization_contracts',
+ 'organization_owner_set_leader','organization_owner_set_contract_access','u6_coin_action','contract_query','contract_mutate','contract_validate_terms','contract_history',
+ 'contract_obligation_create','contract_obligation_pay','contract_obligation_identity_guard','contract_obligation_query','contract_obligation_cancel_internal',
+ 'contract_has_debt','contract_signature_guard','contract_maintenance_run','contract_session_publish_settle','contract_freeze_before_roster_change',
+ 'contract_session_freeze','contract_session_freeze_at','contract_freeze_due_values','contract_session_no_show_assessment',
+ 'contract_player_has_debt','contract_recover_player_claims','contract_player_debt_summary','contract_session_accrual_plan','contract_session_settle',
+ 'contract_session_fine_settle','contract_limit_progress',
+];
+const signatures=await query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and proname=any(array[${backupFunctions.map(name=>"'"+name+"'").join(',')}])`,true);
 await writeFile(new URL(`before-functions-${stamp}.json`,artifactDir),JSON.stringify(signatures,null,2));
 await query(`begin;set local lock_timeout='5s';set local statement_timeout='45s';${body}\nrollback;`);
 const rollback=(await query(inspectionSql,true))[0];

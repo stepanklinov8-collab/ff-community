@@ -30,6 +30,8 @@ import {verifyContractPaymentReturns} from './contract-payment-returns.mjs';
 import {verifyContractAcceptance} from './contract-acceptance.mjs';
 import {verifyContractRuntimeHooks} from './contract-runtime-hooks.mjs';
 import {verifyContractNoShowSettlement} from './contract-no-show-settlement.mjs';
+import {verifyContractLimitProgress} from './contract-limit-progress.mjs';
+import {verifyContractLimitExecution} from './contract-limit-execution.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -222,6 +224,8 @@ try {
  await verifyContractAcceptance(db,id);
  await verifyContractRuntimeHooks(db,id);
  await verifyContractNoShowSettlement(db,id);
+ await verifyContractLimitProgress(db,id);
+ await verifyContractLimitExecution(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

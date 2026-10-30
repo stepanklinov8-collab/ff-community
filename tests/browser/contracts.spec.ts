@@ -39,6 +39,9 @@ test("manager prepares a private contract with structured financial conditions",
   await page.getByRole("button", { name: "Игрок договора", exact: true }).click();
   await page.getByLabel("Тренировка, %", { exact: true }).fill("25");
   await page.getByRole("combobox", { name: "Правило участия", exact: true }).selectOption("proportional");
+  await page.getByRole("combobox", { name: "Ограничение выступлений", exact: true }).selectOption("sessions");
+  await page.getByRole("spinbutton", { name: "Количество", exact: true }).fill("12");
+  await page.getByRole("combobox", { name: "После достижения лимита", exact: true }).selectOption("event_payments");
   await page.getByLabel("Предусмотреть зарплату", { exact: true }).check();
   await page.getByLabel("Зарплата за период, OC", { exact: true }).fill("1000");
   await page.getByLabel("Период зарплаты, суток", { exact: true }).fill("9");
@@ -59,7 +62,7 @@ test("manager prepares a private contract with structured financial conditions",
   await expect(page.getByRole("status")).toHaveText("Черновик сохранён");
   expect(mutations).toHaveLength(1);
   expect(mutations[0]).toMatchObject({ action: "save", organizationId: teamId, playerId, expectedRevision: 0,
-    terms: { schemaVersion: 2, trainingShareBps: 2500, participation: { mode: "proportional" }, financial: {
+    terms: { schemaVersion: 2, trainingShareBps: 2500, participation: { mode: "proportional" }, limit: { unit: "sessions", count: 12, completion: "event_payments" }, financial: {
       salary: { amount: 1000, periodDays: 9 }, rates: { perKill: 5 },
       noShowPenalty: { kind: "combined", amount: 350, basisPoints: 1000, selection: "maximum" },
       overdueCompensation: { kind: "combined", amount: 1000, basisPoints: 1000, base: { kind: "player_value" }, selection: "minimum" },
@@ -352,4 +355,13 @@ test("renewal confirmation does not promise the original welcome payment again",
   await expect(dialog).toHaveCount(0);
   expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ action: "accept", contractId: contract.id, revision: 3 });
   expect(writes[0]).not.toHaveProperty("hasSignedHistory");
+});
+
+test("completed contract shows its fixed end and can only continue through a new revision", async ({ page }) => {
+  await setup(page, [{ ...contract, status: "completed", hasSignedHistory: true, effectiveEndsAt: "2026-10-01T17:00:00Z" }]);
+  await page.goto("/contracts");
+  await expect(page.getByText("Завершён", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Исправление старых результатов автоматически его не возобновляет/)).toBeVisible();
+  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Прежний договор завершён");
 });

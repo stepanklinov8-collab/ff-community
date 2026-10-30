@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { financialTermsSchema, emptyFinancialTerms } from "./financial-terms.ts";
+import { participationLimitSchema } from "./participation-limits.ts";
 
 const uuid = z.string().uuid();
 const coins = z.number().int().min(0).max(1_000_000_000_000);
@@ -13,7 +14,7 @@ export const compensationSchema = z.discriminatedUnion("kind", [
 const termsObject = z.object({
   startsAt: date,
   endsAt: date.nullable(),
-  limit: z.object({ unit: z.enum(["games", "trainings", "tournaments"]), count: z.number().int().min(1).max(1_000_000) }).strict().nullable(),
+  limit: participationLimitSchema.nullable(),
   trainingShareBps: basisPoints,
   tournamentShareBps: basisPoints,
   personalShareBps: basisPoints,
@@ -92,11 +93,12 @@ export const defaultTerms = (now = new Date()): ConstructorTerms => ({
 
 export interface ContractListItem {
   id: string; organizationId: string; organizationName: string; playerId: string; playerName: string;
-  kind: "main" | "guest"; revision: number; status: "draft" | "offered" | "signed" | "cancelled" | "rejected" | "superseded";
+  kind: "main" | "guest"; revision: number; status: "draft" | "offered" | "signed" | "completed" | "cancelled" | "rejected" | "superseded";
   eventId: string | null; sessionId: string | null; eventTitle: string | null;
   terms: ContractTerms; createdAt: string;
   canEdit: boolean; canOffer: boolean; isPlayer: boolean;
   hasSignedHistory?: boolean;
+  effectiveEndsAt?: string | null;
 }
 
 export interface ContractVersion {
