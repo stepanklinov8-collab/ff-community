@@ -9,7 +9,7 @@ type Obligation = {
   cancelledAt?: string | null; cancellationReason?: string | null; returned?: number; recoveryDebt?: number;
   scope?: "tournament" | null;
 };
-const names: Record<string, string> = { signing: "Первоначальный бонус", salary: "Зарплата", appearance: "Участие", kill: "Киллы", mvp: "MVP", ranking: "Рейтинг", termination: "Компенсация", fine_refund: "Возврат отменённого штрафа" };
+const names: Record<string, string> = { signing: "Первоначальный бонус", salary: "Зарплата", appearance: "Участие", kill: "Киллы", mvp: "MVP", ranking: "Рейтинг", termination: "Компенсация", fine_refund: "Возврат отменённого штрафа", prize: "Доля призовых" };
 const coins = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
 
 export default function ContractPayments({ contractId }: { contractId: string }) {

@@ -36,6 +36,8 @@ import {verifyContractTournamentCompletion} from './contract-tournament-completi
 import {verifyOrganizationWalletTransfers} from './organization-wallet-transfers.mjs';
 import {verifyContractTournamentPayments} from './contract-tournament-payments.mjs';
 import {verifyContractTournamentLimits} from './contract-tournament-limits.mjs';
+import {verifyContractPrizeSettlement} from './contract-prize-settlement.mjs';
+import {verifyContractTermination} from './contract-termination.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -234,6 +236,8 @@ try {
  await verifyOrganizationWalletTransfers(db,id);
  await verifyContractTournamentPayments(db,id);
  await verifyContractTournamentLimits(db,id);
+ await verifyContractPrizeSettlement(db,id);
+ await verifyContractTermination(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

@@ -8,6 +8,7 @@ import { contractTermsSchema, defaultTerms, toConstructorTerms, type Constructor
 import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
 import ContractPayments from "./ContractPayments";
 import ContractFines from "./ContractFines";
+import ContractTermination from "./ContractTermination";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -228,6 +229,7 @@ export default function ContractsPage() {
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />
       <ContractPayments key={`${contract.id}:payments`} contractId={contract.id} />
       <ContractFines key={`${contract.id}:fines`} contractId={contract.id} />
+      {(contract.canOffer || contract.isPlayer) && (contract.hasSignedHistory || contract.status === "signed") && <ContractTermination key={`${contract.id}:termination`} contractId={contract.id} onEnded={() => void load()} />}
     </article>)}</div>}
     <div className="flex justify-between gap-3">{offset > 0 && <button type="button" className="secondary-button" onClick={() => setOffset(value => Math.max(0, value - 30))}>Предыдущие</button>}{hasMore && <button type="button" className="secondary-button" onClick={() => setOffset(value => value + 30)}>Следующие</button>}</div>
     {accepting && <section role="dialog" aria-modal="true" aria-label="Подтверждение договора" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4">

@@ -7,6 +7,14 @@ const eventId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
 const terms = () => defaultTerms(new Date("2026-11-01T12:00:00+03:00"));
 
+test("termination cannot choose a payer, recipient or the actual compensation result", () => {
+  const valid = { action: "terminate", requestId: eventId, contractId: otherId, revision: 1, mode: "player_exit", expectedAmount: 100, party: null };
+  assert.equal(mutationSchema.safeParse(valid).success, true);
+  for (const input of [{ ...valid, actorId: eventId }, { ...valid, payerId: eventId }, { ...valid, recipientId: eventId }, { ...valid, amount: 100 }, { ...valid, expectedAmount: -1 }, { ...valid, mode: "erase_debt" }]) assert.equal(mutationSchema.safeParse(input).success, false);
+  assert.equal(querySchema.safeParse({ contractId: otherId, termination: "true" }).success, true);
+  for (const input of [{ termination: "true" }, { contractId: otherId, termination: "true", payments: "true" }, { contractId: otherId, termination: "true", history: "true" }]) assert.equal(querySchema.safeParse(input).success, false);
+});
+
 test("fine cancellation accepts only a claim and reason; fine queries cannot mix financial scopes", () => {
   const valid = { action: "cancel_fine", requestId: eventId, claimId: otherId, reason: "Отмена неявки" };
   assert.equal(mutationSchema.safeParse(valid).success, true);

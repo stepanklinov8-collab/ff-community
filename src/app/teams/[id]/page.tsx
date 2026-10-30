@@ -294,7 +294,11 @@ export default function TeamPage() {
 
   const removeMember = async (memberId: string) => {
     if (!confirm("Удалить игрока из состава?")) return;
-    await supabase.from("team_members").delete().eq("id", memberId);
+    const { error } = await supabase.from("team_members").delete().eq("id", memberId);
+    if (error) {
+      setInviteMessage(error.message.includes("CONTRACT_ACTIVE_MEMBERSHIP") ? "У игрока действует договор. Сначала согласуйте его расторжение в разделе «Контракты»." : "Не удалось удалить участника: " + error.message);
+      return;
+    }
     fetchMembers();
   };
 
@@ -449,7 +453,7 @@ export default function TeamPage() {
     const { error } = await supabase.rpc("dissolve_organization", { p_team_id: id });
     setOrganizationBusy(false);
     if (error) {
-      setInviteMessage("Не удалось распустить организацию: " + error.message);
+      setInviteMessage(error.message.includes("CONTRACT_ACTIVE_MEMBERSHIP") ? "У организации есть действующие договоры. Завершите их или обратитесь в поддержку перед роспуском." : "Не удалось распустить организацию: " + error.message);
       return;
     }
     router.push("/teams");

@@ -25,6 +25,7 @@ async function bounded<T>(work: (signal: AbortSignal) => PromiseLike<T>, ms = 12
 function readableError(error: unknown) {
   if (error instanceof AccountChanged) return error.message;
   const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+  if (/CONTRACT_ACTIVE_MEMBERSHIP/.test(message)) return "У вас действует договор с организацией. Откройте раздел «Контракты», согласуйте расторжение или оплатите предусмотренную компенсацию.";
   if (/Передайте лидерство|current leader|leader.*leave/i.test(message)) return "Вы стали лидером. Сначала передайте лидерство другому участнику.";
   if (/JWT|Authentication required|not authenticated|session.*missing/i.test(message)) return "Сессия входа закончилась. Войдите в аккаунт снова и повторите выход.";
   if (/permission denied|row.level security|not allowed/i.test(message)) return "Сервер не разрешил выход. Обновите страницу; если ошибка повторится, обратитесь к администрации.";

@@ -57,6 +57,8 @@ export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("terminate"), requestId: uuid, contractId: uuid, revision: z.number().int().positive(),
+    mode: z.enum(["mutual", "decline", "player_exit", "organization", "unpaid"]), expectedAmount: coins.nullable(), party: z.enum(["player", "organization"]).nullable() }).strict(),
   z.object({ action: z.literal("cancel_fine"), requestId: uuid, claimId: uuid, reason: z.string().trim().min(3).max(1000) }).strict(),
   z.object({ action: z.literal("cancel_payment"), requestId: uuid, obligationId: uuid, reason: z.string().trim().min(3).max(1000) }).strict(),
   z.object({ action: z.literal("pay"), requestId: uuid, obligationId: uuid, amount: coins.min(1) }).strict(),
@@ -76,8 +78,10 @@ export const querySchema = z.object({
   history: z.literal("true").optional(),
   payments: z.literal("true").optional(),
   fines: z.literal("true").optional(),
+  termination: z.literal("true").optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
+  if (input.termination && (!input.contractId || input.history || input.payments || input.fines || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для расторжения выберите один договор без других фильтров" });
   if (input.fines && (!input.contractId || input.history || input.payments || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для штрафов выберите один договор без дополнительных фильтров" });
   if (input.history && (!input.contractId || input.search !== undefined)) ctx.addIssue({ code: "custom", message: "Для истории выберите один договор без поиска" });
   if (input.payments && (!input.contractId || input.history || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для выплат выберите один договор без дополнительных фильтров" });

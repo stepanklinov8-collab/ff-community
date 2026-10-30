@@ -380,3 +380,50 @@ test("tournament-count renewal explains whole-event expiry and retains its struc
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ action: "save", expectedRevision: 1, terms: { limit: { unit: "tournaments", count: 3, completion: "contract" } } });
 });
+
+test("paid player exit retries the same confirmation after a lost response", async ({ page }) => {
+  await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true, isPlayer: true, canEdit: false, canOffer: false }]);
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/contracts**", route => {
+    if (route.request().method() === "POST" && route.request().postDataJSON().action === "terminate") {
+      writes.push(route.request().postDataJSON());
+      if (writes.length === 1) return route.abort("failed");
+      return route.fulfill({ json: { success: true, ended: true, amount: 100, debt: 0 } });
+    }
+    if (new URL(route.request().url()).searchParams.get("termination") !== "true") return route.fallback();
+    return route.fulfill({ json: { active: true, revision: 1, isPlayer: true, canManage: false, playerExitAmount: 100, organizationAmount: 0, unpaidAmount: 0, debt: 0, overdueSevenDays: false, pending: null } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Расторжение договора", exact: true }).click();
+  const region = page.getByRole("region", { name: "Расторжение договора" });
+  await region.getByLabel("Основание расторжения").selectOption("player_exit");
+  await expect(region).toContainText("Со свободного личного баланса игрока на счёт организации");
+  await page.screenshot({ path: "tools/database-tests/artifacts/contracts/contract-termination.png", fullPage: true });
+  await region.getByRole("button", { name: "Проверить и подтвердить расторжение" }).click();
+  await region.getByRole("button", { name: "Подтвердить выбранное расторжение" }).click();
+  await expect(page.locator('p[role="alert"]')).toContainText("Повторите подтверждение");
+  await region.getByRole("button", { name: "Подтвердить выбранное расторжение" }).click();
+  await expect(page.getByRole("status")).toContainText("Договор завершён");
+  expect(writes).toHaveLength(2); expect(writes[0]).toEqual(writes[1]);
+  expect(writes[0]).toMatchObject({ action: "terminate", mode: "player_exit", expectedAmount: 100, revision: 1 });
+});
+
+test("mutual termination records only the first consent and keeps the contract active", async ({ page }) => {
+  await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true, isPlayer: true, canEdit: false, canOffer: false }]);
+  let signed = false;
+  await page.route("**/api/contracts**", route => {
+    if (route.request().method() === "POST" && route.request().postDataJSON().action === "terminate") {
+      expect(route.request().postDataJSON()).toMatchObject({ mode: "mutual", expectedAmount: null }); signed = true;
+      return route.fulfill({ json: { success: true, ended: false, pending: true } });
+    }
+    if (new URL(route.request().url()).searchParams.get("termination") !== "true") return route.fallback();
+    return route.fulfill({ json: { active: true, revision: 1, isPlayer: true, canManage: false, playerExitAmount: 100, organizationAmount: 0, unpaidAmount: 0, debt: 0, overdueSevenDays: false,
+      pending: signed ? { id: playerId, playerSigned: true, organizationSigned: false } : null } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Расторжение договора", exact: true }).click();
+  const region = page.getByRole("region", { name: "Расторжение договора" });
+  await region.getByRole("button", { name: "Проверить и подтвердить расторжение" }).click();
+  await region.getByRole("button", { name: "Подтвердить выбранное расторжение" }).click();
+  await expect(page.getByRole("status")).toContainText("Договор действует до согласия второй стороны");
+  await expect(region).toContainText("организации: ожидается");
+  await expect(region.getByRole("button", { name: "Отклонить взаимное расторжение" })).toBeVisible();
+});

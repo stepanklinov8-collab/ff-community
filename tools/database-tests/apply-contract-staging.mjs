@@ -47,6 +47,8 @@ const inspectionSql=`select
    and to_regprocedure('public.contract_tournament_settle(uuid,uuid)') is not null as tournament_payments_ready,
  to_regprocedure('public.organization_wallet_withdrawals(uuid)') is not null as organization_transfers_ready,
  to_regprocedure('public.contract_limit_session_progress(uuid,integer)') is not null as tournament_limits_ready,
+ to_regprocedure('public.contract_session_prize_settle(uuid)') is not null as prize_shares_ready,
+ to_regprocedure('public.contract_terminate(uuid,uuid,uuid,integer,text,bigint,text)') is not null as termination_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -81,6 +83,8 @@ const migrations=[
  ['tournament_payments_ready','202610300006_contract_tournament_payments.sql'],
  ['organization_transfers_ready','202610300007_organization_wallet_transfers.sql'],
  ['tournament_limits_ready','202610300008_contract_tournament_limits.sql'],
+ ['prize_shares_ready','202610300009_contract_prize_settlement.sql'],
+ ['termination_ready','202610300010_contract_termination.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');
@@ -99,6 +103,7 @@ const backupFunctions=[
  'contract_player_has_debt','contract_recover_player_claims','contract_player_debt_summary','contract_session_accrual_plan','contract_session_settle',
  'contract_session_fine_settle','contract_limit_progress','organization_can_spend','organization_wallet_withdrawals','contract_tournament_completion',
  'contract_tournament_accrual_plan','contract_tournament_settle_all','contract_limit_finalize',
+ 'u6_settle_session_prizes','contract_session_settle_before_tournament','contract_obligation_create',
 ];
 const signatures=await query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and proname=any(array[${backupFunctions.map(name=>"'"+name+"'").join(',')}])`,true);
 await writeFile(new URL(`before-functions-${stamp}.json`,artifactDir),JSON.stringify(signatures,null,2));

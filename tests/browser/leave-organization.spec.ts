@@ -100,7 +100,7 @@ for (const options of [{ role: "leader" }, { guest: true }, { outsider: true }, 
   });
 }
 
-for (const [error, expected] of [["permission denied", "Сервер не разрешил выход"], ["Передайте лидерство перед выходом из организации", "Вы стали лидером"], ["Could not find the function public.leave_organization in the schema cache", "Функция выхода временно недоступна"]]) {
+for (const [error, expected] of [["permission denied", "Сервер не разрешил выход"], ["Передайте лидерство перед выходом из организации", "Вы стали лидером"], ["Could not find the function public.leave_organization in the schema cache", "Функция выхода временно недоступна"], ["CONTRACT_ACTIVE_MEMBERSHIP", "У вас действует договор"]]) {
   test(`server refusal stays beside button and supports retry: ${error}`, async ({ page }) => {
     const state = await setup(page); state.outcome = "error"; state.error = error;
     await confirmExit(page);

@@ -22,6 +22,9 @@ const errors: Record<string, [number, string]> = {
   CONTRACT_DATES: [422, "Проверьте даты: окончание должно быть позже начала и ещё не наступить"],
   CONTRACT_SHARE: [422, "Доля должна быть от 0 до 100%"],
   CONTRACT_LIMIT: [422, "Проверьте количество выступлений"],
+  CONTRACT_TERMINATED: [409, "Договор уже завершён. Обновите список"],
+  CONTRACT_NOT_OVERDUE: [409, "Право расторжения возникает после семи суток непогашенной задолженности"],
+  CONTRACT_QUOTE_CHANGED: [409, "Сумма компенсации изменилась. Обновите расчёт и подтвердите новую сумму"],
   CONTRACT_EVENT: [422, "Выбранное мероприятие или сессия недоступны"],
   CONTRACT_STATE: [409, "Это действие недоступно в текущем состоянии договора"],
   CONTRACT_GUEST_FLOW: [409, "Гостевой договор требует отдельного согласия основной организации и допуска в состав мероприятия. Этот порядок ещё не подключён"],
@@ -46,7 +49,13 @@ async function handle(request: Request, write: boolean) {
     const value = parsed.data;
     let rpc = write ? "contract_mutate" : "contract_query";
     let args: Record<string, unknown> = { p_actor: user.id, p_input: value };
-    if ("action" in value && value.action === "pay") {
+    if ("action" in value && value.action === "terminate") {
+      rpc = "contract_terminate";
+      args = { p_actor: user.id, p_request: value.requestId, p_contract: value.contractId, p_revision: value.revision, p_mode: value.mode, p_expected_amount: value.expectedAmount, p_party: value.party };
+    } else if ("termination" in value && value.termination) {
+      rpc = "contract_termination_query";
+      args = { p_actor: user.id, p_contract: value.contractId };
+    } else if ("action" in value && value.action === "pay") {
       rpc = "contract_debt_pay";
       args = { p_actor: user.id, p_request: value.requestId, p_obligation: value.obligationId, p_amount: value.amount };
     } else if ("action" in value && value.action === "cancel_fine") {
