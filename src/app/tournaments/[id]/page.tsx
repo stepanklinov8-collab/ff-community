@@ -79,6 +79,7 @@ interface RegistrationCount {
 interface EventGame { id: string; session_id: string; game_number: number; map_name: string }
 
 interface TeamMember {
+  isGuest?: boolean;
   user_id: string;
   role_in_team: string;
   position: string;
@@ -141,6 +142,20 @@ export default function EventPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [myMembers, setMyMembers] = useState<TeamMember[]>([]);
+  const [guestMembers, setGuestMembers] = useState<{ teamId: string; sessionId: string; members: TeamMember[]; error: string } | null>(null);
+  const rosterMembers = useMemo(() => {
+    const guests = guestMembers?.teamId === myTeam?.id && guestMembers?.sessionId === selectedSessionId ? guestMembers.members : [];
+    const known = new Set(myMembers.map(member => member.user_id));
+    return [...myMembers, ...guests.filter(member => !known.has(member.user_id))];
+  }, [guestMembers, myMembers, myTeam?.id, selectedSessionId]);
+  useEffect(() => {
+    if (!myTeam?.id || !selectedSessionId || !currentUser || !canManageTeam) return;
+    let cancelled = false; const teamId = myTeam.id, sessionId = selectedSessionId;
+    void Promise.resolve(supabase.rpc("contract_available_guests", { p_team: teamId, p_session: sessionId })).then(({ data, error }) => {
+      if (!cancelled) setGuestMembers({ teamId, sessionId, members: error ? [] : (Array.isArray(data) ? data : []).map((player: { id: string; nickname: string }) => ({ user_id: player.id, nickname: player.nickname, role_in_team: "guest", position: "reserve", isGuest: true })), error: error ? "Не удалось загрузить согласованных гостей. Обновите страницу перед выбором гостевого состава." : "" });
+    }).catch(() => { if (!cancelled) setGuestMembers({ teamId, sessionId, members: [], error: "Не удалось загрузить согласованных гостей. Проверьте соединение и обновите страницу." }); });
+    return () => { cancelled = true; };
+  }, [myTeam?.id, selectedSessionId, currentUser, canManageTeam, supabase]);
   const [selectedRoster, setSelectedRoster] = useState<string[]>([]);
   const [showRosterForm, setShowRosterForm] = useState(false);
   const [rosterSaving, setRosterSaving] = useState(false);
@@ -338,7 +353,7 @@ export default function EventPage() {
   };
 
   const saveRoster = async (registrationId: string) => {
-    const currentMemberIds = new Set(myMembers.map((member) => member.user_id));
+    const currentMemberIds = new Set(rosterMembers.map((member) => member.user_id));
     const normalizedRoster = [...new Set(selectedRoster)];
     if (normalizedRoster.some((userId) => !currentMemberIds.has(userId))) {
       setMessage("Список участников изменился. Закройте форму, снова нажмите «Изменить состав» и выберите игроков заново.");
@@ -443,6 +458,7 @@ export default function EventPage() {
 
   const selectSession = (sessionId: string) => {
     setSelectedSessionId(sessionId);
+    setSelectedRoster(current => current.filter(userId => myMembers.some(member => member.user_id === userId)));
     setShowRosterForm(false);
     setMessage("");
 
@@ -457,7 +473,7 @@ export default function EventPage() {
   };
 
   const beginRosterEdit = (registration: Registration) => {
-    const currentMemberIds = new Set(myMembers.map((member) => member.user_id));
+    const currentMemberIds = new Set(rosterMembers.map((member) => member.user_id));
     const editableRoster = [...new Set(registration.roster.filter((userId) => currentMemberIds.has(userId)))];
     const removedCount = registration.roster.length - editableRoster.length;
     setSelectedRoster(editableRoster);
@@ -692,9 +708,10 @@ export default function EventPage() {
             <button onClick={() => setShowRosterForm(!showRosterForm)} className="text-sm text-blue-400">
               {showRosterForm ? "Скрыть состав" : "Выбрать состав"} ({selectedRoster.length}/{event.min_players || 4})
             </button>
+            {guestMembers?.teamId === myTeam?.id && guestMembers?.sessionId === selectedSessionId && guestMembers.error && <p role="alert" className="mt-2 text-sm text-amber-200">{guestMembers.error}</p>}
             {showRosterForm && (
               <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                {myMembers.map((m) => (
+                {rosterMembers.map((m) => (
                   <label key={m.user_id} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -704,7 +721,7 @@ export default function EventPage() {
                         else setSelectedRoster(selectedRoster.filter(id => id !== m.user_id));
                       }}
                     />
-                    {m.nickname} ({m.role_in_team === "leader" ? "Лидер" : m.role_in_team === "deputy" ? "Зам" : m.position === "main" ? "Основа" : "Запас"})
+                    {m.nickname} ({m.isGuest ? "Гость" : m.role_in_team === "leader" ? "Лидер" : m.role_in_team === "deputy" ? "Зам" : m.position === "main" ? "Основа" : "Запас"})
                   </label>
                 ))}
               </div>
@@ -791,7 +808,7 @@ export default function EventPage() {
               </p>
               <div className="mt-2 space-y-1 text-sm text-gray-300">
                 {selectedRegistration.roster.length > 0 ? selectedRegistration.roster.map((userId) => (
-                  <p key={userId}>— {myMembers.find((member) => member.user_id === userId)?.nickname || selectedRegistration.roster_players?.find((player) => player.id === userId)?.nickname || "Игрок"}</p>
+                  <p key={userId}>— {rosterMembers.find((member) => member.user_id === userId)?.nickname || selectedRegistration.roster_players?.find((player) => player.id === userId)?.nickname || "Игрок"}</p>
                 )) : <p className="text-gray-400">Состав не указан.</p>}
               </div>
 
@@ -818,7 +835,7 @@ export default function EventPage() {
                         Выбрано: {selectedRoster.length}. Минимум: {event.min_players || 4}.
                       </p>
                       <div className="max-h-48 space-y-1 overflow-y-auto">
-                        {myMembers.map((member) => (
+                        {rosterMembers.map((member) => (
                           <label key={member.user_id} className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
@@ -831,7 +848,7 @@ export default function EventPage() {
                                 }
                               }}
                             />
-                            {member.nickname} ({member.role_in_team === "leader" ? "Лидер" : member.role_in_team === "senior_deputy" ? "Старший зам" : member.role_in_team === "deputy" ? "Зам" : member.position === "main" ? "Основа" : "Запас"})
+                            {member.nickname} ({member.isGuest ? "Гость" : member.role_in_team === "leader" ? "Лидер" : member.role_in_team === "senior_deputy" ? "Старший зам" : member.role_in_team === "deputy" ? "Зам" : member.position === "main" ? "Основа" : "Запас"})
                           </label>
                         ))}
                       </div>

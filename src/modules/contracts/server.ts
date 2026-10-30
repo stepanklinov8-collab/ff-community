@@ -32,6 +32,12 @@ const errors: Record<string, [number, string]> = {
   CONTRACT_SIGNATURE_STALE: [409, "Подписант организации потерял полномочия или сменился владелец. Проверьте и отправьте условия заново"],
   CONTRACT_SIGNATURE_CONFLICT: [409, "Эта редакция уже принята или подписана. Обновите список договоров"],
   CONTRACT_GUEST_FORBIDDEN: [422, "При запрете гостевых выступлений компенсация не назначается"],
+  CONTRACT_GUEST_SESSION: [422, "Для гостевого выступления на тренировке выберите конкретную сессию"],
+  CONTRACT_GUEST_DATES: [409, "Подпишите гостевой договор до начала выступления. Его окончание должно совпадать с окончанием выбранной сессии или всего турнира"],
+  CONTRACT_GUEST_CHANGED: [409, "Основные договоры игрока изменились. Подготовьте новую редакцию гостевого договора и согласуйте требования заново"],
+  CONTRACT_GUEST_CONSENT: [409, "Ожидается согласие основной организации. При нескольких договорах нужны все предусмотренные согласования"],
+  CONTRACT_GUEST_TOTAL_SHARE: [422, "Проценты основных организаций превышают 100% выплаты игроку. Условия необходимо согласовать"],
+  CONTRACT_GUEST_OVERLAP: [409, "У игрока уже есть гостевой договор на пересекающееся выступление"],
 };
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -49,7 +55,16 @@ async function handle(request: Request, write: boolean) {
     const value = parsed.data;
     let rpc = write ? "contract_mutate" : "contract_query";
     let args: Record<string, unknown> = { p_actor: user.id, p_input: value };
-    if ("action" in value && value.action === "terminate") {
+    if ("action" in value && value.action === "guest_consent") {
+      rpc = "contract_guest_consent";
+      args = { p_actor: user.id, p_request: value.requestId, p_contract: value.contractId, p_revision: value.revision, p_home: value.homeContractId, p_approve: value.approve };
+    } else if ("guest" in value && value.guest) {
+      rpc = "contract_guest_query";
+      args = { p_actor: user.id, p_contract: value.contractId ?? null };
+    } else if ("guestSessionsEventId" in value && value.guestSessionsEventId) {
+      rpc = "contract_guest_sessions";
+      args = { p_actor: user.id, p_event: value.guestSessionsEventId };
+    } else if ("action" in value && value.action === "terminate") {
       rpc = "contract_terminate";
       args = { p_actor: user.id, p_request: value.requestId, p_contract: value.contractId, p_revision: value.revision, p_mode: value.mode, p_expected_amount: value.expectedAmount, p_party: value.party };
     } else if ("termination" in value && value.termination) {

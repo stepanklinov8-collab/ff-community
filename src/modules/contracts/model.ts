@@ -57,6 +57,7 @@ export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("guest_consent"), requestId: uuid, contractId: uuid, revision: z.number().int().positive(), homeContractId: uuid, approve: z.boolean() }).strict(),
   z.object({ action: z.literal("terminate"), requestId: uuid, contractId: uuid, revision: z.number().int().positive(),
     mode: z.enum(["mutual", "decline", "player_exit", "organization", "unpaid"]), expectedAmount: coins.nullable(), party: z.enum(["player", "organization"]).nullable() }).strict(),
   z.object({ action: z.literal("cancel_fine"), requestId: uuid, claimId: uuid, reason: z.string().trim().min(3).max(1000) }).strict(),
@@ -79,8 +80,12 @@ export const querySchema = z.object({
   payments: z.literal("true").optional(),
   fines: z.literal("true").optional(),
   termination: z.literal("true").optional(),
+  guest: z.literal("true").optional(),
+  guestSessionsEventId: uuid.optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
+  if (input.guest && (input.history || input.payments || input.termination || input.fines || input.search !== undefined || input.organizationId || input.guestSessionsEventId)) ctx.addIssue({ code: "custom", message: "Гостевые согласования запрашиваются отдельно" });
+  if (input.guestSessionsEventId && (input.contractId || input.guest || input.history || input.payments || input.termination || input.fines || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для сессий выберите только мероприятие" });
   if (input.termination && (!input.contractId || input.history || input.payments || input.fines || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для расторжения выберите один договор без других фильтров" });
   if (input.fines && (!input.contractId || input.history || input.payments || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для штрафов выберите один договор без дополнительных фильтров" });
   if (input.history && (!input.contractId || input.search !== undefined)) ctx.addIssue({ code: "custom", message: "Для истории выберите один договор без поиска" });

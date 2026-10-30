@@ -427,3 +427,56 @@ test("mutual termination records only the first consent and keeps the contract a
   await expect(region).toContainText("организации: ожидается");
   await expect(region.getByRole("button", { name: "Отклонить взаимное расторжение" })).toBeVisible();
 });
+
+test("guest training contract selects one session and fills its real ending", async ({ page }) => {
+  const writes = await setup(page), sessionId = "00000000-0000-4000-8000-000000009705";
+  await page.route("**/api/contracts**", route => {
+    if (!new URL(route.request().url()).searchParams.has("guestSessionsEventId")) return route.fallback();
+    return route.fulfill({ json: { eventType: "training", sessions: [{ id: sessionId, startsAt: "2026-12-01T16:00:00Z", endsAt: "2026-12-01T17:00:00Z" }] } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Создать договор", exact: true }).click();
+  await page.getByLabel("Вид договора").selectOption("guest");
+  await page.getByRole("textbox", { name: "Поиск по имени" }).fill("Игрок"); await page.getByRole("button", { name: "Найти", exact: true }).click();
+  await page.getByRole("button", { name: "Игрок договора", exact: true }).click();
+  await page.getByRole("combobox", { name: "Что искать" }).selectOption("events"); await page.getByRole("textbox", { name: "Поиск по имени" }).fill("Турнир"); await page.getByRole("button", { name: "Найти", exact: true }).click();
+  await page.getByRole("button", { name: "Турнир ноября", exact: true }).click();
+  await page.getByRole("button", { name: "Загрузить сессии гостевого выступления" }).click();
+  await page.getByRole("combobox", { name: "Выступление гостя", exact: true }).selectOption(sessionId);
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Черновик сохранён");
+  expect(writes[0]).toMatchObject({ action: "save", kind: "guest", sessionId, terms: { endsAt: "2026-12-01T17:00:00Z" } });
+});
+
+for (const approved of [false, true]) test(`guest signature requires every home consent: ${approved}`, async ({ page }) => {
+  const writes = await setup(page, [{ ...contract, kind: "guest", eventId: teamId, isPlayer: true, canEdit: false, canOffer: false }]);
+  await page.route("**/api/contracts**", route => {
+    if (new URL(route.request().url()).searchParams.get("guest") !== "true") return route.fallback();
+    return route.fulfill({ json: { captured: true, requirements: [{ organizationName: "Основная гильдия", policy: "consent", compensation: { kind: "fixed", amount: 50 }, approved }] } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Подписать и принять", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Подтверждение договора" });
+  await expect(dialog).toContainText("50 OC со счёта принимающей организации");
+  const submit = dialog.getByRole("button", { name: "Подписать эту редакцию", exact: true });
+  if (approved) await dialog.screenshot({ path: "tools/database-tests/artifacts/contracts/guest-signature.png" });
+  if (approved) {
+    await expect(submit).toBeEnabled(); await submit.click();
+    expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ action: "accept", contractId: contract.id, revision: 1 });
+    expect(writes[0]).not.toHaveProperty("compensation");
+  } else { await expect(submit).toBeDisabled(); expect(writes).toHaveLength(0); }
+});
+
+test("home organization explicitly approves a guest exception without editing the main contract", async ({ page }) => {
+  const writes = await setup(page);
+  await page.route("**/api/contracts**", route => {
+    if (new URL(route.request().url()).searchParams.get("guest") !== "true") return route.fallback();
+    return route.fulfill({ json: { items: [{ contractId: contract.id, revision: 1, homeContractId: playerId, organizationId: teamId, homeName: "Север", hostName: "Принимающая команда", playerName: "Игрок договора", eventTitle: "Тренировка", policy: "forbidden", compensation: { kind: "none" }, startsAt: "2026-12-01T16:00:00Z", endsAt: "2026-12-01T17:00:00Z" }] } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Гостевые согласования", exact: true }).click();
+  const inbox = page.getByRole("region", { name: "Гостевые согласования" });
+  await expect(inbox).toContainText("основной договор не меняется");
+  await inbox.screenshot({ path: "tools/database-tests/artifacts/contracts/guest-approval.png" });
+  await inbox.getByRole("button", { name: "Разрешить выступление" }).click();
+  await expect(page.getByRole("status")).toContainText("игрок должен подписать гостевой договор");
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ action: "guest_consent", contractId: contract.id, revision: 1, homeContractId: playerId, approve: true });
+  expect(writes[0]).not.toHaveProperty("terms");
+});

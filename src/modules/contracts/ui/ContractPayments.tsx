@@ -8,6 +8,7 @@ type Obligation = {
   dueAt: string; remaining: number; debt: boolean; overdueSevenDays: boolean;
   cancelledAt?: string | null; cancellationReason?: string | null; returned?: number; recoveryDebt?: number;
   scope?: "tournament" | null;
+  guestShares?: number; playerPaid?: number;
 };
 const names: Record<string, string> = { signing: "Первоначальный бонус", salary: "Зарплата", appearance: "Участие", kill: "Киллы", mvp: "MVP", ranking: "Рейтинг", termination: "Компенсация", fine_refund: "Возврат отменённого штрафа", prize: "Доля призовых" };
 const coins = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
@@ -84,6 +85,7 @@ export default function ContractPayments({ contractId }: { contractId: string })
         <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           {[["Начислено", row.amount], ["Выплачено", row.paid], ["В резерве", row.held], ["Остаток", row.remaining]].map(([label, value]) => <div key={label}><dt className="text-slate-400">{label}</dt><dd>{coins(Number(value))}</dd></div>)}
         </dl>
+        {!!row.guestShares && <p className="text-sm text-slate-300">Из выплаченного: основным организациям за гостевое выступление — {coins(row.guestShares)}, игроку — {coins(row.playerPaid ?? row.paid - row.guestShares)}.</p>}
         <p className={row.overdueSevenDays ? "text-red-200" : "text-slate-300"}>{row.cancelledAt ? "Начисление отменено" : row.remaining === 0 ? "Выплачено полностью" : row.overdueSevenDays ? "Не оплачено более семи суток после срока выплаты" : row.debt ? "Ожидает оплаты" : "Срок выплаты ещё не наступил"}</p>
         {row.cancelledAt && <div className="text-sm"><p>Причина: {row.cancellationReason}</p><p>Возвращено организации: {coins(row.returned ?? 0)}. Долг игрока по возврату: {coins(row.recoveryDebt ?? 0)}.</p>{!!row.recoveryDebt && <p>Свободные поступления направляются на погашение. Зарезервированные монеты не списываются; вывод до погашения недоступен.</p>}</div>}
         {canPay && row.debt && !row.cancelledAt && !selected && !cancelling && <button type="button" className="secondary-button" disabled={busy} onClick={() => { setSelected(row); setAmount(String(row.remaining)); setError(""); setNotice(""); }}>Оплатить начисление</button>}

@@ -9,6 +9,7 @@ import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEdi
 import ContractPayments from "./ContractPayments";
 import ContractFines from "./ContractFines";
 import ContractTermination from "./ContractTermination";
+import GuestApprovals, { GuestRequirements, GuestScopeEditor } from "./GuestContracts";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -84,6 +85,7 @@ export default function ContractsPage() {
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [accepting, setAccepting] = useState<(ContractListItem & { terms: ConstructorTerms }) | null>(null);
+  const [guestReady, setGuestReady] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const pendingOperation = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [search, setSearch] = useState(""), [choices, setChoices] = useState<Choice[]>([]);
@@ -158,6 +160,7 @@ export default function ContractsPage() {
     </section>
     {error && <p role="alert" className="rounded border border-red-500/50 bg-red-950 p-4 text-red-100">{error}</p>}
     {notice && <p role="status" className="cyber-card p-4 text-cyan-200">{notice}</p>}
+    <GuestApprovals />
     {editor && terms && <form className="cyber-card space-y-6 p-5" onSubmit={event => {
       event.preventDefault();
       const parsed = contractTermsSchema.safeParse(terms);
@@ -179,9 +182,10 @@ export default function ContractsPage() {
             <button type="button" className="secondary-button" disabled={busy || search.trim().length < 2} onClick={() => void findChoices()}>Найти</button>
           </div>
           <ul className="space-y-1">{choices.map(choice => <li key={choice.id}><button type="button" className="w-full rounded bg-slate-800 p-2 text-left hover:bg-slate-700" onClick={() => {
-            setEditor(searchKind === "players" ? { ...editor, playerId: choice.id, playerName: choice.nickname ?? "Игрок" } : { ...editor, eventId: choice.id, eventTitle: choice.title ?? "Мероприятие" }); setChoices([]);
+            setEditor(searchKind === "players" ? { ...editor, playerId: choice.id, playerName: choice.nickname ?? "Игрок" } : { ...editor, eventId: choice.id, sessionId: null, eventTitle: choice.title ?? "Мероприятие", terms: { ...editor.terms, endsAt: null } }); setChoices([]);
           }}>{choice.nickname ?? choice.title}</button></li>)}</ul>
         </>}
+        {editor.kind === "guest" && editor.eventId && <GuestScopeEditor key={editor.eventId} eventId={editor.eventId} sessionId={editor.sessionId} disabled={editor.revision > 0} onScope={(sessionId, endsAt) => setEditor(current => current ? { ...current, sessionId, terms: { ...current.terms, endsAt } } : null)} />}
       </div>
       <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-3 font-semibold">Срок</legend>
         <label>Начало<input type="datetime-local" required className={inputClass} value={localDate(terms.startsAt)} onChange={event => { if (event.target.value) updateTerms({ startsAt: new Date(event.target.value).toISOString() }); }} /></label>
@@ -221,8 +225,7 @@ export default function ContractsPage() {
         {contract.canEdit && ["draft", "offered", "rejected", "signed", "completed"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : contract.status === "signed" ? "Продление сохраняется новой редакцией того же договора. Текущие подписанные условия действуют до принятия новой редакции." : contract.status === "completed" ? "Прежний договор завершён. Продление оформляется новой редакцией с подписями обеих сторон." : ""); }}>{["signed", "completed"].includes(contract.status) ? "Изменить или продлить" : "Изменить условия"}</button>}
         {contract.canOffer && contract.status === "draft" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => void mutate({ action: "offer", contractId: contract.id, revision: contract.revision })}>Направить игроку</button>}
         {contract.canEdit && ["draft", "offered"].includes(contract.status) && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "cancel", contractId: contract.id, revision: contract.revision })}>Отозвать</button>}
-        {contract.isPlayer && contract.status === "offered" && contract.kind === "main" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => setAccepting({ ...contract, terms: contract.terms as ConstructorTerms })}>Подписать и принять</button>}
-        {contract.isPlayer && contract.status === "offered" && contract.kind === "guest" && <p className="text-sm text-amber-200">Гостевой договор пока нельзя принять: нужно подключить согласие основной организации и временный допуск к составу мероприятия.</p>}
+        {contract.isPlayer && contract.status === "offered" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => { setGuestReady(contract.kind === "main"); setAccepting({ ...contract, terms: contract.terms as ConstructorTerms }); }}>Подписать и принять</button>}
         {contract.isPlayer && contract.status === "offered" && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "reject", contractId: contract.id, revision: contract.revision })}>Отклонить условия</button>}
         {contract.isPlayer && contract.status === "offered" && !("schemaVersion" in contract.terms) && <p className="text-sm text-amber-200">Для подписания организация должна отправить новую версию договора через конструктор.</p>}
       </div>
@@ -238,9 +241,10 @@ export default function ContractsPage() {
         <p>Вы подписываете редакцию {accepting.revision}. Она действует после обеих подписей, не раньше {new Date(accepting.terms.startsAt).toLocaleString("ru-RU")}.</p>
         {!accepting.hasSignedHistory&&accepting.terms.financial.signingAmount>0&&<p>Первоначальная выплата: {number(accepting.terms.financial.signingAmount)} OC.</p>}
         {accepting.hasSignedHistory&&<p>При продлении первоначальный бонус и цена выкупа повторно не начисляются.</p>}
+        {accepting.kind === "guest" && <GuestRequirements contractId={accepting.id} onReady={setGuestReady} />}
         {accepting.terms.financial.salary&&<p>Зарплата по новым условиям: {number(accepting.terms.financial.salary.amount)} OC за {number(accepting.terms.financial.salary.periodDays)} суток.</p>}
         <p className="text-sm text-slate-300">Организация резервирует зарплату первого периода, если она предусмотрена; при продлении с прежней длительностью периода учитывается его неоплаченный остаток. Первоначальная выплата резервируется только при первом заключении договора. Если средств не хватит, договор не будет подписан.</p>
-        <div className="flex flex-wrap gap-3"><button type="button" className="primary-button" disabled={busy} onClick={() => void mutate({ action: "accept", contractId: accepting.id, revision: accepting.revision })}>Подписать эту редакцию</button><button type="button" className="secondary-button" disabled={busy} onClick={() => setAccepting(null)}>Вернуться к условиям</button></div>
+        <div className="flex flex-wrap gap-3"><button type="button" className="primary-button" disabled={busy || (accepting.kind === "guest" && !guestReady)} onClick={() => void mutate({ action: "accept", contractId: accepting.id, revision: accepting.revision })}>Подписать эту редакцию</button><button type="button" className="secondary-button" disabled={busy} onClick={() => setAccepting(null)}>Вернуться к условиям</button></div>
       </div>
     </section>}
   </div>;

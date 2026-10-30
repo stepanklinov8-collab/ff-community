@@ -6,6 +6,8 @@ import {verifyContractSessionSettlement} from './contract-session-settlement.mjs
 export async function verifyContractSessionTerms(db,id){
  const owner=id(9610),player=id(9611),team=id(9620),guild=id(9621),event=id(9622),otherEvent=id(9623),session=id(9624),group=id(9625);
  for(const user of [owner,player]){await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,`Session terms ${user.slice(-4)}`]);}
+ const previousActor=(await db.query("select current_setting('request.jwt.claim.sub',true) actor")).rows[0].actor;
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[owner]);
  for(const org of [team,guild])await db.query('insert into teams(id,name,leader_id) values($1,$2,$3)',[org,`Terms org ${org.slice(-4)}`,owner]);
  for(const e of [event,otherEvent])await db.query("insert into events(id,title,type,organizer_user_id) values($1,'Terms event','training',$2)",[e,owner]);
  const day=86400000,cutoff=Date.now()-day,iso=t=>new Date(t).toISOString();
@@ -128,4 +130,5 @@ export async function verifyContractSessionTerms(db,id){
  }finally{await db.exec('reset role');}
  console.log('PASS: immutable session contract terms, signed/effective cutoff, main team + guild history, scoped guest events, unsigned/late exclusion, explicit zero overrides, SQL/TS parity, empty freeze and atomic overlap rejection');
  console.log('PASS: confirmed session accrual plans, all-or-nothing minimum participation, proportional session fees, actual kills/MVP, incomplete-statistics hold, duplicate rejection, nickname isolation and no repeated tournament fee');
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[previousActor??'']);
 }

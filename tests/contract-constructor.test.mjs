@@ -7,6 +7,15 @@ const eventId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
 const terms = () => defaultTerms(new Date("2026-11-01T12:00:00+03:00"));
 
+test("guest approval cannot forge home terms, percentage, actor or financial consent", () => {
+  const valid = { action: "guest_consent", requestId: eventId, contractId: eventId, revision: 1, homeContractId: otherId, approve: true };
+  assert.equal(mutationSchema.safeParse(valid).success, true);
+  for (const input of [{ ...valid, actorId: eventId }, { ...valid, amount: 50 }, { ...valid, compensation: { kind: "none" } }, { ...valid, approve: "yes" }]) assert.equal(mutationSchema.safeParse(input).success, false);
+  assert.equal(querySchema.safeParse({ guest: "true" }).success, true);
+  assert.equal(querySchema.safeParse({ guestSessionsEventId: eventId }).success, true);
+  for (const input of [{ guest: "true", payments: "true", contractId: eventId }, { guest: "true", search: "private" }, { guestSessionsEventId: eventId, contractId: eventId }]) assert.equal(querySchema.safeParse(input).success, false);
+});
+
 test("termination cannot choose a payer, recipient or the actual compensation result", () => {
   const valid = { action: "terminate", requestId: eventId, contractId: otherId, revision: 1, mode: "player_exit", expectedAmount: 100, party: null };
   assert.equal(mutationSchema.safeParse(valid).success, true);

@@ -51,6 +51,8 @@ export async function verifyOrganizationOwnership(db, id) {
  const foundation=await readFile(new URL('../../supabase/migrations/202609010001_omcite_foundation.sql',import.meta.url),'utf8');
  const registrationStart=foundation.indexOf('create or replace function public.register_team_for_session(');
  const registrationEnd=foundation.indexOf('create or replace function public.cancel_session_registration(',registrationStart);
+ const currentRegistration=(await db.query("select pg_get_functiondef('public.register_team_for_session(uuid,uuid,uuid[])'::regprocedure) definition")).rows[0].definition;
+ try {
  await db.exec(foundation.slice(registrationStart,registrationEnd));
  await db.exec(`grant execute on function public.register_team_for_session(uuid,uuid,uuid[]) to authenticated`);
  const event=id(8820),session=id(8821);
@@ -60,6 +62,7 @@ export async function verifyOrganizationOwnership(db, id) {
  const registered=await asUser(owner,()=>db.query(`select * from public.register_team_for_session($1,$2,$3::uuid[])`,[session,team,[delegate]]));
  assert.equal(registered.rows[0].registration_status,'confirmed','off-roster owner can register the organization using its existing player roster');
  assert.equal((await db.query(`select registered_by from public.event_registrations where id=$1`,[registered.rows[0].registration_id])).rows[0].registered_by,owner);
+ } finally { await db.exec(currentRegistration); }
 
  const orgAccount=(await db.query(`select public.u6_coin_account('organization',$1) account`,[team])).rows[0].account;
  await db.query(`update public.coin_accounts set balance=500 where id=$1`,[orgAccount]);

@@ -38,11 +38,16 @@ import {verifyContractTournamentPayments} from './contract-tournament-payments.m
 import {verifyContractTournamentLimits} from './contract-tournament-limits.mjs';
 import {verifyContractPrizeSettlement} from './contract-prize-settlement.mjs';
 import {verifyContractTermination} from './contract-termination.mjs';
+import {verifyContractGuests} from './contract-guests.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
  await db.exec(await readFile(new URL('./baseline.sql',import.meta.url),'utf8'));
  await installChatRealtimeFixture(db);
+ // Baseline predates this legacy RPC. Install its real definition so guest
+ // admission exercises both initial registration and the existing roster edit.
+ const rosterEdit=(await readFile(new URL('../../supabase/migrations/202609060004_registration_reentry_roster_edit.sql',import.meta.url),'utf8')).replaceAll('\r\n','\n');
+ await db.exec(rosterEdit.slice(rosterEdit.indexOf('create or replace function public.update_team_registration_roster('),rosterEdit.lastIndexOf('commit;')));
  const dynamic=await readFile(new URL('../../supabase/migrations/202609060005_dynamic_betting.sql',import.meta.url),'utf8');
  await db.exec(dynamic.slice(dynamic.indexOf('create table if not exists public.betting_sources'),dynamic.indexOf('create or replace function public.place_dynamic_site_bet_for(')));
 
@@ -85,7 +90,8 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
+ if(process.argv.includes('--guests-only')){await verifyContractGuests(db,migrationId);}
+ else if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  await db.query(`insert into auth.users(id) values($1),($2),($3)`,[id(1),id(2),id(3)]);
  await db.query(`insert into public.user_roles values($1,'admin')`,[id(1)]);
@@ -238,6 +244,7 @@ try {
  await verifyContractTournamentLimits(db,id);
  await verifyContractPrizeSettlement(db,id);
  await verifyContractTermination(db,id);
+ await verifyContractGuests(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}
