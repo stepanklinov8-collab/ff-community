@@ -179,6 +179,15 @@ test('event schema normalizes Supabase timestamp format before saving',()=>{
  const parsed=eventConfiguration.parse(config);
  assert.equal(parsed.publishAt,'2026-09-21T06:00:00.000Z');assert.equal(parsed.sessions[0].startTime,'2026-10-01T12:00:00.000Z');
 });
+
+test('personal prize configuration preserves optional historical plans and rejects unexecutable award input',()=>{
+ const config={title:'Awards',type:'training',cost:0,organizer:'',organizerUserId:null,description:'',streamUrl:'',paymentUrl:'',maxTeams:12,minPlayers:4,publishAt:null,commentsEnabled:true,allowIndividualRegistration:false,
+  rules:{...fixture().context.rules,mode:'training'},sessions:[{startTime:'2026-11-01T12:00:00Z',endTime:'2026-11-01T13:00:00Z',registrationOpenTime:null,registrationCloseTime:null,maxTeams:12,groups:[{capacity:12,games:[{map:'bermuda'}]}]}]};
+ assert.equal(eventConfiguration.parse(config).personalPrizes,undefined,'historical absence does not create an unfunded promise');
+ assert.deepEqual(eventConfiguration.parse({...config,personalPrizes:{mvp:20,maxKills:10}}).personalPrizes,{mvp:20,maxKills:10});
+ for(const personalPrizes of [{mvp:-1,maxKills:0},{mvp:.5,maxKills:0},{mvp:0,maxKills:0,userId:id(1)},{mvp:0},{mvp:1000000000001,maxKills:0}])assert.equal(eventConfiguration.safeParse({...config,personalPrizes}).success,false);
+ assert.equal(eventConfiguration.safeParse({...config,type:'solo',rules:{...config.rules,mode:'solo'},personalPrizes:{mvp:20,maxKills:0}}).success,false);
+});
 test('new values use independent useful rating, capped extra points and diminishing prize growth',()=>{
  assert.equal(playerValue(0,0,0),0);
  assert.equal(playerValue(500,499,0),100000000);

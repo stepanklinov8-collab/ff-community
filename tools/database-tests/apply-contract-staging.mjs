@@ -51,6 +51,8 @@ const inspectionSql=`select
  to_regprocedure('public.contract_terminate(uuid,uuid,uuid,integer,text,bigint,text)') is not null as termination_ready,
  to_regprocedure('public.contract_guest_can_play(uuid,uuid,uuid)') is not null as guest_lifecycle_ready,
  to_regprocedure('public.contract_guest_settle(uuid,integer)') is not null as guest_payments_ready,
+ to_regclass('public.personal_award_funds') is not null
+   and to_regprocedure('public.personal_award_distribution(uuid,text,text)') is not null as personal_award_funds_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -89,6 +91,7 @@ const migrations=[
  ['termination_ready','202610300010_contract_termination.sql'],
  ['guest_lifecycle_ready','202610300011_contract_guest_lifecycle.sql'],
  ['guest_payments_ready','202610300012_contract_guest_payments.sql'],
+ ['personal_award_funds_ready','202610300013_personal_award_funds.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

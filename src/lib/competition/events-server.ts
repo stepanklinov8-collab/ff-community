@@ -10,7 +10,7 @@ export async function eventConfigurationFor(db:Database,id:string,auth:AuthConte
  const admin=auth.roles.some(r=>r==="admin"||r==="superadmin");if(!admin&&event.organizer_user_id!==auth.user.id)throw new ApiAuthError("Недостаточно прав",403);
  const sessions=await allRows((a,b)=>db.from("event_sessions").select("*").eq("event_id",id).neq("status","cancelled").order("start_time").range(a,b));
  const games=await allRows((a,b)=>db.from("event_games").select("id,session_id,group_id,game_number,map_name,public_number").eq("event_id",id).neq("status","cancelled").order("game_number").range(a,b));
- const config:EventConfiguration={prizePlan:event.prize_plan??(event.type==="training"?[250,150,100]:[]),trainingSchedule:event.training_schedule??null,title:event.title,type:event.type,cost:event.cost??0,organizer:event.organizer??"",organizerUserId:event.organizer_user_id,
+ const config:EventConfiguration={personalPrizes:event.personal_prizes??{mvp:0,maxKills:0},prizePlan:event.prize_plan??(event.type==="training"?[250,150,100]:[]),trainingSchedule:event.training_schedule??null,title:event.title,type:event.type,cost:event.cost??0,organizer:event.organizer??"",organizerUserId:event.organizer_user_id,
  description:event.description??"",rulesText:event.rules_text??"",streamUrl:event.stream_url??"",paymentUrl:event.payment_url??"",imageUrl:event.image_url??"",
  maxTeams:Math.min(1024,event.max_teams||1024),minPlayers:event.min_players??4,rosterLockMinutes:10,publishAt:event.publish_at,commentsEnabled:event.comments_enabled,
  allowIndividualRegistration:event.allow_individual_registration,finalSessionId:event.final_session_id,
