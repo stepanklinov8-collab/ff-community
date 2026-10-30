@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { terminationCompensationSchema } from "./termination-compensation.ts";
 import { noShowPenaltySchema } from "./no-show-penalty.ts";
+import { rentalConditionSchema } from "./rental-terms.ts";
 
 const coins = z.number().int().min(0).max(1_000_000_000_000);
 const bps = z.number().int().min(0).max(10000);
@@ -31,12 +32,14 @@ export const financialTermsSchema = z.object({
   // Absent in previously saved v2 versions: absence means no fine, never an
   // inferred default. Old immutable JSON is not rewritten on read.
   noShowPenalty: noShowPenaltySchema.optional(),
+  rentalCompensations: z.array(rentalConditionSchema).max(2).optional(),
   rankingBonuses: z.array(rankingBonusSchema).max(20),
   eventOverrides: z.array(eventOverrideSchema).max(20),
 }).strict().superRefine((value, ctx) => {
   for (const [key, ids] of [
     ["rankingBonuses", value.rankingBonuses.map(row => row.id)],
     ["eventOverrides", value.eventOverrides.map(row => row.eventId)],
+    ["rentalCompensations", (value.rentalCompensations ?? []).map(row => row.organizationId)],
   ] as const) {
     if (new Set(ids).size !== ids.length) ctx.addIssue({ code: "custom", path: [key], message: "Повторяющиеся условия недопустимы" });
   }

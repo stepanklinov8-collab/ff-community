@@ -57,6 +57,7 @@ export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
+  z.object({action:z.literal("rental_pay"),requestId:uuid,feeId:uuid,amount:coins.min(1)}).strict(),
   z.object({ action: z.literal("guest_consent"), requestId: uuid, contractId: uuid, revision: z.number().int().positive(), homeContractId: uuid, approve: z.boolean() }).strict(),
   z.object({ action: z.literal("terminate"), requestId: uuid, contractId: uuid, revision: z.number().int().positive(),
     mode: z.enum(["mutual", "decline", "player_exit", "organization", "unpaid"]), expectedAmount: coins.nullable(), party: z.enum(["player", "organization"]).nullable() }).strict(),
@@ -72,6 +73,8 @@ export const mutationSchema = z.discriminatedUnion("action", [
   ...(["offer", "cancel", "reject", "accept"] as const).map(action => z.object({ action: z.literal(action), requestId: uuid, contractId: uuid, revision: z.number().int().positive() }).strict()),
 ]);
 export const querySchema = z.object({
+  rentalOptions:z.literal("true").optional(),rentalPayments:z.literal("true").optional(),
+  rentalPlayerId:uuid.optional(),rentalEventId:uuid.optional(),rentalSessionId:uuid.optional(),
   contractId: uuid.optional(),
   organizationId: uuid.optional(),
   search: z.string().trim().max(80).optional(),
@@ -84,6 +87,9 @@ export const querySchema = z.object({
   guestSessionsEventId: uuid.optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
+  if(input.rentalOptions&&(!input.organizationId||!input.rentalPlayerId||!input.rentalEventId||input.contractId||input.guest||input.guestSessionsEventId||input.history||input.payments||input.fines||input.termination||input.rentalPayments||input.search!==undefined))ctx.addIssue({code:"custom",message:"Выберите организацию, игрока и выступление для условий аренды"});
+  if(!input.rentalOptions&&(input.rentalPlayerId||input.rentalEventId||input.rentalSessionId))ctx.addIssue({code:"custom",message:"Параметры выступления запрашиваются только с условиями аренды"});
+  if(input.rentalPayments&&(input.organizationId||input.guest||input.guestSessionsEventId||input.history||input.payments||input.fines||input.termination||input.search!==undefined))ctx.addIssue({code:"custom",message:"Расчёты аренды запрашиваются отдельно"});
   if (input.guest && (input.history || input.payments || input.termination || input.fines || input.search !== undefined || input.organizationId || input.guestSessionsEventId)) ctx.addIssue({ code: "custom", message: "Гостевые согласования запрашиваются отдельно" });
   if (input.guestSessionsEventId && (input.contractId || input.guest || input.history || input.payments || input.termination || input.fines || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для сессий выберите только мероприятие" });
   if (input.termination && (!input.contractId || input.history || input.payments || input.fines || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для расторжения выберите один договор без других фильтров" });
@@ -98,6 +104,9 @@ export const defaultTerms = (now = new Date()): ConstructorTerms => ({
   participation: { mode: "any" }, transfer: { kind: "none" }, transferRequiresConsent: true,
   playerExit: { kind: "none" }, organizationTermination: { kind: "none" },
   guestPolicy: "consent", guestCompensation: { kind: "none" }, schemaVersion: 2, financial: emptyFinancialTerms(),
+});
+export const defaultRentalTerms = (now = new Date()): ConstructorTerms => ({
+ ...defaultTerms(now),trainingShareBps:0,tournamentShareBps:0,personalShareBps:0,
 });
 
 export interface ContractListItem {

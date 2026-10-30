@@ -41,6 +41,7 @@ import {verifyContractTermination} from './contract-termination.mjs';
 import {verifyContractGuests} from './contract-guests.mjs';
 import {verifyPersonalAwards} from './personal-awards.mjs';
 import {verifyPrizeClosure} from './prize-closure.mjs';
+import {verifyRentalPayments} from './rental-payments.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -92,7 +93,8 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--prize-closure-only')){await verifyPrizeClosure(db,migrationId);}
+ if(process.argv.includes('--rentals-only')){await verifyRentalPayments(db,migrationId);}
+ else if(process.argv.includes('--prize-closure-only')){await verifyPrizeClosure(db,migrationId);}
  else if(process.argv.includes('--personal-awards-only')){await verifyPersonalAwards(db,migrationId);await verifyPrizeClosure(db,migrationId);}
  else if(process.argv.includes('--guests-only')){await verifyContractGuests(db,migrationId);}
  else if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
@@ -251,6 +253,7 @@ try {
  await verifyContractGuests(db,id);
  await verifyPersonalAwards(db,id);
  await verifyPrizeClosure(db,id);
+ await verifyRentalPayments(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

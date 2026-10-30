@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
 import type { Compensation } from "../model";
+import {describeRentalCompensation,type RentalCompensation} from "../rental-terms";
 
-const fee = (rule: Compensation) => rule.kind === "none" ? "Без компенсации" : rule.kind === "fixed" ? `${rule.amount.toLocaleString("ru-RU")} OC со счёта принимающей организации` : `${rule.basisPoints / 100}% фактических выплат гостю`;
-type Requirement = { organizationName: string; policy: string; compensation: Compensation; approved: boolean };
+const fee = (rule: Compensation|RentalCompensation,version=1) => version===2?describeRentalCompensation(rule):rule.kind === "none" ? "Без компенсации" : rule.kind === "fixed" ? `${rule.amount.toLocaleString("ru-RU")} OC со счёта принимающей организации` : `${rule.basisPoints / 100}% фактических выплат гостю`;
+type Requirement = { organizationName: string; policy: string; compensation: Compensation|RentalCompensation; approved: boolean };
 export function GuestRequirements({ contractId, onReady }: { contractId: string; onReady: (ready: boolean) => void }) {
-  const [data, setData] = useState<{ captured: boolean; requirements: Requirement[] } | null>(null), [error, setError] = useState("");
+  const [data, setData] = useState<{ captured: boolean; accountingVersion?:number;requirements: Requirement[] } | null>(null), [error, setError] = useState("");
   useEffect(() => {
     let cancelled = false;
     void authFetch(`/api/contracts?${new URLSearchParams({ contractId, guest: "true" })}`).then(async response => {
@@ -23,8 +24,8 @@ export function GuestRequirements({ contractId, onReady }: { contractId: string;
     {!data && !error && <p>Загружаем требования…</p>}
     {data && !data.captured && <p>Для этих условий ещё не зафиксированы согласования. Организация должна направить новую редакцию.</p>}
     {data?.captured && !data.requirements.length && <p>Действующих основных договоров с другими организациями для этого выступления нет.</p>}
-    {data?.requirements.map(row => <div key={row.organizationName}><strong>{row.organizationName}</strong>: {fee(row.compensation)}. {row.approved ? "Согласовано" : row.policy === "forbidden" ? "Нужно отдельное разрешение вопреки запрету основного договора" : "Ожидается согласие"}.</div>)}
-    <p className="text-sm text-slate-300">Фиксированная компенсация резервируется при подписании и перечисляется после подтверждённого участия. Процент распределяется из фактической выплаты. Постоянный состав не меняется.</p>
+    {data?.requirements.map(row => <div key={row.organizationName}><strong>{row.organizationName}</strong>: {fee(row.compensation,data.accountingVersion)}. {row.approved ? "Согласовано" : row.policy === "forbidden" ? "Нужно отдельное разрешение вопреки запрету основного договора" : "Ожидается согласие"}.</div>)}
+    <p className="text-sm text-slate-300">{data?.accountingVersion===2?"Нанявшая организация оплачивает всю выбранную компенсацию со своего счёта. Фиксированная часть резервируется при подписании; итог рассчитывается после участия. Доли призовых игрока задаются его арендным договором.":"Исторические условия: фиксированная компенсация со счёта принимающей организации, процент из выплаты гостю."} Постоянный состав не меняется.</p>
   </section>;
 }
 
@@ -55,7 +56,7 @@ export function GuestScopeEditor({ eventId, sessionId, disabled, onScope }: { ev
   </div>;
 }
 
-type Consent = { contractId: string; revision: number; homeContractId: string; organizationId: string; homeName: string; hostName: string; playerName: string; eventTitle: string; policy: string; compensation: Compensation; startsAt: string; endsAt: string };
+type Consent = { contractId: string; revision: number; homeContractId: string; organizationId: string; homeName: string; hostName: string; playerName: string; eventTitle: string; policy: string; compensation: Compensation|RentalCompensation; accountingVersion?:number;startsAt: string; endsAt: string };
 export default function GuestApprovals() {
   const [rows, setRows] = useState<Consent[]>([]), [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const pending = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -80,7 +81,7 @@ export default function GuestApprovals() {
     {error && <p role="alert" className="text-red-300">{error}</p>}{notice && <p role="status" className="text-cyan-200">{notice}</p>}
     {open && <div role="region" aria-label="Гостевые согласования" className="space-y-3">{!rows.length && <p>Ожидающих согласования выступлений нет.</p>}{rows.map(row => <article key={`${row.contractId}:${row.homeContractId}`} className="cyber-card space-y-2 p-4">
       <h3 className="font-semibold">{row.playerName} → {row.hostName}</h3><p>{row.eventTitle} · {new Date(row.startsAt).toLocaleString("ru-RU")}. Решение от имени «{row.homeName}».</p>
-      <p>{fee(row.compensation)}. {row.policy === "forbidden" && "Это отдельное разрешение для выступления при запрете в основном договоре; основной договор не меняется."}</p>
+      <p>{fee(row.compensation,row.accountingVersion)}. {row.policy === "forbidden" && "Это отдельное разрешение для выступления при запрете в основном договоре; основной договор не меняется."}</p>
       <Link className="text-cyan-300 underline" href={`/teams/${row.organizationId}`}>Основная организация</Link>
       <div className="flex flex-wrap gap-3"><button type="button" className="primary-button" disabled={busy} onClick={() => void decide(row, true)}>Разрешить выступление</button><button type="button" className="secondary-button" disabled={busy} onClick={() => void decide(row, false)}>Отклонить выступление</button></div>
     </article>)}</div>}

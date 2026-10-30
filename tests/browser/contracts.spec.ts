@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { defaultTerms } from "../../src/modules/contracts/model";
+import { defaultTerms,defaultRentalTerms } from "../../src/modules/contracts/model";
 
 const userId = "00000000-0000-4000-8000-000000009700";
 const teamId = "00000000-0000-4000-8000-000000009701";
@@ -431,6 +431,7 @@ test("mutual termination records only the first consent and keeps the contract a
 test("guest training contract selects one session and fills its real ending", async ({ page }) => {
   const writes = await setup(page), sessionId = "00000000-0000-4000-8000-000000009705";
   await page.route("**/api/contracts**", route => {
+    if(new URL(route.request().url()).searchParams.has("rentalOptions"))return route.fulfill({json:{organizations:[{organizationId:teamId,name:"Основная организация",policy:"allowed",compensation:{kind:"none"}}]}});
     if (!new URL(route.request().url()).searchParams.has("guestSessionsEventId")) return route.fallback();
     return route.fulfill({ json: { eventType: "training", sessions: [{ id: sessionId, startsAt: "2026-12-01T16:00:00Z", endsAt: "2026-12-01T17:00:00Z" }] } });
   });
@@ -442,9 +443,63 @@ test("guest training contract selects one session and fills its real ending", as
   await page.getByRole("button", { name: "Турнир ноября", exact: true }).click();
   await page.getByRole("button", { name: "Загрузить сессии гостевого выступления" }).click();
   await page.getByRole("combobox", { name: "Выступление гостя", exact: true }).selectOption(sessionId);
+  await expect(page.getByLabel("Тренировка, %",{exact:true})).toHaveValue("0");
+  await expect(page.getByLabel("Личная награда, %",{exact:true})).toHaveValue("0");
+  await page.getByRole("button",{name:"Загрузить условия аренды"}).click();
+  const rental=page.getByRole("region",{name:"Условия оплаты аренды"});
+  await rental.getByRole("combobox",{name:"Компенсация за аренду"}).selectOption("combined");
+  await rental.getByLabel("Фиксированная сумма, OC",{exact:true}).fill("40");
+  await rental.getByLabel("Процент компенсации",{exact:true}).fill("20");
+  await rental.getByRole("combobox",{name:"Основание процента"}).selectOption("player_payments");
+  await rental.getByRole("combobox",{name:"Как выбрать итог"}).selectOption("minimum");
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Черновик сохранён");
   expect(writes[0]).toMatchObject({ action: "save", kind: "guest", sessionId, terms: { endsAt: "2026-12-01T17:00:00Z" } });
+  expect(writes[0]).toMatchObject({terms:{trainingShareBps:0,personalShareBps:0,financial:{rentalCompensations:[{organizationId:teamId,compensation:{kind:"combined",amount:40,basisPoints:2000,basis:"player_payments",selection:"minimum"}}]}}});
+});
+
+test("rental debt is paid by the host with explicit confirmation and an idempotent retry",async({page})=>{
+ await setup(page,[{...contract,kind:"guest",status:"signed",terms:defaultRentalTerms()}]);
+ const feeId="00000000-0000-4000-8000-000000009799",requests:Record<string,unknown>[]=[];
+ let paid=0;
+ await page.route("**/api/contracts**",route=>{
+  const params=new URL(route.request().url()).searchParams;
+  if(route.request().method()==="POST"&&route.request().postDataJSON().action==="rental_pay"){
+   requests.push(route.request().postDataJSON());if(requests.length===1)return route.abort('failed');paid=20;return route.fulfill({json:{success:true}});
+  }
+  if(params.has("rentalPayments"))return route.fulfill({json:{rows:[{id:feeId,revision:1,organizationName:"Основная гильдия",rule:{kind:"combined",amount:40,basisPoints:2000,basis:"organization_prizes",selection:"maximum"},accountingVersion:2,amount:40,paid,held:0,remaining:40-paid}],canPay:true}});
+  return route.fallback();
+ });
+ await page.goto("/contracts");await page.getByRole("button",{name:"Расчёты за аренду",exact:true}).click();
+ const region=page.getByRole("region",{name:"Расчёты за аренду"});await expect(region).toContainText("выплата игроку не уменьшается");
+ await region.getByRole("button",{name:"Погасить долг за аренду"}).click();const dialog=page.getByRole("dialog",{name:"Оплата аренды"});
+ await expect(dialog).toContainText("Личный баланс владельца и чужие резервы не используются");await dialog.getByLabel("Сумма оплаты аренды, OC").fill("20");
+ await dialog.getByRole("button",{name:"Подтвердить оплату аренды"}).click();await expect(page.getByRole("status").filter({hasText:"Связь прервалась"})).toBeVisible();
+ await dialog.getByRole("button",{name:"Подтвердить оплату аренды"}).click();await expect(dialog).toHaveCount(0);
+ expect(requests).toHaveLength(2);expect(requests[0].requestId).toBe(requests[1].requestId);expect(requests[0]).toMatchObject({action:"rental_pay",feeId,amount:20});
+ await expect(region).toContainText("оплачено 20 OC · долг 20 OC");
+});
+
+test("rental signature shows the percentage base and the separate host-funded compensation",async({page})=>{
+ await setup(page,[{...contract,kind:"guest",isPlayer:true,canEdit:false,canOffer:false,terms:defaultRentalTerms()}]);
+ await page.route("**/api/contracts**",route=>{
+  if(new URL(route.request().url()).searchParams.get("guest")==="true")return route.fulfill({json:{captured:true,accountingVersion:2,requirements:[{organizationName:"Основная команда",policy:"consent",compensation:{kind:"combined",amount:40,basisPoints:2000,basis:"organization_prizes",selection:"maximum"},approved:true}]}});
+  return route.fallback();
+ });
+ await page.goto("/contracts");await page.getByRole("button",{name:"Подписать и принять",exact:true}).click();
+ const dialog=page.getByRole("dialog",{name:"Подтверждение договора"});await expect(dialog).toContainText("Большее из 40 OC");await expect(dialog).toContainText("призовые организации за выступление");await expect(dialog).toContainText("Оплачивает нанявшая организация со своего счёта");
+ await expect(dialog.getByRole("button",{name:"Подписать эту редакцию"})).toBeEnabled();
+});
+
+test("home organizations can inspect incoming rental receivables without a host spending button",async({page})=>{
+ await setup(page,[],false);
+ await page.route("**/api/contracts**",route=>{
+  const params=new URL(route.request().url()).searchParams;if(!params.has("rentalPayments"))return route.fallback();
+  if(!params.has("contractId"))return route.fulfill({json:{incoming:[{id:contract.id,playerName:"Игрок договора",hostName:"Нанявшая команда",eventTitle:"Тренировка"}],hasMore:false}});
+  return route.fulfill({json:{rows:[{id:teamId,revision:1,organizationName:"Своя гильдия",accountingVersion:2,rule:{kind:"fixed",amount:40},amount:40,paid:10,remaining:30,held:0}],canPay:false}});
+ });
+ await page.goto("/contracts");await page.getByRole("button",{name:"Игроки ваших организаций в аренде"}).click();const incoming=page.getByRole("region",{name:"Входящая аренда"});await expect(incoming).toContainText("Нанявшая команда");
+ await incoming.getByRole("button",{name:"Расчёты за аренду",exact:true}).click();await expect(incoming).toContainText("долг 30 OC");await expect(incoming.getByRole("button",{name:"Погасить долг за аренду"})).toHaveCount(0);
 });
 
 for (const approved of [false, true]) test(`guest signature requires every home consent: ${approved}`, async ({ page }) => {

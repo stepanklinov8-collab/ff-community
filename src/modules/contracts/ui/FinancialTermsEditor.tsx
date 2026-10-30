@@ -6,6 +6,7 @@ import { authFetch } from "@/platform/browser-services";
 import { financialTermsSchema, type FinancialTerms, type EventOverride } from "../financial-terms";
 import { describeTerminationCompensation, type TerminationCompensation } from "../termination-compensation";
 import { describeNoShowPenalty, type NoShowPenalty } from "../no-show-penalty";
+import {describeRentalCompensation} from "../rental-terms";
 
 const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
 const money = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
@@ -69,6 +70,7 @@ export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
     <p>{describeNoShowPenalty(value.noShowPenalty ?? { kind: "none" })}</p>
     <p>При первоначальном подписании резервируются разовая оплата и первый период зарплаты. Продление не резервирует первоначальный бонус или оплату выкупа повторно. При долге договор продолжает действовать; погашение выбирает руководитель или владелец. Вывод организации при долге запрещён.</p>
     {value.rankingBonuses.map(row => <p key={row.id}>Бонус {money(row.amount)}: «{rankingLabels[row.ranking]}», топ-{row.top}, {rankingModes[row.mode].toLowerCase()}, {new Date(row.startsAt).toLocaleString("ru-RU")} — {new Date(row.endsAt).toLocaleString("ru-RU")}.</p>)}
+    {value.rentalCompensations?.map(row=><p key={row.organizationId}><Link className="text-cyan-300 underline" href={`/teams/${row.organizationId}`}>Основная организация</Link>: {describeRentalCompensation(row.compensation)}</p>)}
     {value.eventOverrides.map((row, index) => <p key={row.eventId}>Исключение {index + 1} · <Link className="text-cyan-300 underline" href={`/tournaments/${row.eventId}`}>Открыть мероприятие</Link>: {Object.entries(row.values).map(([key, amount]) => `${overrideLabels[key as keyof typeof overrideLabels]}: ${key.endsWith("Bps") ? `${amount! / 100}%` : money(amount!)}`).join("; ")}. Заменяет только указанные общие условия.</p>)}
   </div>;
 }

@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
-import { contractTermsSchema, defaultTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
+import { contractTermsSchema, defaultTerms, defaultRentalTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
 import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
 import ContractPayments from "./ContractPayments";
 import ContractFines from "./ContractFines";
 import ContractTermination from "./ContractTermination";
 import GuestApprovals, { GuestRequirements, GuestScopeEditor } from "./GuestContracts";
+import {RentalConditionsEditor,RentalPayments,RentalIncoming} from "./RentalConditions";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -161,6 +162,7 @@ export default function ContractsPage() {
     {error && <p role="alert" className="rounded border border-red-500/50 bg-red-950 p-4 text-red-100">{error}</p>}
     {notice && <p role="status" className="cyber-card p-4 text-cyan-200">{notice}</p>}
     <GuestApprovals />
+    <RentalIncoming />
     {editor && terms && <form className="cyber-card space-y-6 p-5" onSubmit={event => {
       event.preventDefault();
       const parsed = contractTermsSchema.safeParse(terms);
@@ -171,7 +173,7 @@ export default function ContractsPage() {
       <h2 className="text-xl font-bold">{editor.revision ? `Новая версия договора №${editor.revision + 1}` : "Новый договор"}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Организация<select required disabled={editor.revision > 0} className={inputClass} value={editor.organizationId} onChange={event => { setEditor({ ...editor, organizationId: event.target.value, playerId: "", playerName: "" }); setChoices([]); }}>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>
-        <label>Вид договора<select disabled={editor.revision > 0} className={inputClass} value={editor.kind} onChange={event => setEditor({ ...editor, kind: event.target.value as Editor["kind"], eventId: null, sessionId: null, eventTitle: "" })}><option value="main">Основной</option><option value="guest">Гостевое выступление</option></select></label>
+        <label>Вид договора<select disabled={editor.revision > 0} className={inputClass} value={editor.kind} onChange={event => {const defaults=event.target.value==="guest"?defaultRentalTerms():defaultTerms();setEditor({ ...editor, kind: event.target.value as Editor["kind"], eventId: null, sessionId: null, eventTitle: "",terms:{...editor.terms,trainingShareBps:defaults.trainingShareBps,tournamentShareBps:defaults.tournamentShareBps,personalShareBps:defaults.personalShareBps,financial:{...editor.terms.financial,rentalCompensations:[]}} });}}><option value="main">Основной</option><option value="guest">Аренда / гостевое выступление</option></select></label>
       </div>
       <div className="space-y-3 rounded border border-slate-700 p-4">
         <p>Игрок: <strong>{editor.playerName || "не выбран"}</strong>{editor.kind === "guest" && <> · Мероприятие: <strong>{editor.eventTitle || "не выбрано"}</strong></>}</p>
@@ -211,6 +213,7 @@ export default function ContractsPage() {
         <label>Выступления за другие коллективы<select className={inputClass} value={terms.guestPolicy} onChange={event => updateTerms({ guestPolicy: event.target.value as ContractTerms["guestPolicy"], ...(event.target.value === "forbidden" ? { guestCompensation: { kind: "none" } as const } : {}) })}><option value="forbidden">Запрещены</option><option value="allowed">Разрешены</option><option value="consent">Требуют согласия организации</option></select></label>
         {terms.guestPolicy !== "forbidden" && <FeeInput label="Компенсация основной организации за гостя" value={terms.guestCompensation} basis="от выплаты игроку" onChange={guestCompensation => updateTerms({ guestCompensation })} />}
       </div>
+      {editor.kind==="guest"&&editor.playerId&&editor.eventId&&<RentalConditionsEditor key={`${editor.organizationId}:${editor.playerId}:${editor.eventId}:${editor.sessionId}`} organizationId={editor.organizationId} playerId={editor.playerId} eventId={editor.eventId} sessionId={editor.sessionId} value={terms.financial.rentalCompensations??[]} onChange={rentalCompensations=>updateTerms({financial:{...terms.financial,rentalCompensations}})}/>}
       <FinancialTermsEditor key={editor.organizationId} value={terms.financial} onChange={financial => updateTerms({ financial })} startsAt={terms.startsAt} endsAt={terms.endsAt} organizationId={editor.organizationId} />
       <div className="rounded border border-cyan-700 p-4"><h3 className="mb-3 font-semibold">Проверьте условия перед сохранением</h3><TermsSummary terms={terms} /></div>
       <div className="flex flex-wrap gap-3"><button type="submit" disabled={busy} className="primary-button">{busy ? "Сохранение…" : "Сохранить черновик"}</button><button type="button" disabled={busy} className="secondary-button" onClick={() => setConfirmClose(true)}>Закрыть</button></div>
@@ -231,6 +234,7 @@ export default function ContractsPage() {
       </div>
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />
       <ContractPayments key={`${contract.id}:payments`} contractId={contract.id} />
+      {contract.kind==="guest"&&<RentalPayments key={`${contract.id}:rental`} contractId={contract.id}/>}
       <ContractFines key={`${contract.id}:fines`} contractId={contract.id} />
       {(contract.canOffer || contract.isPlayer) && (contract.hasSignedHistory || contract.status === "signed") && <ContractTermination key={`${contract.id}:termination`} contractId={contract.id} onEnded={() => void load()} />}
     </article>)}</div>}

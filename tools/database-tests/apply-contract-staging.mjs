@@ -55,6 +55,8 @@ const inspectionSql=`select
    and to_regprocedure('public.personal_award_distribution(uuid,text,text)') is not null as personal_award_funds_ready,
  to_regprocedure('public.personal_award_settle(uuid,boolean)') is not null as personal_award_settlement_ready,
  to_regprocedure('public.podium_fund_action(uuid,uuid,uuid,text,text)') is not null as prize_fund_closure_ready,
+ to_regprocedure('public.contract_rental_options(uuid,uuid,uuid,uuid,uuid)') is not null as rental_conditions_ready,
+ to_regprocedure('public.contract_rental_settle(uuid,integer)') is not null as rental_payments_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -96,6 +98,8 @@ const migrations=[
  ['personal_award_funds_ready','202610300013_personal_award_funds.sql'],
  ['personal_award_settlement_ready','202610300014_personal_award_settlement.sql'],
  ['prize_fund_closure_ready','202610300015_prize_fund_closure.sql'],
+ ['rental_conditions_ready','202610300016_rental_conditions.sql'],
+ ['rental_payments_ready','202610300017_rental_payments.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

@@ -3,6 +3,10 @@ import { createAdminClient, requireUser, authErrorResponse } from "@/platform/da
 import { mutationSchema, querySchema } from "./model";
 
 const errors: Record<string, [number, string]> = {
+  CONTRACT_RENTAL_ORGANIZATION:[422,"Условия аренды можно задать только для действующих основных организаций этого игрока"],
+  CONTRACT_RENTAL_REVIEW:[409,"Загрузите и проверьте условия расчёта со всеми основными организациями в конструкторе аренды"],
+  CONTRACT_RENTAL_ENGINE:[503,"Расчёт аренды временно недоступен. Договор не был подписан и деньги не списаны"],
+  CONTRACT_RENTAL_PENDING:[409,"Оплату аренды можно выполнить после завершения выступления и уточнения личной статистики"],
   CONTRACT_AUTH: [401, "Войдите в аккаунт"],
   CONTRACT_OWNER: [403, "Отменить начисление может только владелец организации"],
   CONTRACT_CANCELLED: [409, "Начисление уже отменено. Обновите список выплат"],
@@ -55,7 +59,13 @@ async function handle(request: Request, write: boolean) {
     const value = parsed.data;
     let rpc = write ? "contract_mutate" : "contract_query";
     let args: Record<string, unknown> = { p_actor: user.id, p_input: value };
-    if ("action" in value && value.action === "guest_consent") {
+    if("action" in value&&value.action==="rental_pay"){
+      rpc="contract_rental_pay";args={p_actor:user.id,p_request:value.requestId,p_fee:value.feeId,p_amount:value.amount};
+    }else if("rentalOptions" in value&&value.rentalOptions){
+      rpc="contract_rental_options";args={p_actor:user.id,p_host:value.organizationId,p_player:value.rentalPlayerId,p_event:value.rentalEventId,p_session:value.rentalSessionId??null};
+    }else if("rentalPayments" in value&&value.rentalPayments){
+      rpc="contract_rental_query";args={p_actor:user.id,p_contract:value.contractId??null,p_offset:value.offset};
+    }else if ("action" in value && value.action === "guest_consent") {
       rpc = "contract_guest_consent";
       args = { p_actor: user.id, p_request: value.requestId, p_contract: value.contractId, p_revision: value.revision, p_home: value.homeContractId, p_approve: value.approve };
     } else if ("guest" in value && value.guest) {

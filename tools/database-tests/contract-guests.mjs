@@ -28,8 +28,10 @@ export async function verifyContractGuests(db,id){
  const mutate=async(actor,input)=>(await db.query('select contract_mutate($1,$2::jsonb) value',[actor,JSON.stringify({requestId:randomUUID(),...input})])).rows[0].value;
  const consent=async(actor,c,revision,homeContract,approve=true,key=randomUUID())=>(await db.query('select contract_guest_consent($1,$2,$3,$4,$5,$6) value',[actor,key,c,revision,homeContract,approve])).rows[0].value;
  const account=async(t)=>(await db.query('select coalesce((select balance::int from coin_accounts where team_id=$1),0) balance,coalesce((select reserved::int from coin_accounts where team_id=$1),0) reserved',[t])).rows[0];
+ const rentalConditions=async(p,s)=>(await db.query('select contract_guest_home_terms($1,$2,$3) value',[p,host,iso(now+(s===session?2:3)*day)])).rows[0].value.map(h=>({organizationId:h.organizationId,compensation:h.compensation.kind==='percent'?{...h.compensation,basis:'player_payments'}:h.compensation}));
  const prepare=async(c,s,bonus=0)=>{
   const terms=defaultTerms(new Date(now));terms.endsAt=iso(now+(s===session?2:3)*day+3600000);terms.financial.signingAmount=bonus;
+  terms.financial.rentalCompensations=await rentalConditions(player,s);
   await mutate(hostOwner,{action:'save',contractId:c,expectedRevision:0,organizationId:host,playerId:player,kind:'guest',eventId:event,sessionId:s,terms});
   await mutate(hostOwner,{action:'offer',contractId:c,revision:1});return terms;
  };
@@ -63,14 +65,18 @@ export async function verifyContractGuests(db,id){
  await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status) values($1,1,$2::jsonb,$3,'offered')",[bonusMain,JSON.stringify(homeTerms),homeOwner]);
  await db.query('insert into contract_agreements(contract_id,revision,organization_signer,player_signer,ownership_revision,signed_at,effective_at) values($1,1,$2,$3,1,$4,$4)',[bonusMain,homeOwner,bonusPlayer,iso(now-day)]);
  const bonusTerms=defaultTerms(new Date(now));bonusTerms.endsAt=iso(now+3*day+3600000);bonusTerms.financial.signingAmount=10;
+ bonusTerms.financial.rentalCompensations=await rentalConditions(bonusPlayer,second);
  await mutate(hostOwner,{action:'save',contractId:bonusGuest,expectedRevision:0,organizationId:host,playerId:bonusPlayer,kind:'guest',eventId:event,sessionId:second,terms:bonusTerms});await mutate(hostOwner,{action:'offer',contractId:bonusGuest,revision:1});await mutate(bonusPlayer,{action:'accept',contractId:bonusGuest,revision:1});
- assert.equal((await account(bonusHome)).balance,10,'home percentage also applies to the actual welcome payment, after activation in the same acceptance transaction');
- assert.equal((await db.query('select balance::int n from coin_accounts where user_id=$1',[bonusPlayer])).rows[0].n,0);
+ assert.equal((await account(bonusHome)).balance,0,'new rental compensation is a separate host expense after participation, never a welcome-payment withholding');
+ assert.equal((await db.query('select balance::int n from coin_accounts where user_id=$1',[bonusPlayer])).rows[0].n,10);
+ const earlyAmendment=structuredClone(bonusTerms);earlyAmendment.financial.signingAmount=80;
+ await mutate(hostOwner,{action:'save',contractId:bonusGuest,expectedRevision:1,organizationId:host,playerId:bonusPlayer,kind:'guest',eventId:event,sessionId:second,terms:earlyAmendment});await mutate(hostOwner,{action:'offer',contractId:bonusGuest,revision:2});await mutate(bonusPlayer,{action:'accept',contractId:bonusGuest,revision:2});
+ assert.equal((await db.query('select contract_rental_bases($1,2) value',[bonusGuest])).rows[0].value.playerPayments,10,'amending a rental does not hide its original welcome receipt from the fee base or issue a new bonus');
  const signing=(await db.query("select id from contract_obligations where contract_id=$1 and kind='signing'",[bonusGuest])).rows[0].id;
  await db.query('select contract_obligation_cancel($1,$2,$3,$4)',[hostOwner,randomUUID(),signing,'Owner cancels guest welcome payment']);
  assert.equal((await account(bonusHome)).balance,0);assert.equal((await db.query('select contract_player_debt_summary($1) value',[bonusPlayer])).rows[0].value.total,0,'100% home share cannot become an invented debt of a player who received nothing');
  const amended=structuredClone(bonusTerms);amended.financial.signingAmount=90;
- await mutate(hostOwner,{action:'save',contractId:bonusGuest,expectedRevision:1,organizationId:host,playerId:bonusPlayer,kind:'guest',eventId:event,sessionId:second,terms:amended});await mutate(hostOwner,{action:'offer',contractId:bonusGuest,revision:2});await mutate(bonusPlayer,{action:'accept',contractId:bonusGuest,revision:2});
+ await mutate(hostOwner,{action:'save',contractId:bonusGuest,expectedRevision:2,organizationId:host,playerId:bonusPlayer,kind:'guest',eventId:event,sessionId:second,terms:amended});await mutate(hostOwner,{action:'offer',contractId:bonusGuest,revision:3});await mutate(bonusPlayer,{action:'accept',contractId:bonusGuest,revision:3});
  assert.equal((await db.query("select count(*)::int n from contract_obligations where contract_id=$1 and kind='signing'",[bonusGuest])).rows[0].n,1,'guest amendment cannot reissue the original welcome payment, including an owner-cancelled payment');
  assert.equal((await account(bonusHome)).balance,0);
  const available=(await db.query('select contract_available_guests($1,$2) value',[host,session])).rows[0].value;assert.deepEqual(available.map(p=>p.id),[player]);
