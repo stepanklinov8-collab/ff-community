@@ -57,6 +57,7 @@ const inspectionSql=`select
  to_regprocedure('public.podium_fund_action(uuid,uuid,uuid,text,text)') is not null as prize_fund_closure_ready,
  to_regprocedure('public.contract_rental_options(uuid,uuid,uuid,uuid,uuid)') is not null as rental_conditions_ready,
  to_regprocedure('public.contract_rental_settle(uuid,integer)') is not null as rental_payments_ready,
+ to_regprocedure('public.contract_ordinary_rule(jsonb)') is not null as combined_compensation_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -100,6 +101,7 @@ const migrations=[
  ['prize_fund_closure_ready','202610300015_prize_fund_closure.sql'],
  ['rental_conditions_ready','202610300016_rental_conditions.sql'],
  ['rental_payments_ready','202610300017_rental_payments.sql'],
+ ['combined_compensation_ready','202610300018_contract_combined_compensation.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

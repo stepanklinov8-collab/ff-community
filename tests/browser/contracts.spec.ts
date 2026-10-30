@@ -71,6 +71,31 @@ test("manager prepares a private contract with structured financial conditions",
   expect(mutations[0]).not.toHaveProperty("actorId");
 });
 
+test("ordinary transfer and exit clauses select a fixed-percent minimum or maximum", async ({ page }) => {
+  const writes=await setup(page,[{...contract,status:"draft"}]);
+  await page.goto("/contracts");await page.getByRole("button",{name:"Изменить условия",exact:true}).click();
+  for(const [label,selection] of [["Компенсация при переходе","maximum"],["Штраф за выход игрока","minimum"],["Выплата игроку при расторжении организацией","maximum"]]){
+    const clause=page.getByRole("group",{name:label,exact:true});
+    await clause.getByRole("combobox",{name:label,exact:true}).selectOption("combined");
+    await clause.getByLabel("Сумма, OC",{exact:true}).fill("40");await clause.getByLabel("Процент",{exact:true}).fill("20");
+    await clause.getByLabel("Как выбрать компенсацию",{exact:true}).selectOption(selection);
+    await expect(clause).toContainText("Значения не складываются");
+  }
+  await page.getByRole("button",{name:"Сохранить черновик",exact:true}).click();await expect(page.getByRole("status")).toContainText("Черновик сохранён");
+  expect(writes[0]).toMatchObject({terms:{transfer:{kind:"combined",amount:40,basisPoints:2000,selection:"maximum"},playerExit:{kind:"combined",amount:40,basisPoints:2000,selection:"minimum"},organizationTermination:{kind:"combined",amount:40,basisPoints:2000,selection:"maximum"}}});
+});
+
+test("player reads the exact combined clauses before signing on mobile",async({page})=>{
+  const mixed={kind:"combined",amount:40,basisPoints:2000,selection:"minimum"};
+  await setup(page,[{...contract,isPlayer:true,canEdit:false,canOffer:false,terms:{...contract.terms,transfer:{...mixed,selection:"maximum"},playerExit:mixed,organizationTermination:mixed}}]);
+  await page.setViewportSize({width:390,height:844});await page.goto("/contracts");
+  await page.getByRole("button",{name:"Подписать и принять",exact:true}).click();const dialog=page.getByRole("dialog",{name:"Подтверждение договора"});
+  await expect(dialog).toContainText("Большее из 40 OC и 20% от цены перехода");await expect(dialog).toContainText("Меньшее из 40 OC и 20% от стоимости игрока на момент оплаты");
+  await expect(dialog.getByRole("button",{name:"Подписать эту редакцию"})).toBeEnabled();
+  await dialog.screenshot({path:"tools/database-tests/artifacts/contracts/combined-signature-mobile.png"});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
 test("event exceptions require selected fields and keep an explicit zero", async ({ page }) => {
   const mutations = await setup(page, [{ ...contract, status: "draft" }]);
   await page.goto("/contracts");

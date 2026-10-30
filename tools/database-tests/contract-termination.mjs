@@ -8,11 +8,13 @@ export async function verifyContractTermination(db,id){
  await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[owner]);
  const wallet=async(actor,action,input)=>(await db.query('select u6_coin_action($1,$2,$3,$4::jsonb) value',[actor,randomUUID(),action,JSON.stringify(input)])).rows[0].value;
  await wallet(owner,'adjust',{kind:'player',ownerId:owner,amount:2000,reason:'Rich owner is not the organization account'});
- const make=async(n,salary=false,orgFunds=0)=>{
+ const make=async(n,salary=false,orgFunds=0,mixed=null)=>{
   const player=id(n),team=id(n+1),contract=id(n+2),terms=defaultTerms(new Date(now-3*day));
   terms.playerExit={kind:'fixed',amount:100};terms.organizationTermination={kind:'fixed',amount:200};
   terms.financial.overdueCompensation={kind:'combined',amount:20,basisPoints:5000,base:{kind:'contract_debt'},selection:'maximum'};
   if(salary)terms.financial.salary={amount:100,periodDays:10};
+  if(mixed){terms.playerExit=mixed;terms.organizationTermination=mixed;}
+  await db.query('select contract_validate_terms($1::jsonb)',[JSON.stringify(terms)]);
   await db.query('insert into auth.users(id) values($1)',[player]);await db.query('insert into profiles(id,nickname) values($1,$2)',[player,'Term player '+n]);
   await db.query("insert into teams(id,name,type,leader_id,verified) values($1,$2,'team',$3,true)",[team,'Term organization '+n,owner]);
   await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main')",[team,player]);
@@ -77,6 +79,22 @@ export async function verifyContractTermination(db,id){
  await db.query("select set_config('omcite.allow_organization_owner_transfer','on',false)");await db.query('update teams set owner_user_id=$2 where id=$1',[self.team,self.player]);await db.query("select set_config('omcite.allow_organization_owner_transfer','off',false)");
  assert.equal((await terminate(self.player,self,'mutual')).pending,true);
  assert.equal((await terminate(self.player,self,'mutual',null,randomUUID(),'organization')).ended,true,'an owner-player explicitly confirms each party, rather than being unable to finish a self-owned contract');
+ const combined={kind:'combined',amount:40,basisPoints:2000,selection:'maximum'};
+ for(const [selection,basis,expected] of [['maximum',100,40],['maximum',300,60],['minimum',100,20],['minimum',300,40],['minimum',0,0]]){
+  assert.equal(Number((await db.query('select contract_compensation_amount($1::jsonb,$2) amount',[JSON.stringify({...combined,selection}),basis])).rows[0].amount),expected);
+ }
+ const mixedExit=await make(18080,false,0,combined),mixedQuote=await quote(mixedExit.player,mixedExit);
+ assert.equal(mixedQuote.playerValue,0);assert.equal(mixedQuote.playerExitAmount,40);
+ await wallet(owner,'adjust',{kind:'player',ownerId:mixedExit.player,amount:40,reason:'Combined exit compensation'});
+ const mixedKey=randomUUID();await terminate(mixedExit.player,mixedExit,'player_exit',40,mixedKey);await terminate(mixedExit.player,mixedExit,'player_exit',40,mixedKey);
+ assert.equal(await balance(mixedExit.player),0);assert.equal((await db.query('select balance::int n from coin_accounts where team_id=$1',[mixedExit.team])).rows[0].n,40,'combined exit transfers selected amount exactly once, not fixed plus percent');
+ assert.equal((await db.query('select amount::int,player_value::int from contract_terminations where contract_id=$1',[mixedExit.contract])).rows[0].player_value,0,'termination preserves server valuation');
+ const mixedDismissal=await make(18090,false,40,combined);
+ const ownerBeforeMixed=await balance(owner);await terminate(owner,mixedDismissal,'organization',40);
+ assert.equal(await balance(mixedDismissal.player),40);assert.equal(await balance(owner),ownerBeforeMixed,'combined dismissal uses only the organization wallet');
+ const zeroMinimum=await make(18100,false,0,{...combined,selection:'minimum'});
+ assert.equal((await quote(zeroMinimum.player,zeroMinimum)).playerExitAmount,0);await terminate(zeroMinimum.player,zeroMinimum,'player_exit',0);
+ assert.equal((await db.query('select amount::int from contract_terminations where contract_id=$1',[zeroMinimum.contract])).rows[0].amount,0);
  await db.exec('set role authenticated');try{await assert.rejects(()=>quote(recent.player,recent),/permission denied/);await assert.rejects(()=>db.query('select * from contract_terminations'),/permission denied/);}finally{await db.exec('reset role');}
- console.log('PASS: two-party mutual termination, decline/replay, partial salary, membership protection, reserve-safe exit fee, changed quote rejection, organization-only compensation debt and seven-day unpaid termination');
+ console.log('PASS: two-party mutual termination, decline/replay, partial salary, membership protection, reserve-safe exit fee, combined min/max signing/quote/execution, changed quote rejection, organization-only compensation debt and seven-day unpaid termination');
 }

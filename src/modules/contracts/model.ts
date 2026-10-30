@@ -1,16 +1,13 @@
 import { z } from "zod";
 import { financialTermsSchema, emptyFinancialTerms } from "./financial-terms.ts";
 import { participationLimitSchema } from "./participation-limits.ts";
+import { compensationSchema, legacyCompensationSchema } from "./ordinary-compensation.ts";
+export { compensationSchema } from "./ordinary-compensation.ts";
 
 const uuid = z.string().uuid();
 const coins = z.number().int().min(0).max(1_000_000_000_000);
 const basisPoints = z.number().int().min(0).max(10_000);
 const date = z.string().datetime({ offset: true });
-export const compensationSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("none") }).strict(),
-  z.object({ kind: z.literal("fixed"), amount: coins }).strict(),
-  z.object({ kind: z.literal("percent"), basisPoints }).strict(),
-]);
 const termsObject = z.object({
   startsAt: date,
   endsAt: date.nullable(),
@@ -23,23 +20,24 @@ const termsObject = z.object({
     z.object({ mode: z.literal("proportional") }).strict(),
     z.object({ mode: z.literal("minimum"), games: z.number().int().min(1).max(10000) }).strict(),
   ]),
-  transfer: compensationSchema,
+  transfer: legacyCompensationSchema,
   transferRequiresConsent: z.boolean(),
-  playerExit: compensationSchema,
-  organizationTermination: compensationSchema,
+  playerExit: legacyCompensationSchema,
+  organizationTermination: legacyCompensationSchema,
   guestPolicy: z.enum(["forbidden", "allowed", "consent"]),
-  guestCompensation: compensationSchema,
+  guestCompensation: legacyCompensationSchema,
   note: z.string().trim().max(4000),
 }).strict();
-function validateTerms(terms: z.infer<typeof termsObject>, ctx: z.RefinementCtx) {
+function validateTerms(terms: Pick<z.infer<typeof termsObject>, "startsAt" | "endsAt" | "guestPolicy" | "guestCompensation">, ctx: z.RefinementCtx) {
   if (terms.endsAt && Date.parse(terms.endsAt) <= Date.parse(terms.startsAt)) ctx.addIssue({ code: "custom", message: "Окончание должно быть позже начала", path: ["endsAt"] });
   if (terms.guestPolicy === "forbidden" && terms.guestCompensation.kind !== "none") ctx.addIssue({ code: "custom", message: "При запрете гостевых выступлений компенсация не назначается", path: ["guestCompensation"] });
 }
 export const legacyContractTermsSchema = termsObject.superRefine(validateTerms);
 export const contractTermsSchema = termsObject.omit({ note: true }).extend({
   schemaVersion: z.literal(2), financial: financialTermsSchema,
+  transfer: compensationSchema, playerExit: compensationSchema, organizationTermination: compensationSchema,
 }).strict().superRefine((terms, ctx) => {
-  validateTerms({ ...terms, note: "" }, ctx);
+  validateTerms(terms, ctx);
   terms.financial.rankingBonuses.forEach((bonus, index) => {
     if (Date.parse(bonus.startsAt) < Date.parse(terms.startsAt) || (terms.endsAt && Date.parse(bonus.endsAt) > Date.parse(terms.endsAt))) {
       ctx.addIssue({ code: "custom", path: ["financial", "rankingBonuses", index], message: "Период бонуса должен входить в срок договора" });

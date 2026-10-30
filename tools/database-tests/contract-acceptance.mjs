@@ -16,6 +16,9 @@ export async function verifyContractAcceptance(db,id) {
  await db.query('update teams set leader_id=$2 where id=$1',[team,leader]);
  const terms=defaultTerms(new Date(Date.now()+86400000));terms.endsAt=new Date(Date.now()+15*86400000).toISOString();
  terms.financial.signingAmount=125;terms.financial.salary={amount:200,periodDays:9};
+ terms.transfer={kind:'combined',amount:40,basisPoints:2000,selection:'maximum'};
+ terms.playerExit={kind:'combined',amount:100,basisPoints:2000,selection:'minimum'};
+ terms.organizationTermination={kind:'combined',amount:200,basisPoints:2000,selection:'maximum'};
  const mutate=async(actor,input)=>{
   try{return (await db.query('select contract_mutate($1,$2::jsonb) value',[actor,JSON.stringify(input)])).rows[0].value;}
   catch(error){error.message=`${input.action} contract ${input.contractId} revision ${input.revision??input.expectedRevision}: ${error.message}`;throw error;}
@@ -36,6 +39,7 @@ export async function verifyContractAcceptance(db,id) {
  const accepted={action:'accept',requestId:request(),contractId:contract,revision:1};
  const result=await mutate(player,accepted);
  assert.equal(result.status,'signed');assert.equal(result.revision,1);
+ assert.deepEqual((await query(player,{contractId:contract})).contracts[0].terms,terms,'mixed clauses survive actual bilateral signing unchanged');
  assert.deepEqual(await mutate(player,accepted),result,'retry returns original acceptance response');
  assert.equal((await query(player,{contractId:contract})).contracts[0].status,'signed');
  assert.equal((await query(player,{contractId:contract})).contracts[0].hasSignedHistory,true);

@@ -19,6 +19,9 @@ export async function verifyContractProposals(db,id){
  terms.financial.overdueCompensation={kind:'combined',amount:1000,basisPoints:1000,base:{kind:'player_value'},selection:'maximum'};
  terms.financial.eventOverrides=[{eventId:guestEvent,values:{tournamentShareBps:3000,perKill:0}}];
  terms.financial.rankingBonuses=[{id:id(9022),ranking:'organizations',mode:'throughout',top:3,startsAt:terms.startsAt,endsAt:'2026-12-10T10:00:00Z',amount:500}];
+ terms.transfer={kind:'combined',amount:40,basisPoints:2000,selection:'maximum'};
+ terms.playerExit={kind:'combined',amount:50,basisPoints:1000,selection:'minimum'};
+ terms.organizationTermination={kind:'combined',amount:60,basisPoints:3000,selection:'maximum'};
  let operation=9050;
  const save={action:'save',requestId:id(operation++),contractId:id(9030),expectedRevision:0,organizationId:team,playerId:player,kind:'main',eventId:null,sessionId:null,terms};
  const mutate=async(actor,input)=> (await db.query('select contract_mutate($1,$2::jsonb) value',[actor,JSON.stringify(input)])).rows[0].value;
@@ -60,7 +63,8 @@ export async function verifyContractProposals(db,id){
    {...terms,playerExit:{kind:'percent',basisPoints:null}},{...terms,limit:{unit:null,count:1}},{...terms,limit:{unit:'games',count:null}},
    {...terms,participation:{mode:null}},{...terms,participation:{mode:'minimum',games:null}},
    {...terms,participation:{mode:'any',games:10}},{...terms,transfer:{kind:'none',amount:900}},
-   {...terms,startsAt:'2026-12-01'},{...terms,endsAt:100}]){
+   {...terms,startsAt:'2026-12-01'},{...terms,endsAt:100},
+   ...[{selection:null},{selection:'sum'},{amount:1.5},{basisPoints:null},{basisPoints:10001},{base:{kind:'specified',amount:500}},{payerId:owner}].map(change=>({...terms,transfer:{...terms.transfer,...change}}))]){
   assert.equal(mutationSchema.safeParse({...save,terms:invalid}).success,false,'API rejects malformed structured terms');
   await assert.rejects(()=>mutate(owner,{...save,contractId:id(operation++),requestId:id(operation++),terms:invalid}));
  }

@@ -11,13 +11,16 @@ export function compensationAmount(rule: Compensation, basis: number) {
   if (rule.kind === "fixed") { integer(rule.amount, "компенсацию"); return rule.amount; }
   const points = integer(rule.basisPoints, "процент");
   if (points > BigInt(10000)) throw new Error("Процент превышает 100%");
-  return Number(amount * points / BigInt(10000));
+  const percentage = Number(amount * points / BigInt(10000));
+  if (rule.kind === "percent") return percentage;
+  integer(rule.amount, "компенсацию");
+  return rule.selection === "maximum" ? Math.max(rule.amount, percentage) : Math.min(rule.amount, percentage);
 }
 
 export interface PrizeRecipient {
   playerId: string; shareBps: number; playedGames: number;
   participation: ContractTerms["participation"];
-  guestObligations: Array<{ organizationId: string; compensation: Compensation }>;
+  guestObligations: Array<{ organizationId: string; compensation: ContractTerms["guestCompensation"] }>;
 }
 
 /** This is a preview/domain calculation. The database repeats all validation

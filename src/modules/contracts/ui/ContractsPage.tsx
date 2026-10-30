@@ -11,6 +11,7 @@ import ContractFines from "./ContractFines";
 import ContractTermination from "./ContractTermination";
 import GuestApprovals, { GuestRequirements, GuestScopeEditor } from "./GuestContracts";
 import {RentalConditionsEditor,RentalPayments,RentalIncoming} from "./RentalConditions";
+import {describeOrdinaryCompensation} from "../ordinary-compensation";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -19,21 +20,29 @@ const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 t
 const statusNames = { draft: "Черновик", offered: "Предложен игроку", signed: "Подписан", completed: "Завершён", rejected: "Отклонён", cancelled: "Отозван", superseded: "Заменён новой версией" };
 const number = (value: number) => value.toLocaleString("ru-RU");
 const percentage = (bps: number) => number(bps / 100) + "%";
-const feeText = (fee: Compensation, basis: string) => fee.kind === "none" ? "Без компенсации" : fee.kind === "fixed" ? `${number(fee.amount)} OC` : `${percentage(fee.basisPoints)} ${basis}`;
+const feeText = describeOrdinaryCompensation;
 function localDate(iso: string) {
   const date = new Date(iso);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
-function FeeInput({ label, value, onChange, basis }: { label: string; value: Compensation; onChange: (value: Compensation) => void; basis: string }) {
+function FeeInput({ label, value, onChange, basis, allowCombined = true }: { label: string; value: Compensation; onChange: (value: Compensation) => void; basis: string; allowCombined?: boolean }) {
   return <fieldset className="space-y-2"><legend className="text-sm font-semibold">{label}</legend>
-    <select aria-label={label} className={inputClass} value={value.kind} onChange={event => onChange(event.target.value === "none" ? { kind: "none" } : event.target.value === "fixed" ? { kind: "fixed", amount: 0 } : { kind: "percent", basisPoints: 0 })}>
+    <select aria-label={label} className={inputClass} value={value.kind} onChange={event => onChange(event.target.value === "none" ? { kind: "none" } : event.target.value === "fixed" ? { kind: "fixed", amount: 0 } : event.target.value === "combined" ? { kind: "combined", amount: 0, basisPoints: 0, selection: "maximum" } : { kind: "percent", basisPoints: 0 })}>
       <option value="none">Без компенсации</option><option value="fixed">Фиксированная сумма</option><option value="percent">Процент {basis}</option>
+      {allowCombined && <option value="combined">Выбор из суммы и процента</option>}
     </select>
-    {value.kind !== "none" && <label className="block text-sm">{value.kind === "fixed" ? "Сумма, OC" : "Процент"}
-      <input className={inputClass} type="number" min="0" max={value.kind === "fixed" ? 1_000_000_000_000 : 100} step={value.kind === "fixed" ? 1 : 0.01}
-        value={value.kind === "fixed" ? value.amount : value.basisPoints / 100}
-        onChange={event => onChange(value.kind === "fixed" ? { kind: "fixed", amount: Number(event.target.value) } : { kind: "percent", basisPoints: Math.round(Number(event.target.value) * 100) })} />
+    {(value.kind === "fixed" || value.kind === "combined") && <label className="block text-sm">Сумма, OC
+      <input className={inputClass} type="number" min="0" max={1_000_000_000_000} step={1} value={value.amount}
+        onChange={event => onChange({ ...value, amount: Number(event.target.value) })} />
     </label>}
+    {(value.kind === "percent" || value.kind === "combined") && <label className="block text-sm">Процент
+      <input className={inputClass} type="number" min="0" max={100} step={0.01} value={value.basisPoints / 100}
+        onChange={event => onChange({ ...value, basisPoints: Math.round(Number(event.target.value) * 100) })} />
+    </label>}
+    {value.kind === "combined" && <><label className="block text-sm">Как выбрать компенсацию
+      <select aria-label="Как выбрать компенсацию" className={inputClass} value={value.selection} onChange={event => onChange({ ...value, selection: event.target.value as "maximum" | "minimum" })}>
+        <option value="maximum">Большее значение</option><option value="minimum">Меньшее значение</option>
+      </select></label><p className="text-xs text-slate-300">{feeText(value, basis)}.</p></>}
   </fieldset>;
 }
 function TermsSummary({ terms }: { terms: ContractTerms }) {
@@ -211,7 +220,7 @@ export default function ContractsPage() {
         <FeeInput label="Выплата игроку при расторжении организацией" value={terms.organizationTermination} basis="от стоимости игрока" onChange={organizationTermination => updateTerms({ organizationTermination })} />
         <label className="flex items-start gap-2"><input type="checkbox" checked={terms.transferRequiresConsent} onChange={event => updateTerms({ transferRequiresConsent: event.target.checked })} />Для платного перехода нужно согласие организации</label>
         <label>Выступления за другие коллективы<select className={inputClass} value={terms.guestPolicy} onChange={event => updateTerms({ guestPolicy: event.target.value as ContractTerms["guestPolicy"], ...(event.target.value === "forbidden" ? { guestCompensation: { kind: "none" } as const } : {}) })}><option value="forbidden">Запрещены</option><option value="allowed">Разрешены</option><option value="consent">Требуют согласия организации</option></select></label>
-        {terms.guestPolicy !== "forbidden" && <FeeInput label="Компенсация основной организации за гостя" value={terms.guestCompensation} basis="от выплаты игроку" onChange={guestCompensation => updateTerms({ guestCompensation })} />}
+        {terms.guestPolicy !== "forbidden" && <FeeInput label="Компенсация основной организации за гостя" value={terms.guestCompensation} basis="от выплаты игроку" allowCombined={false} onChange={guestCompensation => { if (guestCompensation.kind !== "combined") updateTerms({ guestCompensation }); }} />}
       </div>
       {editor.kind==="guest"&&editor.playerId&&editor.eventId&&<RentalConditionsEditor key={`${editor.organizationId}:${editor.playerId}:${editor.eventId}:${editor.sessionId}`} organizationId={editor.organizationId} playerId={editor.playerId} eventId={editor.eventId} sessionId={editor.sessionId} value={terms.financial.rentalCompensations??[]} onChange={rentalCompensations=>updateTerms({financial:{...terms.financial,rentalCompensations}})}/>}
       <FinancialTermsEditor key={editor.organizationId} value={terms.financial} onChange={financial => updateTerms({ financial })} startsAt={terms.startsAt} endsAt={terms.endsAt} organizationId={editor.organizationId} />
@@ -247,6 +256,7 @@ export default function ContractsPage() {
         {accepting.hasSignedHistory&&<p>При продлении первоначальный бонус и цена выкупа повторно не начисляются.</p>}
         {accepting.kind === "guest" && <GuestRequirements contractId={accepting.id} onReady={setGuestReady} />}
         {accepting.terms.financial.salary&&<p>Зарплата по новым условиям: {number(accepting.terms.financial.salary.amount)} OC за {number(accepting.terms.financial.salary.periodDays)} суток.</p>}
+        <TermsSummary terms={accepting.terms} />
         <p className="text-sm text-slate-300">Организация резервирует зарплату первого периода, если она предусмотрена; при продлении с прежней длительностью периода учитывается его неоплаченный остаток. Первоначальная выплата резервируется только при первом заключении договора. Если средств не хватит, договор не будет подписан.</p>
         <div className="flex flex-wrap gap-3"><button type="button" className="primary-button" disabled={busy || (accepting.kind === "guest" && !guestReady)} onClick={() => void mutate({ action: "accept", contractId: accepting.id, revision: accepting.revision })}>Подписать эту редакцию</button><button type="button" className="secondary-button" disabled={busy} onClick={() => setAccepting(null)}>Вернуться к условиям</button></div>
       </div>
