@@ -58,6 +58,8 @@ const inspectionSql=`select
  to_regprocedure('public.contract_rental_options(uuid,uuid,uuid,uuid,uuid)') is not null as rental_conditions_ready,
  to_regprocedure('public.contract_rental_settle(uuid,integer)') is not null as rental_payments_ready,
  to_regprocedure('public.contract_ordinary_rule(jsonb)') is not null as combined_compensation_ready,
+ to_regclass('public.contract_ranking_history') is not null as ranking_history_ready,
+ to_regprocedure('public.contract_ranking_settle(uuid,uuid)') is not null as ranking_payments_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -102,6 +104,8 @@ const migrations=[
  ['rental_conditions_ready','202610300016_rental_conditions.sql'],
  ['rental_payments_ready','202610300017_rental_payments.sql'],
  ['combined_compensation_ready','202610300018_contract_combined_compensation.sql'],
+ ['ranking_history_ready','202610310001_contract_ranking_history.sql'],
+ ['ranking_payments_ready','202610310002_contract_ranking_payments.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

@@ -71,6 +71,7 @@ export const mutationSchema = z.discriminatedUnion("action", [
   ...(["offer", "cancel", "reject", "accept"] as const).map(action => z.object({ action: z.literal(action), requestId: uuid, contractId: uuid, revision: z.number().int().positive() }).strict()),
 ]);
 export const querySchema = z.object({
+  ranking: z.literal("true").optional(),
   rentalOptions:z.literal("true").optional(),rentalPayments:z.literal("true").optional(),
   rentalPlayerId:uuid.optional(),rentalEventId:uuid.optional(),rentalSessionId:uuid.optional(),
   contractId: uuid.optional(),
@@ -85,6 +86,7 @@ export const querySchema = z.object({
   guestSessionsEventId: uuid.optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
+  if(input.ranking&&(!input.contractId||input.organizationId||input.guest||input.guestSessionsEventId||input.history||input.payments||input.fines||input.termination||input.rentalOptions||input.rentalPayments||input.search!==undefined))ctx.addIssue({code:"custom",message:"Для рейтинговых начислений выберите один договор без других фильтров"});
   if(input.rentalOptions&&(!input.organizationId||!input.rentalPlayerId||!input.rentalEventId||input.contractId||input.guest||input.guestSessionsEventId||input.history||input.payments||input.fines||input.termination||input.rentalPayments||input.search!==undefined))ctx.addIssue({code:"custom",message:"Выберите организацию, игрока и выступление для условий аренды"});
   if(!input.rentalOptions&&(input.rentalPlayerId||input.rentalEventId||input.rentalSessionId))ctx.addIssue({code:"custom",message:"Параметры выступления запрашиваются только с условиями аренды"});
   if(input.rentalPayments&&(input.organizationId||input.guest||input.guestSessionsEventId||input.history||input.payments||input.fines||input.termination||input.search!==undefined))ctx.addIssue({code:"custom",message:"Расчёты аренды запрашиваются отдельно"});

@@ -12,6 +12,7 @@ import ContractTermination from "./ContractTermination";
 import GuestApprovals, { GuestRequirements, GuestScopeEditor } from "./GuestContracts";
 import {RentalConditionsEditor,RentalPayments,RentalIncoming} from "./RentalConditions";
 import {describeOrdinaryCompensation} from "../ordinary-compensation";
+import RankingPayments from "./RankingPayments";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
@@ -243,6 +244,7 @@ export default function ContractsPage() {
       </div>
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />
       <ContractPayments key={`${contract.id}:payments`} contractId={contract.id} />
+      <RankingPayments key={`${contract.id}:ranking`} contractId={contract.id}/>
       {contract.kind==="guest"&&<RentalPayments key={`${contract.id}:rental`} contractId={contract.id}/>}
       <ContractFines key={`${contract.id}:fines`} contractId={contract.id} />
       {(contract.canOffer || contract.isPlayer) && (contract.hasSignedHistory || contract.status === "signed") && <ContractTermination key={`${contract.id}:termination`} contractId={contract.id} onEnded={() => void load()} />}

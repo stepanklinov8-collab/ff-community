@@ -239,6 +239,22 @@ test("contract debt payment is explicit, partial and retry-safe after a lost res
   expect(attempts[0]).not.toHaveProperty("actorId"); expect(attempts[0]).not.toHaveProperty("recipientId");
 });
 
+test("ranking bonus evidence explains early ending and missing history without a spending button",async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await setup(page,[{...contract,isPlayer:true,canEdit:false,canOffer:false,status:"signed"}]);
+ await page.route("**/api/contracts**",route=>{
+  if(!new URL(route.request().url()).searchParams.has("ranking"))return route.fallback();
+  const rule={ranking:"teams",mode:"throughout",top:3,amount:100,startsAt:"2026-10-01T00:00:00Z",endsAt:"2026-10-31T00:00:00Z"};
+  return route.fulfill({json:{rows:[{id:teamId,revision:1,rule,status:"not_earned",assessment:{reason:"contract_ended_before_period"}},{id:playerId,revision:1,rule,status:"history_missing",assessment:{reason:"no_period_coverage"}}],hasMore:false,coverageSince:"2026-10-20T00:00:00Z"}});
+ });
+ await page.goto("/contracts");await page.getByRole("button",{name:"Бонусы за место в рейтинге",exact:true}).click();
+ const evidence=page.getByRole("region",{name:"Рейтинговые начисления"});await expect(evidence).toContainText("Договор закончился до конца периода");await expect(evidence).toContainText("Недостаточно истории рейтинга");
+ await expect(evidence).toContainText("Автоматического начисления нет");await expect(evidence.getByRole("button",{name:/Оплатить|Начислить/})).toHaveCount(0);
+ await expect(evidence).toContainText("Команды · Удержание в топе весь период");
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await evidence.screenshot({path:"tools/database-tests/artifacts/contracts/ranking-evidence-mobile.png"});
+});
+
 test("recipient sees liabilities without payment controls", async ({ page }) => {
   await setup(page, [{ ...contract, canEdit: false, canOffer: false, isPlayer: true }]);
   await page.route("**/api/contracts?**", route => {

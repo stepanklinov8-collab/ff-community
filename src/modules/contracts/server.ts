@@ -59,7 +59,9 @@ async function handle(request: Request, write: boolean) {
     const value = parsed.data;
     let rpc = write ? "contract_mutate" : "contract_query";
     let args: Record<string, unknown> = { p_actor: user.id, p_input: value };
-    if("action" in value&&value.action==="rental_pay"){
+    if("ranking" in value&&value.ranking){
+      rpc="contract_ranking_query";args={p_actor:user.id,p_contract:value.contractId,p_offset:value.offset};
+    }else if("action" in value&&value.action==="rental_pay"){
       rpc="contract_rental_pay";args={p_actor:user.id,p_request:value.requestId,p_fee:value.feeId,p_amount:value.amount};
     }else if("rentalOptions" in value&&value.rentalOptions){
       rpc="contract_rental_options";args={p_actor:user.id,p_host:value.organizationId,p_player:value.rentalPlayerId,p_event:value.rentalEventId,p_session:value.rentalSessionId??null};

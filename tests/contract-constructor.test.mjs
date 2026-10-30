@@ -7,6 +7,11 @@ const eventId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
 const terms = () => defaultTerms(new Date("2026-11-01T12:00:00+03:00"));
 
+test("ranking evidence queries cannot select a payer, organization or mix scopes",()=>{
+ assert.equal(querySchema.safeParse({contractId:eventId,ranking:"true"}).success,true);
+ for(const input of [{ranking:"true"},{contractId:eventId,ranking:"true",organizationId:otherId},{contractId:eventId,ranking:"true",payments:"true"},{contractId:eventId,ranking:"true",history:"true"},{contractId:eventId,ranking:"true",amount:100},{contractId:eventId,ranking:"true",rentalPayments:"true"}])assert.equal(querySchema.safeParse(input).success,false);
+});
+
 test("guest approval cannot forge home terms, percentage, actor or financial consent", () => {
   const valid = { action: "guest_consent", requestId: eventId, contractId: eventId, revision: 1, homeContractId: otherId, approve: true };
   assert.equal(mutationSchema.safeParse(valid).success, true);

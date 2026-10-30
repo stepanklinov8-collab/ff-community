@@ -111,6 +111,7 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
     <OverdueEditor value={value.overdueCompensation} onChange={overdueCompensation => onChange({ ...value, overdueCompensation })} />
     <NoShowEditor value={value.noShowPenalty ?? { kind: "none" }} onChange={noShowPenalty => onChange({ ...value, noShowPenalty })} />
     <fieldset className="space-y-3"><legend className="font-semibold">Бонусы за рейтинг своей организации</legend>
+      <p className="text-sm text-slate-300">Условия фиксируются по подписанной редакции на начало периода. Договор должен непрерывно действовать до его конца; при более раннем завершении бонус не начисляется. Прошлые места без сохранённой истории не восстанавливаются из текущей таблицы.</p>
       {value.rankingBonuses.map((row, index) => {
         const patch = (fields: Partial<typeof row>) => onChange({ ...value, rankingBonuses: value.rankingBonuses.map((v, i) => i === index ? { ...v, ...fields } : v) });
         return <div className="space-y-3 rounded border border-slate-700 p-3" key={row.id}>

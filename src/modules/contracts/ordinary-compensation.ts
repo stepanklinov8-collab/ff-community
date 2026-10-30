@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compensationAmount } from "./calculations.ts";
 
 const coins = z.number().int().min(0).max(1_000_000_000_000);
 const basisPoints = z.number().int().min(0).max(10_000);
@@ -19,11 +20,7 @@ export type Compensation = z.infer<typeof compensationSchema>;
 export function ordinaryCompensationAmount(input: unknown, basis: number) {
   const rule = compensationSchema.parse(input);
   coins.parse(basis);
-  if (rule.kind === "none") return 0;
-  if (rule.kind === "fixed") return rule.amount;
-  const percentage = Number(BigInt(basis) * BigInt(rule.basisPoints) / BigInt(10000));
-  if (rule.kind === "percent") return percentage;
-  return rule.selection === "maximum" ? Math.max(rule.amount, percentage) : Math.min(rule.amount, percentage);
+  return compensationAmount(rule, basis);
 }
 
 const format = (n: number) => n.toLocaleString("ru-RU");
