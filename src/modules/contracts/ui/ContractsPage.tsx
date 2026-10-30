@@ -7,12 +7,13 @@ import { authFetch } from "@/platform/browser-services";
 import { contractTermsSchema, defaultTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
 import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
 import ContractPayments from "./ContractPayments";
+import ContractFines from "./ContractFines";
 
 type Organization = { id: string; name: string; type: string; canOffer: boolean };
 type Choice = { id: string; nickname?: string; title?: string };
 type Editor = { id: string; revision: number; organizationId: string; playerId: string; playerName: string; kind: "main" | "guest"; eventId: string | null; eventTitle: string; sessionId: string | null; terms: ConstructorTerms };
 const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
-const statusNames = { draft: "Черновик", offered: "Предложен игроку", rejected: "Отклонён", cancelled: "Отозван", superseded: "Заменён новой версией" };
+const statusNames = { draft: "Черновик", offered: "Предложен игроку", signed: "Подписан", rejected: "Отклонён", cancelled: "Отозван", superseded: "Заменён новой версией" };
 const number = (value: number) => value.toLocaleString("ru-RU");
 const percentage = (bps: number) => number(bps / 100) + "%";
 const feeText = (fee: Compensation, basis: string) => fee.kind === "none" ? "Без компенсации" : fee.kind === "fixed" ? `${number(fee.amount)} OC` : `${percentage(fee.basisPoints)} ${basis}`;
@@ -80,6 +81,7 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [accepting, setAccepting] = useState<(ContractListItem & { terms: ConstructorTerms }) | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const pendingOperation = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [search, setSearch] = useState(""), [choices, setChoices] = useState<Choice[]>([]);
@@ -122,7 +124,8 @@ export default function ContractsPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Не удалось сохранить договор");
       pendingOperation.current = null;
-      setEditor(null); setConfirmClose(false); setNotice(input.action === "save" ? "Черновик сохранён" : input.action === "offer" ? "Условия направлены игроку" : "Действие сохранено");
+      if (input.action === "accept") setAccepting(null);
+      setEditor(null); setConfirmClose(false); setNotice(input.action === "save" ? "Черновик сохранён" : input.action === "offer" ? "Условия направлены игроку" : input.action === "accept" ? "Вы подписали договор. Его финансовые условия закреплены." : "Действие сохранено");
       await load();
     } catch (caught) { setError(caught instanceof TypeError ? "Нет связи с сервером. Проверьте соединение и повторите сохранение." : caught instanceof Error ? caught.message : "Ошибка сохранения"); }
     finally { setBusy(false); }
@@ -144,7 +147,7 @@ export default function ContractsPage() {
     <section className="cyber-card space-y-3 p-5 sm:p-8">
       <h1 className="section-title">Контракты</h1>
       <p className="text-slate-300">Условия участия, доли призовых и обязательства перед организацией. Каждое изменение сохраняется новой версией.</p>
-      <p className="text-sm text-amber-200">В этой локальной версии доступны подготовка и отправка условий. Подписание и денежные выплаты будут включены после подключения расчётов; предложение само по себе не создаёт действующий контракт.</p>
+      <p className="text-sm text-slate-300">Договор действует после подписания обеими сторонами, не раньше указанной даты. Первоначальная выплата начисляется один раз; при продлении резервируется зарплата по новым условиям с учётом сохранённого календаря. Неподписанные условия не создают обязательств.</p>
       <Link href="/my-organizations" className="text-cyan-300 hover:underline">Мои организации</Link>
       {organizations.length > 0 && !editor && <button className="primary-button ml-3" type="button" onClick={() => {
         setError(""); setNotice(""); setChoices([]); setSearch("");
@@ -208,15 +211,31 @@ export default function ContractsPage() {
     {loading ? <p role="status">Загрузка договоров…</p> : !contracts.length ? <section className="cyber-card p-5">Договоров пока нет.</section> : <div className="space-y-4">{contracts.map(contract => <article className="cyber-card space-y-4 p-5" key={contract.id}>
       <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold"><Link href={`/teams/${contract.organizationId}`} className="text-cyan-200">{contract.organizationName}</Link> → <Link href={`/profile/${contract.playerId}`}>{contract.playerName}</Link></h2><p className="text-sm text-slate-400">{contract.kind === "main" ? "Основной договор" : `Гостевое выступление · ${contract.eventTitle ?? "Мероприятие"}`} · Версия {contract.revision}</p></div><span className="text-amber-200">{statusNames[contract.status]}</span></div>
       <TermsSummary terms={contract.terms} />
+      {contract.hasSignedHistory && ["draft", "offered"].includes(contract.status) && <p className="text-sm text-cyan-200">Это новая редакция существующего договора. Прежние подписанные условия действуют до согласованного начала новой редакции. Первоначальный бонус и цена выкупа повторно не начисляются.</p>}
       <div className="flex flex-wrap gap-3">
-        {contract.canEdit && ["draft", "offered", "rejected"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : ""); }}>Изменить условия</button>}
+        {contract.canEdit && ["draft", "offered", "rejected", "signed"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : contract.status === "signed" ? "Продление сохраняется новой редакцией того же договора. Текущие подписанные условия действуют до принятия новой редакции." : ""); }}>{contract.status === "signed" ? "Изменить или продлить" : "Изменить условия"}</button>}
         {contract.canOffer && contract.status === "draft" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => void mutate({ action: "offer", contractId: contract.id, revision: contract.revision })}>Направить игроку</button>}
         {contract.canEdit && ["draft", "offered"].includes(contract.status) && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "cancel", contractId: contract.id, revision: contract.revision })}>Отозвать</button>}
+        {contract.isPlayer && contract.status === "offered" && contract.kind === "main" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => setAccepting({ ...contract, terms: contract.terms as ConstructorTerms })}>Подписать и принять</button>}
+        {contract.isPlayer && contract.status === "offered" && contract.kind === "guest" && <p className="text-sm text-amber-200">Гостевой договор пока нельзя принять: нужно подключить согласие основной организации и временный допуск к составу мероприятия.</p>}
         {contract.isPlayer && contract.status === "offered" && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "reject", contractId: contract.id, revision: contract.revision })}>Отклонить условия</button>}
+        {contract.isPlayer && contract.status === "offered" && !("schemaVersion" in contract.terms) && <p className="text-sm text-amber-200">Для подписания организация должна отправить новую версию договора через конструктор.</p>}
       </div>
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />
       <ContractPayments key={`${contract.id}:payments`} contractId={contract.id} />
+      <ContractFines key={`${contract.id}:fines`} contractId={contract.id} />
     </article>)}</div>}
     <div className="flex justify-between gap-3">{offset > 0 && <button type="button" className="secondary-button" onClick={() => setOffset(value => Math.max(0, value - 30))}>Предыдущие</button>}{hasMore && <button type="button" className="secondary-button" onClick={() => setOffset(value => value + 30)}>Следующие</button>}</div>
+    {accepting && <section role="dialog" aria-modal="true" aria-label="Подтверждение договора" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950 p-6">
+        <h2 className="text-xl font-bold">Подтвердить договор с организацией «{accepting.organizationName}»?</h2>
+        <p>Вы подписываете редакцию {accepting.revision}. Она действует после обеих подписей, не раньше {new Date(accepting.terms.startsAt).toLocaleString("ru-RU")}.</p>
+        {!accepting.hasSignedHistory&&accepting.terms.financial.signingAmount>0&&<p>Первоначальная выплата: {number(accepting.terms.financial.signingAmount)} OC.</p>}
+        {accepting.hasSignedHistory&&<p>При продлении первоначальный бонус и цена выкупа повторно не начисляются.</p>}
+        {accepting.terms.financial.salary&&<p>Зарплата по новым условиям: {number(accepting.terms.financial.salary.amount)} OC за {number(accepting.terms.financial.salary.periodDays)} суток.</p>}
+        <p className="text-sm text-slate-300">Организация резервирует зарплату первого периода, если она предусмотрена; при продлении с прежней длительностью периода учитывается его неоплаченный остаток. Первоначальная выплата резервируется только при первом заключении договора. Если средств не хватит, договор не будет подписан.</p>
+        <div className="flex flex-wrap gap-3"><button type="button" className="primary-button" disabled={busy} onClick={() => void mutate({ action: "accept", contractId: accepting.id, revision: accepting.revision })}>Подписать эту редакцию</button><button type="button" className="secondary-button" disabled={busy} onClick={() => setAccepting(null)}>Вернуться к условиям</button></div>
+      </div>
+    </section>}
   </div>;
 }

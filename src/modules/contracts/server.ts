@@ -4,6 +4,9 @@ import { mutationSchema, querySchema } from "./model";
 
 const errors: Record<string, [number, string]> = {
   CONTRACT_AUTH: [401, "Войдите в аккаунт"],
+  CONTRACT_OWNER: [403, "Отменить начисление может только владелец организации"],
+  CONTRACT_CANCELLED: [409, "Начисление уже отменено. Обновите список выплат"],
+  CONTRACT_SYSTEM_REFUND: [409, "Возврат отменённого штрафа сохраняется как обязательство организации и не может быть отменён"],
   CONTRACT_INPUT: [422, "Проверьте условия договора"],
   CONTRACT_SCHEMA: [422, "Создайте новую версию договора через конструктор. Старые пояснения сохраняются в истории"],
   CONTRACT_FUNDS: [422, "Недостаточно доступных монет. Резервы других выплат использовать нельзя"],
@@ -21,6 +24,10 @@ const errors: Record<string, [number, string]> = {
   CONTRACT_LIMIT: [422, "Проверьте количество выступлений"],
   CONTRACT_EVENT: [422, "Выбранное мероприятие или сессия недоступны"],
   CONTRACT_STATE: [409, "Это действие недоступно в текущем состоянии договора"],
+  CONTRACT_GUEST_FLOW: [409, "Гостевой договор требует отдельного согласия основной организации и допуска в состав мероприятия. Этот порядок ещё не подключён"],
+  CONTRACT_ALREADY_ACTIVE: [409, "У игрока уже действует договор с этой организацией. Измените или продлите текущую версию"],
+  CONTRACT_SIGNATURE_STALE: [409, "Подписант организации потерял полномочия или сменился владелец. Проверьте и отправьте условия заново"],
+  CONTRACT_SIGNATURE_CONFLICT: [409, "Эта редакция уже принята или подписана. Обновите список договоров"],
   CONTRACT_GUEST_FORBIDDEN: [422, "При запрете гостевых выступлений компенсация не назначается"],
 };
 function json(data: unknown, status = 200) {
@@ -42,6 +49,18 @@ async function handle(request: Request, write: boolean) {
     if ("action" in value && value.action === "pay") {
       rpc = "contract_debt_pay";
       args = { p_actor: user.id, p_request: value.requestId, p_obligation: value.obligationId, p_amount: value.amount };
+    } else if ("action" in value && value.action === "cancel_fine") {
+      rpc = "contract_no_show_cancel";
+      args = { p_actor: user.id, p_request: value.requestId, p_claim: value.claimId, p_reason: value.reason };
+    } else if ("action" in value && value.action === "cancel_payment") {
+      rpc = "contract_obligation_cancel";
+      args = { p_actor: user.id, p_request: value.requestId, p_obligation: value.obligationId, p_reason: value.reason };
+    } else if ("action" in value && ["offer", "accept"].includes(value.action)) {
+      rpc = "contract_mutate";
+      args = { p_actor: user.id, p_input: value };
+    } else if ("fines" in value && value.fines) {
+      rpc = "contract_fine_query";
+      args = { p_actor: user.id, p_contract: value.contractId, p_offset: value.offset };
     } else if ("payments" in value && value.payments) {
       rpc = "contract_obligation_query";
       args = { p_actor: user.id, p_contract: value.contractId, p_offset: value.offset };

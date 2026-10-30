@@ -7,6 +7,22 @@ const eventId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
 const terms = () => defaultTerms(new Date("2026-11-01T12:00:00+03:00"));
 
+test("fine cancellation accepts only a claim and reason; fine queries cannot mix financial scopes", () => {
+  const valid = { action: "cancel_fine", requestId: eventId, claimId: otherId, reason: "Отмена неявки" };
+  assert.equal(mutationSchema.safeParse(valid).success, true);
+  for (const input of [{ ...valid, amount: 50 }, { ...valid, playerValue: 1000 }, { ...valid, actorId: eventId }, { ...valid, reason: " " }]) assert.equal(mutationSchema.safeParse(input).success, false);
+  assert.equal(querySchema.safeParse({ contractId: eventId, fines: "true" }).success, true);
+  for (const input of [{ fines: "true" }, { contractId: eventId, fines: "true", payments: "true" }, { contractId: eventId, fines: "true", history: "true" }]) assert.equal(querySchema.safeParse(input).success, false);
+});
+
+test("owner cancellation requires a reason and cannot supply a refund amount or recipient", () => {
+  const valid = { action: "cancel_payment", requestId: eventId, obligationId: otherId, reason: "Ошибка начисления" };
+  assert.equal(mutationSchema.safeParse(valid).success, true);
+  for (const input of [{ ...valid, amount: 999 }, { ...valid, actorId: eventId }, { ...valid, recipientId: eventId }, { ...valid, reason: "  " }]) {
+    assert.equal(mutationSchema.safeParse(input).success, false);
+  }
+});
+
 test("manual payment cannot supply a recipient, actor, automatic mode or fractional amount", () => {
   const valid = { action: "pay", requestId: eventId, obligationId: otherId, amount: 100 };
   assert.equal(mutationSchema.safeParse(valid).success, true);

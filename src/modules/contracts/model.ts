@@ -56,6 +56,8 @@ export function toConstructorTerms(terms: ContractTerms): ConstructorTerms {
 export type Compensation = z.infer<typeof compensationSchema>;
 
 export const mutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("cancel_fine"), requestId: uuid, claimId: uuid, reason: z.string().trim().min(3).max(1000) }).strict(),
+  z.object({ action: z.literal("cancel_payment"), requestId: uuid, obligationId: uuid, reason: z.string().trim().min(3).max(1000) }).strict(),
   z.object({ action: z.literal("pay"), requestId: uuid, obligationId: uuid, amount: coins.min(1) }).strict(),
   z.object({ action: z.literal("save"), requestId: uuid, contractId: uuid, expectedRevision: z.number().int().nonnegative(), organizationId: uuid, playerId: uuid,
     kind: z.enum(["main", "guest"]), eventId: uuid.nullable(), sessionId: uuid.nullable(), terms: contractTermsSchema }).strict()
@@ -63,7 +65,7 @@ export const mutationSchema = z.discriminatedUnion("action", [
       if (input.kind === "main" && (input.eventId || input.sessionId)) ctx.addIssue({ code: "custom", message: "Основной договор не привязан к одному мероприятию" });
       if (input.kind === "guest" && !input.eventId) ctx.addIssue({ code: "custom", message: "Выберите мероприятие для гостевого выступления" });
     }),
-  ...(["offer", "cancel", "reject"] as const).map(action => z.object({ action: z.literal(action), requestId: uuid, contractId: uuid, revision: z.number().int().positive() }).strict()),
+  ...(["offer", "cancel", "reject", "accept"] as const).map(action => z.object({ action: z.literal(action), requestId: uuid, contractId: uuid, revision: z.number().int().positive() }).strict()),
 ]);
 export const querySchema = z.object({
   contractId: uuid.optional(),
@@ -72,8 +74,10 @@ export const querySchema = z.object({
   searchKind: z.enum(["players", "events"]).default("players"),
   history: z.literal("true").optional(),
   payments: z.literal("true").optional(),
+  fines: z.literal("true").optional(),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict().superRefine((input, ctx) => {
+  if (input.fines && (!input.contractId || input.history || input.payments || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для штрафов выберите один договор без дополнительных фильтров" });
   if (input.history && (!input.contractId || input.search !== undefined)) ctx.addIssue({ code: "custom", message: "Для истории выберите один договор без поиска" });
   if (input.payments && (!input.contractId || input.history || input.search !== undefined || input.organizationId)) ctx.addIssue({ code: "custom", message: "Для выплат выберите один договор без дополнительных фильтров" });
 });
@@ -88,10 +92,11 @@ export const defaultTerms = (now = new Date()): ConstructorTerms => ({
 
 export interface ContractListItem {
   id: string; organizationId: string; organizationName: string; playerId: string; playerName: string;
-  kind: "main" | "guest"; revision: number; status: "draft" | "offered" | "cancelled" | "rejected" | "superseded";
+  kind: "main" | "guest"; revision: number; status: "draft" | "offered" | "signed" | "cancelled" | "rejected" | "superseded";
   eventId: string | null; sessionId: string | null; eventTitle: string | null;
   terms: ContractTerms; createdAt: string;
   canEdit: boolean; canOffer: boolean; isPlayer: boolean;
+  hasSignedHistory?: boolean;
 }
 
 export interface ContractVersion {

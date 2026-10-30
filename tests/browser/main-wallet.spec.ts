@@ -64,3 +64,21 @@ test('financial API denial is visible without exposing money controls',async({pa
  await expect(page.getByRole('alert').filter({hasText:'Нет прав на управление балансами'})).toBeVisible();
  await expect(page.getByRole('button',{name:'Проверить перевод'})).toHaveCount(0);
 });
+
+test('contract recovery debt blocks personal withdrawal and explains reserve release',async({page})=>{
+ await login(page);
+ const state={...initial(),contractDebt:{total:850,withdrawalBlocked:true}};
+ state.accounts[0].balance=200;state.accounts[0].reserved=200;
+ state.withdrawals.push({id:id(998001),account_id:account,user_id:alice,amount:200,status:'pending',note:'Test withdrawal',created_at:'2026-10-29T08:00:00Z'});
+ await page.route('**/api/wallet',route=>route.fulfill({json:state}));
+ await page.goto('/wallet');
+ const debt=page.getByRole('region',{name:'Долг перед организациями'});
+ await expect(debt).toContainText('850');
+ await expect(debt).toContainText('Зарезервированные монеты не списываются');
+ await expect(debt.getByRole('link')).toHaveAttribute('href','/contracts');
+ await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('10');
+ await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank');
+ await expect(page.getByRole('button',{name:'Подать заявку'})).toBeDisabled();
+ await page.getByRole('button',{name:'Отменить заявку',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('Освободившиеся монеты пойдут на погашение долга');
+});

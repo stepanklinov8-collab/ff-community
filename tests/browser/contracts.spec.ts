@@ -152,6 +152,25 @@ test("recipient sees precise conditions and can reject the particular revision o
   expect(mutations[0]).toMatchObject({ action: "reject", contractId: contract.id, revision: 1 });
 });
 
+test("player confirms the exact offered main-contract revision before signing", async ({ page }) => {
+  const terms = defaultTerms(new Date("2026-12-01T10:00:00Z"));
+  terms.financial.signingAmount = 125;
+  terms.financial.salary = { amount: 200, periodDays: 9 };
+  const mutations = await setup(page, [{ ...contract, terms, canEdit: false, canOffer: false, isPlayer: true }]);
+  await page.goto(`/contracts?contractId=${contract.id}`);
+  await page.getByRole("button", { name: "Подписать и принять", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Подтверждение договора" });
+  await expect(dialog).toContainText("Вы подписываете редакцию 1");
+  await expect(dialog).toContainText("125 OC");
+  await expect(dialog).toContainText("200 OC за 9 суток");
+  expect(mutations).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Подписать эту редакцию", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Вы подписали договор");
+  expect(mutations).toHaveLength(1);
+  expect(mutations[0]).toMatchObject({ action: "accept", contractId: contract.id, revision: 1 });
+  expect(mutations[0]).not.toHaveProperty("terms");
+});
+
 test("disabled contracts module hides its page and API", async ({ request }) => {
   const api = await request.get("http://127.0.0.1:3104/api/contracts");
   expect(api.status()).toBe(404);
@@ -202,6 +221,7 @@ test("recipient sees liabilities without payment controls", async ({ page }) => 
   await page.getByRole("button", { name: "Начисления и выплаты", exact: true }).click();
   await expect(page.getByText("80 OC", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Оплатить начисление", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Отменить начисление", exact: true })).toHaveCount(0);
 });
 
 test("confirmed payment with a failed list refresh never offers retrying that transfer", async ({ page }) => {
@@ -224,4 +244,112 @@ test("confirmed payment with a failed list refresh never offers retrying that tr
   await expect(page.getByRole("region", { name: "Начисления по договору" }).getByRole("alert")).toContainText("Выплата подтверждена");
   await expect(page.getByRole("button", { name: "Подтвердить выплату", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Оплатить начисление", exact: true })).toHaveCount(0);
+});
+
+test("owner cancellation recovers only free coins and retry never duplicates it", async ({ page }) => {
+  await setup(page, [contract]);
+  const obligationId = "00000000-0000-4000-8000-000000009705";
+  const attempts: Record<string, unknown>[] = [];
+  let cancelled = false;
+  await page.route("**/api/contracts**", route => {
+    const req = route.request(), url = new URL(req.url());
+    if (req.method() === "GET" && url.searchParams.get("payments") === "true") {
+      if (cancelled) return route.abort("failed");
+      return route.fulfill({ json: { canPay: true, canCancel: true, hasMore: false, obligations: [{ id: obligationId, revision: 1, kind: "salary", amount: 1000, paid: 1000, held: 0, remaining: 0, dueAt: "2026-10-01T12:00:00Z", debt: false, overdueSevenDays: false }] } });
+    }
+    if (req.method() === "POST" && req.postDataJSON().action === "cancel_payment") {
+      attempts.push(req.postDataJSON()); cancelled = true;
+      if (attempts.length === 1) return route.abort("failed");
+      return route.fulfill({ json: { success: true, returned: 150, recoveryDebt: 850 } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Начисления и выплаты", exact: true }).click();
+  await page.getByRole("button", { name: "Отменить начисление", exact: true }).click();
+  const confirm = page.getByRole("button", { name: "Подтвердить отмену начисления", exact: true });
+  await expect(confirm).toBeDisabled();
+  await page.getByLabel("Причина отмены", { exact: true }).fill("Ошибка начисления");
+  await confirm.click();
+  const region = page.getByRole("region", { name: "Начисления по договору" });
+  await expect(region.getByRole("alert")).toContainText("Нет связи");
+  await confirm.click();
+  await expect(region.getByRole("status")).toContainText("Возвращено 150 OC. Остаток к возврату: 850 OC");
+  await expect(region.getByRole("alert")).toContainText("Отмена подтверждена");
+  await expect(region.getByText("Начисление отменено", { exact: true })).toBeVisible();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Отменить начисление", exact: true })).toHaveCount(0);
+  expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0]);
+  expect(attempts[0]).toMatchObject({ action: "cancel_payment", obligationId, reason: "Ошибка начисления" });
+  expect(attempts[0]).not.toHaveProperty("amount"); expect(attempts[0]).not.toHaveProperty("actorId");
+});
+
+test("owner cancels a no-show fine with a reason and a lost response reuses the same request", async ({ page }) => {
+  await setup(page, [contract]);
+  const claimId = "00000000-0000-4000-8000-000000009706";
+  const attempts: Record<string, unknown>[] = [];
+  let cancelled = false;
+  await page.route("**/api/contracts**", route => {
+    const req = route.request(), url = new URL(req.url());
+    if (req.method() === "GET" && url.searchParams.get("fines") === "true") {
+      if (cancelled) return route.abort("failed");
+      return route.fulfill({ json: { canCancel: true, hasMore: false, fines: [{ id: claimId, revision: 1, amount: 500, paid: 100, remaining: 400, playerValue: 5000, eventId: teamId, eventTitle: "Тренировка декабря", sessionStart: "2026-12-01T16:00:00Z", cancelledAt: null, cancellationReason: null, refundAmount: 0, refunded: 0, refundDebt: 0 }] } });
+    }
+    if (req.method() === "POST" && req.postDataJSON().action === "cancel_fine") {
+      attempts.push(req.postDataJSON()); cancelled = true;
+      if (attempts.length === 1) return route.abort("failed");
+      return route.fulfill({ json: { success: true, cancelledDebt: 400, refundAmount: 100, refunded: 40, refundDebt: 60 } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/contracts");
+  await page.getByRole("button", { name: "Штрафы за неявку", exact: true }).click();
+  const region = page.getByRole("region", { name: "Штрафы по договору" });
+  await expect(region.getByRole("link", { name: "Тренировка декабря" })).toHaveAttribute("href", `/tournaments/${teamId}`);
+  await region.getByRole("button", { name: "Отменить штраф", exact: true }).click();
+  const confirm = region.getByRole("button", { name: "Подтвердить отмену штрафа", exact: true });
+  await expect(confirm).toBeDisabled();
+  await region.getByLabel("Причина отмены штрафа", { exact: true }).fill("Отсутствие согласовано заранее");
+  await confirm.click(); await expect(region.getByRole("alert")).toContainText("Нет связи");
+  await confirm.click(); await expect(region.getByRole("status")).toContainText("Возвращено 40 OC");
+  await expect(region.getByRole("alert")).toContainText("Отмена подтверждена");
+  await expect(region.getByRole("button", { name: "Отменить штраф", exact: true })).toHaveCount(0);
+  await expect(region.getByText("Возврат находится", { exact: false })).toBeVisible();
+  expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0]);
+  expect(attempts[0]).toMatchObject({ action: "cancel_fine", claimId, reason: "Отсутствие согласовано заранее" });
+  expect(attempts[0]).not.toHaveProperty("amount"); expect(attempts[0]).not.toHaveProperty("playerValue");
+});
+
+test("player sees no-show debt without owner cancellation controls", async ({ page }) => {
+  await setup(page, [{ ...contract, isPlayer: true, canEdit: false, canOffer: false }]);
+  await page.route("**/api/contracts**", route => {
+    if (new URL(route.request().url()).searchParams.get("fines") !== "true") return route.fallback();
+    return route.fulfill({ json: { canCancel: false, hasMore: false, fines: [{ id: playerId, revision: 1, amount: 500, paid: 100, remaining: 400, playerValue: 5000, eventId: teamId, eventTitle: "Тренировка", sessionStart: "2026-12-01T16:00:00Z", cancelledAt: null, cancellationReason: null, refundAmount: 0, refunded: 0, refundDebt: 0 }] } });
+  });
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Штрафы за неявку", exact: true }).click();
+  const region = page.getByRole("region", { name: "Штрафы по договору" });
+  await expect(region).toContainText("До погашения вывод недоступен");
+  await expect(region.getByRole("button", { name: "Отменить штраф", exact: true })).toHaveCount(0);
+});
+
+test("signed agreement renews through a new revision of the same contract", async ({ page }) => {
+  const writes = await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true }]);
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Текущие подписанные условия действуют");
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Черновик сохранён");
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ action: "save", contractId: contract.id, expectedRevision: 1, organizationId: teamId, playerId });
+});
+
+test("renewal confirmation does not promise the original welcome payment again", async ({ page }) => {
+  const terms = defaultTerms(); terms.financial.signingAmount = 1000; terms.financial.salary = { amount: 200, periodDays: 9 };
+  const writes = await setup(page, [{ ...contract, revision: 3, hasSignedHistory: true, terms, isPlayer: true, canEdit: false, canOffer: false }]);
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Подписать и принять", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Подтверждение договора" });
+  await expect(dialog).toContainText("первоначальный бонус и цена выкупа повторно не начисляются");
+  await expect(dialog).not.toContainText("Первоначальная выплата: 1");
+  await dialog.getByRole("button", { name: "Подписать эту редакцию", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ action: "accept", contractId: contract.id, revision: 3 });
+  expect(writes[0]).not.toHaveProperty("hasSignedHistory");
 });

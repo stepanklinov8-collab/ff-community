@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {defaultTerms} from '../../src/modules/contracts/model.ts';
 import {resolveEventConditions} from '../../src/modules/contracts/financial-terms.ts';
+import {verifyContractSessionSettlement} from './contract-session-settlement.mjs';
 
 export async function verifyContractSessionTerms(db,id){
  const owner=id(9610),player=id(9611),team=id(9620),guild=id(9621),event=id(9622),otherEvent=id(9623),session=id(9624),group=id(9625);
@@ -66,13 +67,17 @@ export async function verifyContractSessionTerms(db,id){
  assert.equal(new Date((await db.query('select cutoff_at from contract_session_frames where session_id=$1',[early])).rows[0].cutoff_at).getTime(),cutoff,'early publication sets the earlier cutoff');
  // Invalid overlapping signed revisions cause an atomic failure, not selection
  // of whichever row happens to be returned first.
+  await db.exec('begin');
  const ambiguous=id(9672);await makeSession(ambiguous,Date.now()+day);
  await db.query("insert into event_groups(id,session_id,public_number,display_order,name,capacity) values($1,$2,1,1,'Main',12)",[id(9674),ambiguous]);
  await db.query('insert into event_registrations(id,event_id,session_id,team_id,group_id,roster_json) values($1,$2,$3,$4,$5,$6::jsonb)',[id(9673),event,ambiguous,team,id(9674),JSON.stringify([player])]);
- await db.query('update event_sessions set start_time=$2,end_time=$3 where id=$1',[ambiguous,iso(cutoff+100),iso(cutoff+3600000)]);
  await version(mainGuild,2);await sign(mainGuild,2);
+  await db.query('update event_sessions set start_time=$2,end_time=$3 where id=$1',[ambiguous,iso(cutoff+100),iso(cutoff+3600000)]);
+  await db.exec('savepoint ambiguous_freeze');
  await assert.rejects(()=>freeze(ambiguous),/CONTRACT_AMBIGUOUS_VERSION/);
+  await db.exec('rollback to savepoint ambiguous_freeze');
  assert.equal((await db.query('select count(*)::int n from contract_session_frames where session_id=$1',[ambiguous])).rows[0].n,0);
+  await db.exec('rollback');
  const plan=async(c=main)=>(await db.query('select contract_session_accrual_plan($1,$2) value',[session,c])).rows[0].value;
  assert.equal((await plan()).reason,'unpublished');
  const document={rules:{mode:'training',criterion:'points',ratingEnabled:false},mvps:[player],standings:[],rows:[0,1].map((i)=>({
@@ -98,7 +103,7 @@ export async function verifyContractSessionTerms(db,id){
  modified=structuredClone(document);modified.rows[0].detail='team';await publish(modified);assert.equal((await plan()).ready,false);
  modified=structuredClone(document);modified.rows.pop();await publish(modified);assert.equal((await plan()).reason,'incomplete_games');
  modified=structuredClone(document);modified.rows.push(structuredClone(modified.rows[0]));await publish(modified);await assert.rejects(()=>plan(),/CONTRACT_RESULT_AMBIGUOUS/);
- modified=structuredClone(document);modified.rows[0].players[0].userId=null;await publish(modified);assert.deepEqual((await plan()).entries,[],'a guest with the same nickname is not this registered player');
+  modified=structuredClone(document);modified.rows[0].players[0].userId=null;modified.rows[1].played=false;await publish(modified);assert.deepEqual((await plan()).entries,[],'a guest with the same nickname is not this registered player');
  assert.equal((await fine()).amount,350,'a declared absent account is assessed independently of a same-nickname guest');
  assert.equal((await fine(main)).amount,0,'no clause means no fine');
  modified=structuredClone(document);modified.rows.forEach(r=>{r.played=false;r.reason='technical';});await publish(modified);
@@ -108,7 +113,11 @@ export async function verifyContractSessionTerms(db,id){
   await assert.rejects(()=>db.query('select contract_validate_no_show_penalty($1::jsonb)',[JSON.stringify(rule)]),/CONTRACT_INPUT/);
  assert.equal((await db.query('select contract_no_show_amount($1::jsonb,2501)::int amount',[JSON.stringify({...minimumTerms.financial.noShowPenalty,selection:'minimum'})])).rows[0].amount,250);
  await assert.rejects(()=>db.query("select contract_accrual_line('kill','test',1000000000001)"),/CONTRACT_ACCRUAL_AMOUNT/);
+ await verifyContractSessionSettlement(db,{owner,player,team,session,contract:proportional,publish,document});
  await db.query('update events set cancelled_at=now() where id=$1',[event]);assert.equal((await plan()).cancelled,true);
+ const cancelledSettlement=(await db.query('select contract_session_settle($1,$2) value',[session,proportional])).rows[0].value;
+ assert.equal(cancelledSettlement.applied,true);
+ assert.equal((await db.query('select count(*)::int n from contract_obligations where contract_id=$1 and cancelled_at is null',[proportional])).rows[0].n,0,'cancelled event removes outstanding session accruals');
  await db.exec('set role service_role');
  try{
   await assert.rejects(()=>freeze(),/permission denied/);
