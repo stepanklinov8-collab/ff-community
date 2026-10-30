@@ -61,8 +61,10 @@ export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
   const parsed = financialTermsSchema.safeParse(value);
   if (!parsed.success) return <p className="text-amber-200">Проверьте поля выплат: {parsed.error.issues[0].message}</p>;
   return <div className="space-y-3 text-sm">
+    <p>Плательщик по договору — организация. Все выплаты и резервы относятся к её отдельному счёту; личные средства владельца автоматически не списываются.</p>
     <p>При первом подписании: {money(value.signingAmount)}. Приветственный бонус и оплата выкупа не повторяются при продлении. {value.salary ? `Зарплата ${money(value.salary.amount)} каждые ${value.salary.periodDays} суток от начала договора, в конце периода. Неполный последний период — пропорционально времени, с округлением вниз.` : "Регулярная зарплата не предусмотрена."}</p>
     <p>{Object.entries(rateLabels).map(([key, label]) => `${label}: ${money(value.rates[key as keyof typeof rateLabels])}`).join(" · ")}</p>
+    {value.rates.perTournament>0&&<p>Оплата целого турнира фиксируется до его начала и начисляется один раз после завершения всех действующих сессий. Участие в отборе тоже учитывается при выполнении правила участия.</p>}
     <p>{describeTerminationCompensation(value.overdueCompensation)}</p>
     <p>{describeNoShowPenalty(value.noShowPenalty ?? { kind: "none" })}</p>
     <p>При первоначальном подписании резервируются разовая оплата и первый период зарплаты. Продление не резервирует первоначальный бонус или оплату выкупа повторно. При долге договор продолжает действовать; погашение выбирает руководитель или владелец. Вывод организации при долге запрещён.</p>
@@ -94,7 +96,7 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
   }
   return <div className="space-y-6 border-t border-slate-700 pt-5">
     <h3 className="text-lg font-bold">Оплата и дополнительные бонусы</h3>
-    <p className="text-sm text-slate-300">Суммы выплачивает организация сверх доли призовых. Ноль означает отсутствие выплаты. Сохранение предложения пока не резервирует и не переводит монеты.</p>
+    <p className="text-sm text-slate-300">Все договорные выплаты и резервы списываются со счёта организации. Личный баланс владельца автоматически не используется. Эти суммы выплачиваются сверх доли призовых. Ноль означает отсутствие выплаты; сохранение черновика не переводит монеты.</p>
     <Amount label="Разовая оплата при первом подписании" value={value.signingAmount} onChange={signingAmount => onChange({ ...value, signingAmount })} />
     <p className="text-sm text-slate-300">Этот бонус относится к первоначальному заключению договора. Продление срока и изменение версии не создают его повторно и не повторяют оплату выкупа.</p>
     <fieldset className="space-y-3"><legend className="font-semibold">Регулярная зарплата</legend>
@@ -103,6 +105,7 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
         <label>Период зарплаты, суток<input required className={inputClass} type="number" min="1" max="1000000" step="1" value={value.salary.periodDays} onChange={e => onChange({ ...value, salary: { ...value.salary!, periodDays: Number(e.target.value) } })} /></label></div>}
     </fieldset>
     <div className="grid gap-3 sm:grid-cols-2">{Object.entries(rateLabels).map(([key, label]) => <Amount key={key} label={label} value={value.rates[key as keyof typeof rateLabels]} onChange={amount => onChange({ ...value, rates: { ...value.rates, [key]: amount } })} />)}</div>
+    <p className="text-sm text-slate-300">Оплата за целый турнир определяется условиями, подписанными до начала турнира, и начисляется один раз после завершения всех его действующих сессий. Изменения между этапами не заменяют эту сумму. Участие только в отборе учитывается при выполнении договорного правила участия.</p>
     <OverdueEditor value={value.overdueCompensation} onChange={overdueCompensation => onChange({ ...value, overdueCompensation })} />
     <NoShowEditor value={value.noShowPenalty ?? { kind: "none" }} onChange={noShowPenalty => onChange({ ...value, noShowPenalty })} />
     <fieldset className="space-y-3"><legend className="font-semibold">Бонусы за рейтинг своей организации</legend>

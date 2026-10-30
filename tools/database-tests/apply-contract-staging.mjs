@@ -42,6 +42,11 @@ const inspectionSql=`select
  to_regprocedure('public.contract_limit_progress(uuid,integer)') is not null as limit_constructor_ready,
  to_regclass('public.contract_limit_closures') is not null
    and to_regprocedure('public.contract_limit_finalize(uuid,integer)') is not null as limit_execution_ready,
+ to_regprocedure('public.contract_tournament_completion(uuid)') is not null as tournament_completion_ready,
+ to_regclass('public.contract_tournament_terms') is not null
+   and to_regprocedure('public.contract_tournament_settle(uuid,uuid)') is not null as tournament_payments_ready,
+ to_regprocedure('public.organization_wallet_withdrawals(uuid)') is not null as organization_transfers_ready,
+ to_regprocedure('public.contract_limit_session_progress(uuid,integer)') is not null as tournament_limits_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -72,6 +77,10 @@ const migrations=[
  ['renewal_controls_ready','202610300002_contract_renewal_controls.sql'],
  ['limit_constructor_ready','202610300003_contract_limit_constructor.sql'],
  ['limit_execution_ready','202610300004_contract_limit_execution.sql'],
+ ['tournament_completion_ready','202610300005_contract_tournament_completion.sql'],
+ ['tournament_payments_ready','202610300006_contract_tournament_payments.sql'],
+ ['organization_transfers_ready','202610300007_organization_wallet_transfers.sql'],
+ ['tournament_limits_ready','202610300008_contract_tournament_limits.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');
@@ -88,7 +97,8 @@ const backupFunctions=[
  'contract_has_debt','contract_signature_guard','contract_maintenance_run','contract_session_publish_settle','contract_freeze_before_roster_change',
  'contract_session_freeze','contract_session_freeze_at','contract_freeze_due_values','contract_session_no_show_assessment',
  'contract_player_has_debt','contract_recover_player_claims','contract_player_debt_summary','contract_session_accrual_plan','contract_session_settle',
- 'contract_session_fine_settle','contract_limit_progress',
+ 'contract_session_fine_settle','contract_limit_progress','organization_can_spend','organization_wallet_withdrawals','contract_tournament_completion',
+ 'contract_tournament_accrual_plan','contract_tournament_settle_all','contract_limit_finalize',
 ];
 const signatures=await query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and proname=any(array[${backupFunctions.map(name=>"'"+name+"'").join(',')}])`,true);
 await writeFile(new URL(`before-functions-${stamp}.json`,artifactDir),JSON.stringify(signatures,null,2));

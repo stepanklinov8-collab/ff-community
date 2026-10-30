@@ -3,7 +3,8 @@ const amount = z.number().int().positive().max(1_000_000_000_000);
 const reason = z.string().trim().min(3, "Укажите причину").max(1000);
 const teamId = z.string().uuid().optional();
 export const walletActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("transfer"), userId: z.string().uuid(), amount, teamId }).strict(),
+  z.object({ action: z.literal("transfer"), userId: z.string().uuid().optional(), recipientTeamId: z.string().uuid().optional(), amount, teamId }).strict()
+    .refine(value => Number(!!value.userId) + Number(!!value.recipientTeamId) === 1, "Выберите одного получателя: игрока или организацию"),
   z.object({ action: z.literal("withdraw_request"), amount, teamId, note: z.string().trim().min(3, "Укажите реквизиты").max(2000) }).strict(),
   z.object({ action: z.literal("withdraw_cancel"), withdrawalId: z.string().uuid() }).strict(),
   z.object({ action: z.literal("withdraw_paid"), withdrawalId: z.string().uuid(), reason }).strict(),

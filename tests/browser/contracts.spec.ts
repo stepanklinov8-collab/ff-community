@@ -365,3 +365,18 @@ test("completed contract shows its fixed end and can only continue through a new
   await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Прежний договор завершён");
 });
+
+test("tournament-count renewal explains whole-event expiry and retains its structured limit", async ({ page }) => {
+  const terms = defaultTerms(); terms.limit = { unit: "tournaments", count: 2, completion: "contract" };
+  const writes = await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true, terms }]);
+  await page.goto("/contracts");
+  await expect(page.getByText(/Участие только в отборе считается/)).toBeVisible();
+  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Ограничение выступлений", exact: true })).toHaveValue("tournaments");
+  await expect(page.getByText(/Один турнир расходует одну единицу/)).toBeVisible();
+  await page.getByRole("spinbutton", { name: "Количество", exact: true }).fill("3");
+  await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Черновик сохранён");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ action: "save", expectedRevision: 1, terms: { limit: { unit: "tournaments", count: 3, completion: "contract" } } });
+});

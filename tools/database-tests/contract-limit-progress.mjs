@@ -58,7 +58,7 @@ export async function verifyContractLimitProgress(db,id){
  await db.query('update organization_contracts set current_revision=3 where id=$1',[contracts[0]]);
  const acceptance={action:'accept',requestId:randomUUID(),contractId:contracts[0],revision:3};
  await assert.rejects(()=>db.query('select contract_mutate($1,$2::jsonb)',[owner,JSON.stringify(acceptance)]),/CONTRACT_FORBIDDEN/);
- await assert.rejects(()=>db.query('select contract_mutate($1,$2::jsonb)',[players[0],JSON.stringify(acceptance)]),/CONTRACT_LIMIT_EXECUTION_PENDING/);
+ await assert.rejects(()=>db.query('select contract_mutate($1,$2::jsonb)',[players[0],JSON.stringify(acceptance)]),/CONTRACT_MEMBER/);
  assert.equal((await db.query('select count(*)::int n from contract_financial_starts where contract_id=$1',[contracts[0]])).rows[0].n,0,'previewing a limited agreement cannot start incomplete payroll');
  await db.exec('set role service_role');
  try{await assert.rejects(()=>progress(0),/permission denied/);}finally{await db.exec('reset role');}

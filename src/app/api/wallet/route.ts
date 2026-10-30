@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       if (q.length < 2) return Response.json({ players: [], teams: [] }, { headers: { "Cache-Control": "private, no-store" } });
       const [{ data: players, error }, { data: teams, error: teamError }] = await Promise.all([
         db.from("profiles").select("id,nickname").ilike("nickname", `%${q}%`).order("nickname").limit(20),
-        db.from("teams").select("id,name,type").ilike("name", `%${q}%`).order("name").limit(20),
+        db.from("teams").select("id,name,type").is("dissolved_at", null).ilike("name", `%${q}%`).order("name").limit(20),
       ]);
       if (error || teamError) throw new Error((error ?? teamError)!.message);
       return Response.json({ players, teams }, { headers: { "Cache-Control": "private, no-store" } });
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const ids = accounts.map(a=>a.id);
     const [ledger, withdrawals, demo, admin, contractDebt] = await Promise.all([
       ids.length ? db.from("coin_entries").select("id,account_id,amount,reserved_change,balance_after,created_at,operation:coin_operations(id,action,description)").in("account_id",ids).order("id",{ascending:false}).limit(100).abortSignal(AbortSignal.timeout(15000)) : {data:[],error:null},
-      db.from("coin_withdrawals").select("id,account_id,user_id,amount,status,note,admin_note,created_at").eq("user_id",auth.user.id).order("created_at",{ascending:false}).limit(100).abortSignal(AbortSignal.timeout(15000)),
+      db.rpc("organization_wallet_withdrawals", { p_actor: auth.user.id }).abortSignal(AbortSignal.timeout(15000)),
       db.from("site_wallets").select("balance").eq("user_id",auth.user.id).abortSignal(AbortSignal.timeout(15000)).maybeSingle(),
       db.rpc("u6_coin_admin",{p_actor:auth.user.id}).abortSignal(AbortSignal.timeout(15000)),
       db.rpc("contract_player_debt_summary",{p_actor:auth.user.id}).abortSignal(AbortSignal.timeout(15000)),
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     const own = accounts.find(a=>a.user_id===auth.user.id);
     return Response.json({userId:auth.user.id,canManage:!!admin.data,
       accounts:[{...own,id:own?.id??null,user_id:auth.user.id,team_id:null,balance:own?.balance??0,reserved:own?.reserved??0,name:"Личный баланс",canSpend:true},
-        ...accounts.filter(a=>a.team_id).map(a=>{const organization=teams.data?.find(t=>t.id===a.team_id);return {...a,name:organization?.name??"Организация",canSpend:!organization?.dissolved_at&&(organization?.ultimate_owner_user_id===auth.user.id||organization?.leader_id===auth.user.id)};})],
+        ...(teams.data??[]).map(organization=>{const a=accounts.find(account=>account.team_id===organization.id);return {id:a?.id??null,user_id:null,team_id:organization.id,balance:a?.balance??0,reserved:a?.reserved??0,name:organization.name,canSpend:!organization.dissolved_at&&(organization.ultimate_owner_user_id===auth.user.id||organization.leader_id===auth.user.id||(!organization.leader_id&&memberships.some(m=>m.team_id===organization.id&&m.role_in_team==='leader')))};})],
       demoBalance:demo.data?.balance??0,ledger:ledger.data,withdrawals:withdrawals.data,contractDebt:contractDebt.data,
     },{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){const response=competitionErrorResponse(error);response.headers.set("Cache-Control","private, no-store");return response;}

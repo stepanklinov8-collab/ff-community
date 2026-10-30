@@ -22,7 +22,7 @@ test('main wallet transfers use explicit confirmation, update balance and expose
  await page.goto('/wallet');
  await expect(page.getByRole('heading',{name:'Демо-баланс ставок'})).toBeVisible();
  await expect(page.getByLabel('Откуда списать монеты').locator('option')).toHaveCount(1);
- await page.getByLabel('Найти игрока',{exact:true}).fill('Получатель');
+ await page.getByLabel('Найти игрока или организацию',{exact:true}).fill('Получатель');
  await page.getByRole('button',{name:'Получатель · Игрок'}).click();
  await page.getByLabel('Сумма, 🪙',{exact:true}).first().fill('100');
  await page.getByRole('button',{name:'Проверить перевод'}).click();
@@ -81,4 +81,58 @@ test('contract recovery debt blocks personal withdrawal and explains reserve rel
  await expect(page.getByRole('button',{name:'Подать заявку'})).toBeDisabled();
  await page.getByRole('button',{name:'Отменить заявку',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('Освободившиеся монеты пойдут на погашение долга');
+});
+
+test('organization is a separate recipient and an owner can transfer its available coins to self',async({page})=>{
+ await login(page);const organization=id(997010),organizationAccount=id(997011);
+ const state={...initial(),accounts:[...initial().accounts,{id:organizationAccount,user_id:null,team_id:organization,name:'Север',balance:500,reserved:100,canSpend:true}]};
+ const writes:Array<{requestId:string;operation:Record<string,unknown>}>=[];
+ await page.route('**/api/wallet*',route=>{
+  if(route.request().url().includes('search='))return route.fulfill({json:{players:[{id:alice,nickname:'Владелец'}],teams:[{id:organization,name:'Север'}]}});
+  if(route.request().method()==='POST'){
+   const body=route.request().postDataJSON();writes.push(body);
+   if(body.operation.recipientTeamId){state.accounts[0].balance-=body.operation.amount;state.accounts[1].balance+=body.operation.amount;}
+   else{state.accounts[1].balance-=body.operation.amount;state.accounts[0].balance+=body.operation.amount;}
+   return route.fulfill({json:{success:true,operationId:body.requestId}});
+  }
+  return route.fulfill({json:state});
+ });
+ await page.goto('/wallet');await expect(page.getByText('Счёт организации · отдельно от личного баланса владельца',{exact:true})).toBeVisible();
+ await page.getByLabel('Найти игрока или организацию',{exact:true}).fill('Север');await page.getByRole('button',{name:'Север · Организация',exact:true}).click();
+ await page.getByLabel('Сумма, 🪙',{exact:true}).first().fill('200');await page.getByRole('button',{name:'Проверить перевод'}).click();
+ await expect(page.getByRole('dialog')).toContainText('организации Север с баланса «Личный баланс»');
+ await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);
+ expect(writes[0].operation).toEqual({action:'transfer',recipientTeamId:organization,amount:200});
+ await page.getByLabel('Откуда списать монеты').selectOption(organization);
+ await page.screenshot({path:'tools/database-tests/artifacts/contracts/wallet-organization-transfers.png',fullPage:true});
+ await page.getByLabel('Найти игрока или организацию',{exact:true}).fill('Владелец');await page.getByRole('button',{name:'Владелец · Игрок',exact:true}).click();
+ await page.getByRole('button',{name:'Вся доступная сумма',exact:true}).click();await expect(page.getByLabel('Сумма, 🪙',{exact:true}).first()).toHaveValue('600');
+ await page.getByRole('button',{name:'Проверить перевод'}).click();await expect(page.getByRole('dialog')).toContainText('с баланса «Север»');
+ await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect.poll(()=>writes.length).toBe(2);
+ expect(writes[1].operation).toEqual({action:'transfer',teamId:organization,userId:alice,amount:600});
+ await expect(page.getByText('В резерве: 100 🪙',{exact:true})).toBeVisible();
+ await expect(page.getByText('Доступно: 0 🪙',{exact:true})).toBeVisible();
+});
+
+test('organization withdrawal uses its account and remains visible to the current owner',async({page})=>{
+ await login(page);const organization=id(997020),organizationAccount=id(997021);
+ const state={...initial(),accounts:[...initial().accounts,{id:organizationAccount,user_id:null,team_id:organization,name:'Гильдия',balance:500,reserved:0,canSpend:true}],withdrawals:[] as Array<Record<string,unknown>>};
+ const writes:Array<Record<string,unknown>>=[];
+ await page.route('**/api/wallet*',route=>{
+  if(route.request().method()==='POST'){
+   const body=route.request().postDataJSON(),op=body.operation;writes.push(op);
+   if(op.action==='withdraw_request'){state.accounts[1].reserved+=op.amount;state.withdrawals.push({id:body.requestId,account_id:organizationAccount,user_id:bob,amount:op.amount,status:'pending',note:op.note,created_at:'2026-10-30T08:00:00Z',accountName:'Гильдия',organizationId:organization,canCancel:true});}
+   else{state.accounts[1].reserved=0;state.withdrawals[0].status='cancelled';}
+   return route.fulfill({json:{success:true}});
+  }
+  return route.fulfill({json:state});
+ });
+ await page.goto('/wallet');await page.getByLabel('Откуда списать монеты').selectOption(organization);
+ await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('500');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Реквизиты организации');
+ await page.getByRole('button',{name:'Подать заявку'}).click();await expect(page.getByRole('dialog')).toContainText('с баланса «Гильдия»');
+ await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect(page.getByText('Счёт: Гильдия · от лица организации',{exact:true})).toBeVisible();
+ expect(writes[0]).toMatchObject({action:'withdraw_request',teamId:organization,amount:500});
+ await expect(page.getByText('Доступно: 1 000 🪙',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Отменить заявку',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByText('Доступно: 500 🪙',{exact:true})).toBeVisible();expect(writes[1].action).toBe('withdraw_cancel');
 });

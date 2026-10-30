@@ -32,6 +32,10 @@ import {verifyContractRuntimeHooks} from './contract-runtime-hooks.mjs';
 import {verifyContractNoShowSettlement} from './contract-no-show-settlement.mjs';
 import {verifyContractLimitProgress} from './contract-limit-progress.mjs';
 import {verifyContractLimitExecution} from './contract-limit-execution.mjs';
+import {verifyContractTournamentCompletion} from './contract-tournament-completion.mjs';
+import {verifyOrganizationWalletTransfers} from './organization-wallet-transfers.mjs';
+import {verifyContractTournamentPayments} from './contract-tournament-payments.mjs';
+import {verifyContractTournamentLimits} from './contract-tournament-limits.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
 try {
@@ -226,6 +230,10 @@ try {
  await verifyContractNoShowSettlement(db,id);
  await verifyContractLimitProgress(db,id);
  await verifyContractLimitExecution(db,id);
+ await verifyContractTournamentCompletion(db,id);
+ await verifyOrganizationWalletTransfers(db,id);
+ await verifyContractTournamentPayments(db,id);
+ await verifyContractTournamentLimits(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}

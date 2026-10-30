@@ -7,6 +7,7 @@ type Obligation = {
   id: string; revision: number; kind: string; amount: number; paid: number; held: number;
   dueAt: string; remaining: number; debt: boolean; overdueSevenDays: boolean;
   cancelledAt?: string | null; cancellationReason?: string | null; returned?: number; recoveryDebt?: number;
+  scope?: "tournament" | null;
 };
 const names: Record<string, string> = { signing: "Первоначальный бонус", salary: "Зарплата", appearance: "Участие", kill: "Киллы", mvp: "MVP", ranking: "Рейтинг", termination: "Компенсация", fine_refund: "Возврат отменённого штрафа" };
 const coins = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
@@ -78,7 +79,7 @@ export default function ContractPayments({ contractId }: { contractId: string })
       <p className="text-sm text-slate-300">Начисленное обязательство и поступление монет — разные записи. Погашение долга выбирает владелец или руководитель организации. Обычное предложение договора ещё не создаёт начислений.</p>
       {!rows.length && <p>Начислений пока нет.</p>}
       <div className="space-y-3">{rows.map(row => <div key={row.id} className="space-y-2 rounded border border-slate-700 p-3">
-        <p className="font-semibold">{names[row.kind] ?? "Выплата"} · версия {row.revision}</p>
+        <p className="font-semibold">{row.scope === "tournament" ? "Участие в целом турнире" : names[row.kind] ?? "Выплата"} · версия {row.revision}</p>
         <p className="text-sm">Срок выплаты: {new Date(row.dueAt).toLocaleString("ru-RU")}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           {[["Начислено", row.amount], ["Выплачено", row.paid], ["В резерве", row.held], ["Остаток", row.remaining]].map(([label, value]) => <div key={label}><dt className="text-slate-400">{label}</dt><dd>{coins(Number(value))}</dd></div>)}
