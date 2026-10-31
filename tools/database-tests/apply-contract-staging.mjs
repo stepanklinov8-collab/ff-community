@@ -67,6 +67,9 @@ const inspectionSql=`select
  to_regprocedure('public.player_transfer_quote(uuid,uuid,bigint,jsonb)') is not null as player_transfer_plan_ready,
  to_regprocedure('public.player_transfer_prepare_contract(uuid,uuid,integer)') is not null as player_transfer_contract_gate_ready,
  to_regprocedure('public.contract_transfer_cancellation_quote(jsonb,text,jsonb)') is not null as transfer_cancellation_terms_ready,
+ to_regprocedure('public.player_transfer_execute(uuid,uuid,integer)') is not null as player_transfer_execution_ready,
+ to_regprocedure('public.player_transfer_mutate(uuid,jsonb)') is not null as player_transfer_workflow_ready,
+ to_regprocedure('public.player_transfer_query(uuid,jsonb)') is not null as player_transfer_query_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -120,6 +123,9 @@ const migrations=[
  ['player_transfer_plan_ready','202610310007_player_transfer_plan.sql'],
  ['player_transfer_contract_gate_ready','202610310008_player_transfer_contract_gate.sql'],
  ['transfer_cancellation_terms_ready','202610310009_contract_transfer_cancellation_terms.sql'],
+ ['player_transfer_execution_ready','202610310010_player_transfer_execution.sql'],
+ ['player_transfer_workflow_ready','202610310011_player_transfer_workflow.sql'],
+ ['player_transfer_query_ready','202610310012_player_transfer_query.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

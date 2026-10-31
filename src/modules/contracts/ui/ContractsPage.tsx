@@ -146,6 +146,7 @@ export default function ContractsPage() {
       <p className="text-sm text-slate-300">Договор действует после подписания обеими сторонами, не раньше указанной даты. Первоначальная выплата начисляется один раз; при продлении резервируется зарплата по новым условиям с учётом сохранённого календаря. Неподписанные условия не создают обязательств.</p>
       <Link href="/my-organizations" className="text-cyan-300 hover:underline">Мои организации</Link>
       <Link href="/market" className="ml-4 text-cyan-300 hover:underline">Сделки с организациями</Link>
+      <Link href="/transfers" className="ml-4 text-cyan-300 hover:underline">Переходы игроков</Link>
       {organizations.length > 0 && !editor && <button className="primary-button ml-3" type="button" onClick={() => {
         setError(""); setNotice(""); setChoices([]); setSearch("");
         setEditor({ id: crypto.randomUUID(), revision: 0, organizationId: selectedOrganization ?? organizations[0].id, playerId: "", playerName: "", kind: "main", eventId: null, eventTitle: "", sessionId: null, terms: defaultTerms() });
@@ -222,7 +223,7 @@ export default function ContractsPage() {
         {contract.canEdit && ["draft", "offered"].includes(contract.status) && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "cancel", contractId: contract.id, revision: contract.revision })}>Отозвать</button>}
         {contract.isPlayer && contract.status === "offered" && !contract.transferPending && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => { setGuestReady(contract.kind === "main"); setAccepting({ ...contract, terms: contract.terms as ConstructorTerms }); }}>Подписать и принять</button>}
         {contract.isPlayer && contract.status === "offered" && !contract.transferPending && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "reject", contractId: contract.id, revision: contract.revision })}>Отклонить условия</button>}
-        {contract.transferPending&&<p className="text-cyan-200">Договор подготовлен в рамках перехода игрока. Он подписывается при завершении сделки; до вступления нового договора старый продолжает действовать.</p>}
+        {contract.transferPending&&<p className="text-cyan-200">Договор подготовлен в рамках перехода игрока. Он подписывается при завершении сделки; до вступления нового договора старый продолжает действовать. {contract.transferDealId&&<Link className="underline" href={`/transfers?dealId=${contract.transferDealId}`}>Открыть переход</Link>}</p>}
         {contract.isPlayer && contract.status === "offered" && !("schemaVersion" in contract.terms) && <p className="text-sm text-amber-200">Для подписания организация должна отправить новую версию договора через конструктор.</p>}
       </div>
       <ContractHistory key={`${contract.id}:${contract.revision}:${contract.status}`} contractId={contract.id} />

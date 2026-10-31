@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
+import {defaultTerms} from '../../src/modules/contracts/model.ts';import {emptyTransferCancellation} from '../../src/modules/contracts/transfer-cancellation.ts';
+export async function verifyPlayerTransferExecution(db,id){
+ const owner=id(93000),player=id(93001),employer=id(93002),guildOwner=id(93003),oldOrg=id(93010),newOrg=id(93011),guild=id(93012),oldContract=id(93020),guildContract=id(93021),deal=id(93030),newContract=id(93031);
+ for(const user of [owner,player,employer,guildOwner]){await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,'Transfer execution '+user.slice(-4)]);}
+ await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);
+ for(const [org,leader,type] of [[oldOrg,owner,'team'],[newOrg,employer,'team'],[guild,guildOwner,'guild']])await db.query('insert into teams(id,name,type,leader_id,verified) values($1,$2,$3,$4,true)',[org,'Transfer execution '+org.slice(-4),type,leader]);
+ await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main'),($3,$2,'main')",[oldOrg,player,guild]);
+ const fund=(org,amount)=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'adjust',JSON.stringify({kind:'organization',ownerId:org,amount,reason:'Transfer execution funds'})]);
+ await fund(oldOrg,500);await fund(newOrg,10190);
+ const past=new Date(Date.now()-3*86400000),oldTerms=defaultTerms(past),guildTerms=defaultTerms(past);
+ oldTerms.transfer={kind:'percent',basisPoints:2000};oldTerms.playerExit={kind:'fixed',amount:900};oldTerms.transferRequiresConsent=false;oldTerms.financial.salary={amount:100,periodDays:10};
+ guildTerms.guestPolicy='forbidden';
+ for(const [contract,org,signer,terms] of [[oldContract,oldOrg,owner,oldTerms],[guildContract,guild,guildOwner,guildTerms]]){
+   await db.query("insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,'main',$4)",[contract,org,player,signer]);
+   await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status,offered_at) values($1,1,$2::jsonb,$3,'offered',$4)",[contract,JSON.stringify(terms),signer,past.toISOString()]);
+   await db.query('insert into contract_agreements(contract_id,revision,organization_signer,player_signer,ownership_revision,signed_at,effective_at) values($1,1,$2,$3,1,$4,$4)',[contract,signer,player,past.toISOString()]);
+ }
+ await db.query('select contract_financial_start($1,1,$2::timestamptz)',[oldContract,past.toISOString()]);
+ const terms=defaultTerms();terms.financial.signingAmount=100;terms.financial.salary={amount:50,periodDays:7};terms.financial.transferCancellation=emptyTransferCancellation();
+ const quote=(await db.query('select player_transfer_quote($1,$2,10000) value',[player,newOrg])).rows[0].value;
+ assert.equal(quote.organizationFees,2000);assert.equal(quote.playerAmount,8000);assert.equal(quote.contracts.find(row=>row.contractId===guildContract).requiresConsent,true);
+ await db.query("insert into market_deals(id,kind,player_id,organization_id,buyer_organization_id,created_by) values($1,'player',$2,$3,$3,$4)",[deal,player,newOrg,employer]);
+ await db.query("insert into market_versions(deal_id,revision,price,expires_at,asset_revision,buyer_revision,seller_user_id,status,created_by,author_side,transfer_plan,new_terms,new_contract_id) values($1,1,10000,now()+interval '7 days',1,1,$2,'offered',$3,'buyer',$4::jsonb,$5::jsonb,$6)",[deal,player,employer,JSON.stringify(quote),JSON.stringify(terms),newContract]);
+ await db.query("insert into market_consents(deal_id,revision,party,signed_by) values($1,1,'seller',$2)",[deal,player]);
+ await assert.rejects(()=>db.query('select player_transfer_prepare_contract($1,$2,1)',[employer,deal]),/MARKET_PLAYER_HOME/);
+ await db.query('insert into player_transfer_approvals(deal_id,revision,contract_id,organization_id,signed_by,ownership_revision) values($1,1,$2,$3,$4,1)',[deal,guildContract,guild,guildOwner]);
+ await db.query('select player_transfer_prepare_contract($1,$2,1)',[employer,deal]);
+ const source=(await db.query("select u6_coin_account('organization',$1) id",[newOrg])).rows[0].id,holdOperation=randomUUID();
+ await db.query("insert into coin_operations(id,actor_id,action,input,description) values($1,$2,'test_transfer_fund','{}','Transfer price and protected unrelated hold')",[holdOperation,employer]);
+ await db.query('select u6_coin_entry($1,$2,0,10040)',[holdOperation,source]);
+ await db.query('insert into market_escrows(deal_id,revision,account_id,amount,held) values($1,1,$2,10000,10000)',[deal,source]);
+ await db.query("insert into market_consents(deal_id,revision,party,signed_by) values($1,1,'buyer',$2)",[deal,employer]);
+ await db.query("update market_versions set status='funded' where deal_id=$1 and revision=1",[deal]);
+ const execute=actor=>db.query('select player_transfer_execute($1,$2,1) value',[actor,deal]);
+ await assert.rejects(()=>execute(employer),/MARKET_FORBIDDEN/,'the employer cannot forge the player final signature');
+ const balances=async()=>(await db.query('select sum(balance)::text balance,sum(reserved)::text reserved from coin_accounts')).rows[0];
+ const before=await balances();
+ await db.exec(`create function public.test_transfer_failure() returns trigger language plpgsql as $$begin raise exception 'INJECTED_TRANSFER_ROSTER';end $$;
+ create trigger test_transfer_failure after insert on public.team_members for each row when(new.team_id='${newOrg}') execute function public.test_transfer_failure();`);
+ await assert.rejects(()=>execute(player),/INJECTED_TRANSFER_ROSTER/);
+ await db.exec('drop trigger test_transfer_failure on public.team_members;drop function public.test_transfer_failure();');
+ assert.deepEqual(await balances(),before,'a late roster failure rolls back all money, salary releases and welcome payment');
+ assert.equal((await db.query('select count(*)::int n from contract_agreements where contract_id=$1',[newContract])).rows[0].n,0);
+ assert.equal((await db.query("select count(*)::int n from contract_signatures where contract_id=$1 and party='player'",[newContract])).rows[0].n,0);
+ assert.equal((await db.query('select ended_at from contract_agreements where contract_id=$1',[oldContract])).rows[0].ended_at,null);
+ assert.equal((await db.query('select held::int from player_transfer_startup_escrows where deal_id=$1',[deal])).rows[0].held,150);
+ assert.equal((await db.query('select held::int from market_escrows where deal_id=$1',[deal])).rows[0].held,10000);
+ const response=(await execute(player)).rows[0].value;assert.equal(response.status,'completed');
+ assert.deepEqual((await execute(player)).rows[0].value,response,'replay never repeats the contract signature, welcome or purchase');
+ assert.deepEqual((await db.query('select team_id from team_members where user_id=$1 order by team_id',[player])).rows.map(row=>row.team_id),[newOrg,guild].sort());
+ const signed=(await db.query('select * from contract_agreements where contract_id=$1',[newContract])).rows[0];
+ assert.equal(signed.player_signer,player);assert.equal(signed.organization_signer,employer);
+ assert.deepEqual((await db.query('select ended_at from contract_agreements where contract_id=$1',[oldContract])).rows[0].ended_at,signed.effective_at,'old agreement ends only when the signed new one actually becomes effective');
+ assert.equal((await db.query('select ended_at from contract_agreements where contract_id=$1',[guildContract])).rows[0].ended_at,null,'the guild agreement remains active without an extra transfer commission');
+ assert.deepEqual((await db.query('select balance::int,reserved::int from coin_accounts where team_id=$1',[newOrg])).rows[0],{balance:90,reserved:90},'first salary and unrelated reserve remain held');
+ assert.equal((await db.query('select balance::int from coin_accounts where team_id=$1',[oldOrg])).rows[0].balance,2470,'old organization receives 2000 and pays its earned 30 salary, without the unrelated 900 exit fee');
+ assert.equal((await db.query('select balance::int from coin_accounts where user_id=$1',[player])).rows[0].balance,8130);
+ assert.equal((await db.query('select coalesce(sum(balance),0)::int n from coin_accounts where team_id=$1',[guild])).rows[0].n,0);
+ assert.equal((await balances()).balance,before.balance,'the complete transfer conserves all main coins');
+ const op=(await db.query('select operation_id from player_transfer_executions where deal_id=$1',[deal])).rows[0].operation_id;
+ await assert.rejects(()=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'reverse',JSON.stringify({operationId:op,reason:'Cannot reverse money without the roster'})]),/отмена заявки|исправление результатов/);
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await db.query("select has_function_privilege($1,'public.player_transfer_execute(uuid,uuid,integer)','execute') allowed",[role])).rows[0].allowed,false);
+ console.log('PASS: actual final player signature, atomic salary/welcome/price/roster cutover, late failure full rollback, retained guild consent without extra commission, earned old salary preserved, unrelated holds protected, exact replay and generic wallet reversal blocked');
+}
