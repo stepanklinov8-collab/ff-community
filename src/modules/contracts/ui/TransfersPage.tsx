@@ -9,16 +9,17 @@ import {marketStatus} from "../market-model";
 import {TermsSummary} from "./ContractsPage";
 import TransferTermsEditor from "./TransferTermsEditor";
 import DealChat from "./DealChat";
+import TransferReversal,{ReversalSummary,type TransferReversalData} from "./TransferReversal";
 
 type Organization={id:string;name:string;type:string;canSpend?:boolean};
 type Listing={id:string;playerId:string;playerName:string;organizationId:string;organizationName:string;revision:number;price:number;status:string;unread:number};
 type Requirement={contractId:string;organizationId:string;organizationName:string;relation:string;requiresConsent:boolean;approved:boolean;fee:number|null;canApprove:boolean;canDisclose:boolean;terms:ContractTerms|null};
 type Deal=Listing&{buyerUserId:string|null;buyerOrganizationId:string|null;buyerName:string;expiresAt:string;newTerms:ConstructorTerms|null;newContractId:string;organizationFees:number;playerAmount:number;requirements:Requirement[];requiresFeeException:boolean;compensationOverrides:Array<{contractId:string;amount:number}>|null;fresh:boolean;isCurrent:boolean;isPlayer:boolean;startsReady:boolean;prepared:boolean;playerConsented:boolean;homeReady:boolean;disputed:boolean;canEdit:boolean;canOffer:boolean;canPlayerConsent:boolean;canPrepare:boolean;canFund:boolean;canComplete:boolean;canCancel:boolean;canDispute:boolean;canResolve:boolean;canMessage:boolean};
-type Detail={deal:Deal;priceReserve:{amount:number;held:number}|null;contractReserve:{amount:number;held:number}|null;dispute:{reason:string;resolution:string|null;closedAt:string|null}|null};
+type Detail={deal:Deal;priceReserve:{amount:number;held:number}|null;contractReserve:{amount:number;held:number}|null;dispute:{reason:string;resolution:string|null;closedAt:string|null}|null;reversal?:TransferReversalData};
 type ListResponse={deals:Listing[];organizations:Organization[];userId:string;hasMore:boolean;error?:string};
 type Draft=Omit<PlayerTransferDraft,"action"|"requestId">&{playerName:string};
 type Choice={id:string;name:string;kind:string};
-type Confirmation={action:string;title:string;description:string;extra?:Record<string,unknown>};
+type Confirmation={action:string;title:string;description:string;dealId:string;revision:number;extra?:Record<string,unknown>};
 const inputClass="w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white",money=(value:number)=>`${value.toLocaleString('ru-RU')} OC`;
 function localDate(iso:string){const value=new Date(iso);return new Date(value.getTime()-value.getTimezoneOffset()*60000).toISOString().slice(0,16);}
 export default function TransfersPage(){
@@ -58,7 +59,7 @@ export default function TransfersPage(){
  async function find(){setBusy(true);setError('');try{const result=await authFetch(`/api/transfers?${new URLSearchParams({search:search.trim(),searchKind})}`),data=await result.json();if(!result.ok)throw new Error(data.error??'Поиск не удался');setChoices(data.items);}catch(cause){setError(cause instanceof Error?cause.message:'Поиск не удался');}finally{setBusy(false);}}
  async function history(append=false){if(historyOpen&&!append){setHistoryOpen(false);return;}setBusy(true);setError('');try{const response=await authFetch(`/api/transfers?${new URLSearchParams({dealId:selected!,history:'true',offset:String(append?versions.length:0)})}`),data=await response.json();if(!response.ok)throw new Error(data.error??'История недоступна');setVersions(current=>append?[...current,...data.versions]:data.versions);setHistoryMore(data.hasMore);setHistoryOpen(true);}catch(cause){setError(cause instanceof Error?cause.message:'Не удалось загрузить историю');}finally{setBusy(false);}}
  const deal=detail&&detail.deal.id===selected&&(!revision||detail.deal.revision===Number(revision))?detail.deal:null;
- function ask(action:string,title:string,description:string,extra?:Record<string,unknown>){setConfirmation({action,title,description,extra});setError('');}
+ function ask(action:string,title:string,description:string,extra?:Record<string,unknown>){if(!deal)return;setConfirmation({action,title,description,extra,dealId:deal.id,revision:deal.revision});setError('');}
  return <main className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6">
   <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-bold">Переходы игроков</h1><p className="text-slate-300">Приглашение в состав с новым договором и согласованием условий.</p></div><nav className="flex flex-wrap gap-3"><Link className="secondary-button" href="/contracts">Договоры</Link><Link className="secondary-button" href="/market">Покупка организаций</Link></nav></header>
   <div className="flex flex-wrap gap-3"><button className="primary-button" disabled={busy||loading} onClick={()=>create()}>Пригласить игрока</button><button className="secondary-button" disabled={busy||loading||!userId} onClick={()=>create(true)}>Предложить свой переход</button><button className="secondary-button" disabled={busy||loading} onClick={()=>{setDetail(null);setLoading(true);void load().catch(()=>{});}}>Обновить переходы</button></div>
@@ -106,13 +107,15 @@ export default function TransfersPage(){
     {deal.canCancel&&<button disabled={busy} className="secondary-button" onClick={()=>ask('cancel','Отозвать предложение','Ценовой и договорный резервы освобождаются. Действующий прежний договор не меняется.')}>Отозвать предложение</button>}
    </div>
    {detail.dispute&&<p className="text-amber-200">Спор: {detail.dispute.reason}{detail.dispute.resolution&&` · Решение: ${detail.dispute.resolution}`}</p>}
+   {detail.reversal&&<TransferReversal key={`${deal.id}:${deal.revision}`} value={detail.reversal} busy={busy} ask={ask}/>}
    {(deal.canDispute||deal.canResolve)&&<div className="space-y-2"><label className="block">Причина обращения или решение<textarea className={inputClass} minLength={3} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label><button disabled={busy||reason.trim().length<3} className="secondary-button" onClick={()=>ask(deal.canResolve?'resolve':'dispute',deal.canResolve?'Закрыть спор':'Открыть спор',reason.trim(),{reason:reason.trim()})}>{deal.canResolve?'Зафиксировать решение':'Обратиться по спору'}</button></div>}
    <button disabled={busy} className="secondary-button" onClick={()=>void history()}>История редакций</button>{historyOpen&&<><ul>{versions.map(version=><li key={version.revision}><Link className="text-cyan-200 underline" href={`/transfers?dealId=${deal.id}&revision=${version.revision}`}>Редакция {version.revision} · {money(version.price)} · {marketStatus[version.status]??version.status}</Link></li>)}</ul>{historyMore&&<button disabled={busy} className="secondary-button" onClick={()=>void history(true)}>Предыдущие редакции</button>}</>}
    <DealChat key={deal.id} dealId={deal.id} canMessage={deal.canMessage}/>
   </article>}
-  {confirmation&&deal&&<section role="dialog" aria-modal="true" aria-label={confirmation.title} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4"><div className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950 p-5"><h2 className="text-xl font-bold">{confirmation.title}</h2><p className="whitespace-pre-wrap break-words">{confirmation.description}</p>
+  {confirmation&&deal&&confirmation.dealId===deal.id&&confirmation.revision===deal.revision&&<section role="dialog" aria-modal="true" aria-label={confirmation.title} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4"><div className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950 p-5"><h2 className="text-xl font-bold">{confirmation.title}</h2><p className="whitespace-pre-wrap break-words">{confirmation.description}</p>
    {error&&<p role="alert" className="break-words text-red-300">{error}</p>}
    {['complete','prepare_contract','player_consent'].includes(confirmation.action)&&deal.newTerms&&<TermsSummary terms={deal.newTerms}/>}
+   {['reverse_consent','reverse_complete'].includes(confirmation.action)&&detail?.reversal?.proposal&&<ReversalSummary proposal={detail.reversal.proposal}/>}
    <div className="flex flex-wrap gap-3"><button className="primary-button" disabled={busy} onClick={()=>void mutate({action:confirmation.action,dealId:deal.id,revision:deal.revision,...confirmation.extra})}>Подтвердить действие</button><button className="secondary-button" disabled={busy} onClick={()=>setConfirmation(null)}>Назад</button></div>
   </div></section>}
  </main>;

@@ -44,13 +44,18 @@ import {verifyPlayerTransferPlan} from './player-transfer-plan.mjs';
 import {verifyPlayerTransferContractGate} from './player-transfer-contract-gate.mjs';
 import {verifyContractTransferCancellation} from './contract-transfer-cancellation.mjs';
 import {verifyPlayerTransferExecution} from './player-transfer-execution.mjs';
+import {verifyPlayerTransferReversal} from './player-transfer-reversal.mjs';
+import {verifyPlayerTransferReversalWorkflow} from './player-transfer-reversal-workflow.mjs';
 import {verifyPlayerTransferWorkflow} from './player-transfer-workflow.mjs';
+import {verifyPlayerReturnReconciliation} from './player-return-reconciliation.mjs';
 import {verifyContractGuests} from './contract-guests.mjs';
 import {verifyPersonalAwards} from './personal-awards.mjs';
 import {verifyPrizeClosure} from './prize-closure.mjs';
 import {verifyRentalPayments} from './rental-payments.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
+let verificationCompleted=false;
+process.on('exit',()=>{if(!verificationCompleted){console.error('FAILED: SQL verification ended before all selected scenarios completed');process.exitCode=1;}});
 try {
  await db.exec(await readFile(new URL('./baseline.sql',import.meta.url),'utf8'));
  await installChatRealtimeFixture(db);
@@ -100,7 +105,10 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--player-workflow-only')){await verifyPlayerTransferWorkflow(db,migrationId);}
+ if(process.argv.includes('--player-reversal-workflow-only')){await verifyPlayerTransferReversalWorkflow(db,migrationId);}
+ else if(process.argv.includes('--player-reversal-only')){await verifyPlayerTransferExecution(db,migrationId);await verifyPlayerTransferReversal(db,migrationId);}
+ else if(process.argv.includes('--player-returns-only')){await verifyPlayerReturnReconciliation(db,migrationId);}
+ else if(process.argv.includes('--player-workflow-only')){await verifyPlayerTransferWorkflow(db,migrationId);}
  else if(process.argv.includes('--player-execution-only')){await verifyPlayerTransferExecution(db,migrationId);}
  else if(process.argv.includes('--transfer-cancellation-only')){await verifyContractTransferCancellation(db,migrationId);await verifyPlayerTransferContractGate(db,migrationId);}
  else if(process.argv.includes('--player-gate-only')){await verifyPlayerTransferContractGate(db,migrationId);}
@@ -270,7 +278,10 @@ try {
  await verifyPlayerTransferContractGate(db,id);
  await verifyContractTransferCancellation(db,id);
  await verifyPlayerTransferExecution(db,id);
+ await verifyPlayerTransferReversal(db,id);
+ await verifyPlayerTransferReversalWorkflow(db,id);
  await verifyPlayerTransferWorkflow(db,id);
+ await verifyPlayerReturnReconciliation(db,id);
  await verifyContractGuests(db,id);
  await verifyPersonalAwards(db,id);
  await verifyPrizeClosure(db,id);
@@ -278,3 +289,5 @@ try {
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}
+verificationCompleted=true;
+if(!process.exitCode)console.log('PASS: every selected SQL scenario completed');

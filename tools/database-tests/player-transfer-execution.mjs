@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
-import {defaultTerms} from '../../src/modules/contracts/model.ts';import {emptyTransferCancellation} from '../../src/modules/contracts/transfer-cancellation.ts';
-export async function verifyPlayerTransferExecution(db,id){
+import {defaultTerms} from '../../src/modules/contracts/model.ts';import {emptyTransferCancellation,emptyTransferCancellationPenalty} from '../../src/modules/contracts/transfer-cancellation.ts';
+export async function verifyPlayerTransferExecution(db,id,createUser=user=>db.query('insert into auth.users(id) values($1)',[user]),promoteAdmin=user=>db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[user])){
  const owner=id(93000),player=id(93001),employer=id(93002),guildOwner=id(93003),oldOrg=id(93010),newOrg=id(93011),guild=id(93012),oldContract=id(93020),guildContract=id(93021),deal=id(93030),newContract=id(93031);
- for(const user of [owner,player,employer,guildOwner]){await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,'Transfer execution '+user.slice(-4)]);}
- await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);
- for(const [org,leader,type] of [[oldOrg,owner,'team'],[newOrg,employer,'team'],[guild,guildOwner,'guild']])await db.query('insert into teams(id,name,type,leader_id,verified) values($1,$2,$3,$4,true)',[org,'Transfer execution '+org.slice(-4),type,leader]);
+ for(const user of [owner,player,employer,guildOwner]){await createUser(user);await db.query('insert into profiles(id,nickname) values($1,$2) on conflict(id) do update set nickname=excluded.nickname',[user,'Tx-'+user.slice(0,6)+'-'+user.slice(-4)]);}
+ await promoteAdmin(owner);
+ for(const [org,leader,type] of [[oldOrg,owner,'team'],[newOrg,employer,'team'],[guild,guildOwner,'guild']])await db.query('insert into teams(id,name,type,leader_id,verified) values($1,$2,$3,$4,true)',[org,'Tx-'+org.slice(0,6)+'-'+org.slice(-4),type,leader]);
  await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main'),($3,$2,'main')",[oldOrg,player,guild]);
+ await db.query("update team_members set position='substitute' where team_id=$1 and user_id=$2",[oldOrg,player]);
  const fund=(org,amount)=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'adjust',JSON.stringify({kind:'organization',ownerId:org,amount,reason:'Transfer execution funds'})]);
  await fund(oldOrg,500);await fund(newOrg,10190);
  const past=new Date(Date.now()-3*86400000),oldTerms=defaultTerms(past),guildTerms=defaultTerms(past);
@@ -18,6 +19,8 @@ export async function verifyPlayerTransferExecution(db,id){
  }
  await db.query('select contract_financial_start($1,1,$2::timestamptz)',[oldContract,past.toISOString()]);
  const terms=defaultTerms();terms.financial.signingAmount=100;terms.financial.salary={amount:50,periodDays:7};terms.financial.transferCancellation=emptyTransferCancellation();
+ terms.financial.transferCancellation.player_fault.signing={kind:'percent',basisPoints:5000};
+ terms.financial.transferCancellationPenalty=emptyTransferCancellationPenalty();terms.financial.transferCancellationPenalty.player_fault={kind:'fixed',amount:120};
  const quote=(await db.query('select player_transfer_quote($1,$2,10000) value',[player,newOrg])).rows[0].value;
  assert.equal(quote.organizationFees,2000);assert.equal(quote.playerAmount,8000);assert.equal(quote.contracts.find(row=>row.contractId===guildContract).requiresConsent,true);
  await db.query("insert into market_deals(id,kind,player_id,organization_id,buyer_organization_id,created_by) values($1,'player',$2,$3,$3,$4)",[deal,player,newOrg,employer]);

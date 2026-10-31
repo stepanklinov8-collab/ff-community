@@ -67,8 +67,9 @@ export default function ContractPayments({ contractId }: { contractId: string })
       const response = await authFetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, requestId: pending.current.requestId }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Не удалось отменить начисление");
-      setRows(current => current.map(row => row.id === cancelling.id ? { ...row, cancelledAt: new Date().toISOString(), cancellationReason: payload.reason, held: 0, remaining: 0, debt: false, overdueSevenDays: false, returned: data.returned, recoveryDebt: data.recoveryDebt } : row));
-      setNotice(`Начисление отменено. Возвращено ${coins(data.returned)}. Остаток к возврату: ${coins(data.recoveryDebt)}.`);
+      if(data.returnReconciliation){setRows([]);setNotice("Начисление отменено. Договорные возвраты пересчитаны; итоговые суммы показаны в обновлённом списке.");}
+      else{setRows(current => current.map(row => row.id === cancelling.id ? { ...row, cancelledAt: new Date().toISOString(), cancellationReason: payload.reason, held: 0, remaining: 0, debt: false, overdueSevenDays: false, returned: data.returned, recoveryDebt: data.recoveryDebt } : row));
+      setNotice(`Начисление отменено. Возвращено ${coins(data.returned)}. Остаток к возврату: ${coins(data.recoveryDebt)}.`);}
       pending.current = null; setCancelling(null); setReason("");
       try { await fetchRows(false); } catch { setError("Отмена подтверждена, но список не обновился. Нажмите «Обновить начисления»."); }
     } catch (e) { setError(e instanceof TypeError ? "Нет связи. Повторите отмену: повторное списание защищено." : e instanceof Error ? e.message : "Ошибка отмены"); }

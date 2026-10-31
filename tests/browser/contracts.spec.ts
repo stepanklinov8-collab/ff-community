@@ -392,7 +392,7 @@ test("owner cancels a no-show fine with a reason and a lost response reuses the 
     return route.fallback();
   });
   await page.goto("/contracts");
-  await page.getByRole("button", { name: "Штрафы за неявку", exact: true }).click();
+  await page.getByRole("button", { name: "Штрафы по договору", exact: true }).click();
   const region = page.getByRole("region", { name: "Штрафы по договору" });
   await expect(region.getByRole("link", { name: "Тренировка декабря" })).toHaveAttribute("href", `/tournaments/${teamId}`);
   await region.getByRole("button", { name: "Отменить штраф", exact: true }).click();
@@ -415,7 +415,7 @@ test("player sees no-show debt without owner cancellation controls", async ({ pa
     if (new URL(route.request().url()).searchParams.get("fines") !== "true") return route.fallback();
     return route.fulfill({ json: { canCancel: false, hasMore: false, fines: [{ id: playerId, revision: 1, amount: 500, paid: 100, remaining: 400, playerValue: 5000, eventId: teamId, eventTitle: "Тренировка", sessionStart: "2026-12-01T16:00:00Z", cancelledAt: null, cancellationReason: null, refundAmount: 0, refunded: 0, refundDebt: 0 }] } });
   });
-  await page.goto("/contracts"); await page.getByRole("button", { name: "Штрафы за неявку", exact: true }).click();
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Штрафы по договору", exact: true }).click();
   const region = page.getByRole("region", { name: "Штрафы по договору" });
   await expect(region).toContainText("До погашения вывод недоступен");
   await expect(region.getByRole("button", { name: "Отменить штраф", exact: true })).toHaveCount(0);

@@ -26,6 +26,9 @@ export const transferCancellationSchema = z.object({
 export type TransferCancellation = z.infer<typeof transferCancellationSchema>;
 export type CancellationReason = typeof cancellationReasons[number];
 export type CancellationPaymentKind = typeof cancellationPaymentKinds[number];
+export const transferCancellationPenaltySchema=z.object(Object.fromEntries(cancellationReasons.map(reason=>[reason,compensationSchema])) as Record<CancellationReason,typeof compensationSchema>).strict();
+export type TransferCancellationPenalty=z.infer<typeof transferCancellationPenaltySchema>;
+export const emptyTransferCancellationPenalty=()=>Object.fromEntries(cancellationReasons.map(reason=>[reason,{kind:"none"}])) as TransferCancellationPenalty;
 
 /** Explicitly enabling the constructor starts with no returns. Historical
  * agreements without this clause are never given these terms on read. */

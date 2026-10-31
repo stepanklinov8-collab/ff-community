@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {contractTermsSchema} from "./model.ts";
 import {marketQuerySchema} from "./market-model.ts";
+import {cancellationReasons} from "./transfer-cancellation.ts";
 const uuid=z.string().uuid(),coins=z.number().int().min(0).max(1_000_000_000_000);
 export const playerTransferDraftSchema=z.object({
  action:z.literal("player_save"),requestId:uuid,dealId:uuid,expectedRevision:z.number().int().min(0).max(1_000_000),
@@ -22,6 +23,9 @@ export const playerTransferMutationSchema=z.discriminatedUnion("action",[
  z.object({action:z.literal("home_consent"),...identity,homeContractId:uuid,approve:z.boolean()}).strict(),
  z.object({action:z.literal("disclose"),...identity,organizationId:uuid}).strict(),
  ...(["dispute","resolve"] as const).map(action=>z.object({action:z.literal(action),...identity,reason:z.string().trim().min(3).max(1000)}).strict()),
+ z.object({action:z.literal("reverse_review"),...identity,cause:z.enum(cancellationReasons),reason:z.string().trim().min(3).max(1000)}).strict(),
+ z.object({action:z.literal("reverse_consent"),...identity,proposalId:uuid,party:z.enum(["player","organization","buyer","previous"])}).strict(),
+ z.object({action:z.literal("reverse_complete"),...identity,proposalId:uuid}).strict(),
  z.object({action:z.literal("message"),requestId:uuid,dealId:uuid,body:z.string().trim().min(1).max(4000),replyTo:z.string().regex(/^\d{1,18}$/).nullable()}).strict(),
  z.object({action:z.literal("read"),requestId:uuid,dealId:uuid,lastSeen:z.string().regex(/^\d{1,18}$/)}).strict(),
 ]);

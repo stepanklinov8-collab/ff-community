@@ -2,7 +2,7 @@ import { z } from "zod";
 import { terminationCompensationSchema } from "./termination-compensation.ts";
 import { noShowPenaltySchema } from "./no-show-penalty.ts";
 import { rentalConditionSchema } from "./rental-terms.ts";
-import { transferCancellationSchema } from "./transfer-cancellation.ts";
+import { transferCancellationSchema,transferCancellationPenaltySchema } from "./transfer-cancellation.ts";
 
 const coins = z.number().int().min(0).max(1_000_000_000_000);
 const bps = z.number().int().min(0).max(10000);
@@ -37,6 +37,7 @@ export const financialTermsSchema = z.object({
   // Absence in historical signed JSON requires a separate agreement, never
   // an inferred refund of earned money or retroactive default.
   transferCancellation: transferCancellationSchema.optional(),
+  transferCancellationPenalty:transferCancellationPenaltySchema.optional(),
   rankingBonuses: z.array(rankingBonusSchema).max(20),
   eventOverrides: z.array(eventOverrideSchema).max(20),
 }).strict().superRefine((value, ctx) => {

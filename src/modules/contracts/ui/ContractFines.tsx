@@ -5,6 +5,7 @@ import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
 
 type Fine = {
+  kind?:"no_show"|"transfer_penalty";dealId?:string|null;
   id: string; revision: number; amount: number; paid: number; remaining: number; playerValue: number;
   eventId: string; eventTitle: string; sessionStart: string; cancelledAt: string | null;
   cancellationReason: string | null; refundAmount: number; refunded: number; refundDebt: number;
@@ -49,13 +50,12 @@ export default function ContractFines({ contractId }: { contractId: string }) {
     finally { setBusy(false); }
   }
   return <section className="space-y-3 border-t border-slate-700 pt-3" aria-label="Штрафы по договору">
-    <button type="button" className="secondary-button" disabled={busy} aria-expanded={open} onClick={() => { if (open) setOpen(false); else void load(); }}>{busy ? "Обработка…" : open ? "Скрыть штрафы" : "Штрафы за неявку"}</button>
+    <button type="button" className="secondary-button" disabled={busy} aria-expanded={open} onClick={() => { if (open) setOpen(false); else void load(); }}>{busy ? "Обработка…" : open ? "Скрыть штрафы" : "Штрафы по договору"}</button>
     {open && <>
-      <p className="text-sm text-slate-300">Штраф применяется только к заявленному игроку, который полностью пропустил сессию, если это условие есть в подписанном договоре. Свободные монеты погашают долг; целевые резервы сохраняются.</p>
+      <p className="text-sm text-slate-300">Здесь штрафы за полную неявку и отдельные штрафы за отмену перехода, если они предусмотрены подписанным договором. Свободные монеты погашают долг; целевые резервы сохраняются.</p>
       {!rows.length && <p>Штрафов пока нет.</p>}
       {rows.map(row => <div key={row.id} className="space-y-3 rounded border border-slate-700 p-3">
-        <p className="font-semibold">Неявка · версия {row.revision} · <Link className="text-cyan-200 hover:underline" href={`/tournaments/${row.eventId}`}>{row.eventTitle}</Link></p>
-        <p className="text-sm">Сессия: {new Date(row.sessionStart).toLocaleString("ru-RU")} · Стоимость в снимке сессии: {coins(row.playerValue)}</p>
+        {row.kind==="transfer_penalty"?<><p className="font-semibold">Отмена перехода · версия {row.revision} · <Link className="text-cyan-200 hover:underline" href={`/transfers?dealId=${row.dealId}`}>Решение по переходу</Link></p><p className="text-sm">Сумма зафиксирована при отмене и не зависит от призовых. Стоимость для процента: {coins(row.playerValue)}</p></>:<><p className="font-semibold">Неявка · версия {row.revision} · <Link className="text-cyan-200 hover:underline" href={`/tournaments/${row.eventId}`}>{row.eventTitle}</Link></p><p className="text-sm">Сессия: {new Date(row.sessionStart).toLocaleString("ru-RU")} · Стоимость в снимке сессии: {coins(row.playerValue)}</p></>}
         <dl className="grid grid-cols-3 gap-2 text-sm">{[["Штраф", row.amount], ["Оплачено", row.paid], ["Долг", row.remaining]].map(([label, value]) => <div key={label}><dt className="text-slate-400">{label}</dt><dd>{coins(Number(value))}</dd></div>)}</dl>
         {row.cancelledAt ? <div className="text-sm"><p>Штраф отменён: {row.cancellationReason}</p><p>Возвращено игроку: {coins(row.refunded)}. Осталось вернуть: {coins(row.refundDebt)}.</p>{row.refundDebt > 0 && <p>Возврат находится в разделе «Начисления и выплаты» и остаётся долгом организации.</p>}</div> : <p className="text-sm">{row.remaining ? "Остаток погашается из свободных поступлений. До погашения вывод недоступен." : "Штраф оплачен."}</p>}
         {canCancel && !row.cancelledAt && !selected && <button type="button" className="secondary-button" disabled={busy} onClick={() => { setSelected(row); setReason(""); setError(""); setNotice(""); }}>Отменить штраф</button>}

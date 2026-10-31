@@ -72,6 +72,12 @@ const inspectionSql=`select
  to_regprocedure('public.player_transfer_execute(uuid,uuid,integer)') is not null as player_transfer_execution_ready,
  to_regprocedure('public.player_transfer_mutate(uuid,jsonb)') is not null as player_transfer_workflow_ready,
  to_regprocedure('public.player_transfer_query(uuid,jsonb)') is not null as player_transfer_query_ready,
+ to_regprocedure('public.player_return_settle(uuid)') is not null as player_return_reconciliation_ready,
+ to_regprocedure('public.player_return_flush()') is not null as player_return_source_hooks_ready,
+ to_regprocedure('public.player_transfer_reversal_assess(uuid,uuid,integer,text)') is not null as player_reversal_assessment_ready,
+ to_regprocedure('public.player_transfer_reverse_execute(uuid,uuid,integer,text,text,text,text)') is not null as player_reversal_execution_ready,
+ to_regprocedure('public.player_transfer_reversal_view(uuid,public.market_deals,public.market_versions)') is not null as player_reversal_workflow_ready,
+ to_regprocedure('public.contract_transfer_penalty_validate(jsonb)') is not null as player_reversal_penalty_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -128,6 +134,12 @@ const migrations=[
  ['player_transfer_execution_ready','202610310010_player_transfer_execution.sql'],
  ['player_transfer_workflow_ready','202610310011_player_transfer_workflow.sql'],
  ['player_transfer_query_ready','202610310012_player_transfer_query.sql'],
+ ['player_return_reconciliation_ready','202610310013_player_return_reconciliation.sql'],
+ ['player_return_source_hooks_ready','202610310014_player_return_source_hooks.sql'],
+ ['player_reversal_assessment_ready','202610310015_player_transfer_reversal_assessment.sql'],
+ ['player_reversal_execution_ready','202610310016_player_transfer_reversal_execution.sql'],
+ ['player_reversal_workflow_ready','202610310017_player_transfer_reversal_workflow.sql'],
+ ['player_reversal_penalty_ready','202610310018_player_transfer_cancellation_penalty.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');
@@ -152,6 +164,7 @@ const backupFunctions=[
  'u6_settle_session_prizes','contract_session_settle_before_tournament','contract_obligation_create',
  'register_team_for_session','update_team_registration_roster','u2_registration_action','u5_reserve_eligible','u2_registration_guard',
  'contract_terminate','contract_obligation_cancel_internal','contract_obligation_query','contract_tournament_freeze',
+ 'player_transfer_quote','player_transfer_memberships','player_transfer_party','player_transfer_mutate','player_transfer_query','market_write_barrier',
 ];
 const signatures=await query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and proname=any(array[${backupFunctions.map(name=>"'"+name+"'").join(',')}])`,true);
 await writeFile(new URL(`before-functions-${stamp}.json`,artifactDir),JSON.stringify(signatures,null,2));

@@ -3,6 +3,8 @@ import {createAdminClient,requireUser,authErrorResponse} from "@/platform/databa
 import {marketMutationSchema,marketQuerySchema} from "./market-model";
 import {playerTransferMutationSchema,playerTransferQuerySchema} from "./player-transfer-model";
 const errors:Record<string,[number,string]>={
+ MARKET_RETURN_TIMING_PENDING:[409,"Правило пересчёта возвратов ещё согласуется. Финансовая отмена пока недоступна"],MARKET_PLAYER_MUTUAL:[409,"Нужны отдельные подтверждения всех сторон именно этого решения об отмене"],
+ MARKET_PLAYER_LATER_POLICY:[409,"Условия возвратов в договоре позже изменились. Сначала урегулируйте их в споре"],MARKET_PLAYER_RESTORE_REVIEW:[409,"В старой сделке не сохранена прежняя позиция игрока. Требуется отдельное рассмотрение"],
  MARKET_PLAYER:[422,"Игрок не найден"],MARKET_PLAYER_BUYER:[403,"Плательщик должен иметь право приглашать в выбранную организацию"],
  MARKET_PLAYER_CHANGED:[409,"Состав или действующие договоры изменились. Подготовьте новую редакцию и соберите согласия заново"],
  MARKET_PLAYER_EXCEPTION:[409,"Компенсация превышает цену. Согласуйте исключение с прежней организацией в новой редакции"],

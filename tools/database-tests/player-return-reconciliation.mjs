@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
+import {defaultTerms} from '../../src/modules/contracts/model.ts';
+import {emptyTransferCancellation} from '../../src/modules/contracts/transfer-cancellation.ts';
+import {previewReturnReconciliation} from '../../src/modules/contracts/return-reconciliation.ts';
+export async function verifyPlayerReturnReconciliation(db,id){
+ const owner=id(96000);await db.query('insert into auth.users(id) values($1)',[owner]);await db.query("insert into profiles(id,nickname) values($1,'Return worker owner')",[owner]);
+ await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);
+ const wallet=async(actor,action,input)=>(await db.query('select u6_coin_action($1,$2,$3,$4::jsonb) value',[actor,randomUUID(),action,JSON.stringify(input)])).rows[0].value;
+ const total=async()=>(await db.query('select sum(balance)::text n from coin_accounts')).rows[0].n;
+ const make=async n=>{
+   const player=id(n),org=id(n+1),contract=id(n+2),deal=id(n+3),job=id(n+4);
+   await db.query('insert into auth.users(id) values($1)',[player]);await db.query('insert into profiles(id,nickname) values($1,$2)',[player,'Return player '+n]);
+   await db.query("insert into teams(id,name,type,leader_id,verified) values($1,$2,'team',$3,true)",[org,'Return worker '+n,owner]);
+   await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main')",[org,player]);
+   await wallet(owner,'adjust',{kind:'organization',ownerId:org,amount:5000,reason:'Private return worker fixture funds'});
+   const terms=defaultTerms(),policy=emptyTransferCancellation();policy.player_fault.prize={kind:'percent',basisPoints:2000};policy.player_fault.personalAward={kind:'percent',basisPoints:5000};terms.financial.transferCancellation=policy;
+   for(const [actor,input] of [[owner,{action:'save',expectedRevision:0,organizationId:org,playerId:player,kind:'main',eventId:null,sessionId:null,terms}],[owner,{action:'offer',revision:1}],[player,{action:'accept',revision:1}]])await db.query('select contract_mutate($1,$2::jsonb)',[actor,JSON.stringify({...input,requestId:randomUUID(),contractId:contract})]);
+   // This is a financial-worker unit fixture, not a second test of forward
+   // market authorization: public workflows cannot directly create these jobs.
+   await db.query("insert into market_deals(id,kind,player_id,organization_id,buyer_organization_id,created_by) values($1,'player',$2,$3,$3,$4)",[deal,player,org,owner]);
+   await db.query("insert into market_versions(deal_id,revision,price,expires_at,asset_revision,buyer_revision,seller_user_id,status,created_by,author_side,new_terms,new_contract_id) values($1,1,0,now()+interval '1 day',1,1,$2,'completed',$3,'buyer',$4::jsonb,$5)",[deal,player,owner,JSON.stringify(terms),contract]);
+   const start=()=>db.query("insert into player_return_jobs(id,deal_id,revision,contract_id,claim_revision,player_id,organization_id,cause,policy,mode,eligible_revisions,cutoff_at,created_by) values($1,$2,1,$3,1,$4,$5,'player_fault',$6::jsonb,'recalculate',array[1],clock_timestamp(),$7)",[job,deal,contract,player,org,JSON.stringify(policy),owner]);
+   const pay=async(kind,amount,source)=>{const obligation=(await db.query('select contract_obligation_create($1,1,$2,$3,$4,clock_timestamp(),true) id',[contract,kind,source,amount])).rows[0].id;await db.query('select contract_obligation_pay(null,$1,$2,$3,true)',[randomUUID(),obligation,amount]);return obligation;};
+   const state=async()=>(await db.query('select player_return_state($1) value',[job])).rows[0].value;
+   const settle=async()=>(await db.query('select player_return_settle($1) value',[job])).rows[0].value;
+   return{player,org,contract,deal,job,policy,pay,state,settle,start};
+ };
+ const x=await make(96010),original=await x.pay('prize',1000,'initial-prize');const supply=await total();
+ const hold=await wallet(x.player,'withdraw_request',{amount:950,note:'Protected player withdrawal while a return is due'});
+ await x.start();
+ let result=await x.settle(),state=await x.state();assert.equal(result.targets.prize,200);assert.equal(state.collected.prize,50);assert.equal(state.playerDebt.prize,150);
+ assert.ok(previewReturnReconciliation(x.policy,'player_fault',state).every(row=>row.balanced));
+ const runs=Number((await db.query('select count(*) n from player_return_runs where job_id=$1',[x.job])).rows[0].n);
+ await x.settle();assert.equal(Number((await db.query('select count(*) n from player_return_runs where job_id=$1',[x.job])).rows[0].n),runs,'an unpaid existing claim is never charged again');
+ await wallet(x.player,'withdraw_cancel',{withdrawalId:hold.operationId});state=await x.state();assert.equal(state.collected.prize,200);assert.equal(state.playerDebt.prize,0);assert.equal((await x.settle()).changed,false);
+ await db.query('select contract_obligation_cancel_internal($1,$2,$3,$4)',[owner,randomUUID(),original,'Correction of the original prize receipt']);
+ await x.settle();state=await x.state();assert.equal(state.paid.prize,0);assert.equal(state.refunded.prize,200);assert.equal(state.organizationDebt.prize,0);
+ assert.equal((await db.query('select balance::int from coin_accounts where user_id=$1',[x.player])).rows[0].balance,0);
+ assert.equal((await db.query('select contract_player_has_debt($1) debt',[x.player])).rows[0].debt,false,'the refund can repay the original source claim without a double debt');
+ await x.pay('prize',500,'corrected-prize');await x.settle();state=await x.state();assert.equal(state.collected.prize-state.refunded.prize,100);assert.equal(state.playerDebt.prize,0);
+ assert.equal((await db.query('select balance::int from coin_accounts where user_id=$1',[x.player])).rows[0].balance,400);
+ assert.equal(await total(),supply);
+
+ const y=await make(96030),paid=await y.pay('prize',1000,'unfunded-correction');await y.start();await y.settle();
+ await wallet(owner,'transfer',{teamId:y.org,userId:owner,amount:4200});await wallet(y.player,'transfer',{userId:owner,amount:800});
+ const supply2=await total();await db.query('select contract_obligation_cancel_internal($1,$2,$3,$4)',[owner,randomUUID(),paid,'Correction after both recipients spent their funds']);
+ await y.settle();state=await y.state();assert.equal(state.organizationDebt.prize,200);assert.equal(state.playerDebt.prize,0);
+ assert.equal((await db.query('select contract_has_debt($1) debt',[y.org])).rows[0].debt,true);
+ await wallet(owner,'transfer',{recipientTeamId:y.org,amount:200});await y.settle();state=await y.state();assert.equal(state.refunded.prize,0,'topping up an old unfunded organization debt does not automatically spend it');
+ const refund=(await db.query('select o.id from player_return_refunds link join player_return_runs run on run.id=link.run_id join contract_obligations o on o.id=link.obligation_id where run.job_id=$1 and o.cancelled_at is null',[y.job])).rows[0].id;
+ await db.query('select contract_obligation_pay($1,$2,$3,100,false)',[owner,randomUUID(),refund]);await y.settle();state=await y.state();assert.equal(state.refunded.prize,100);assert.equal(state.organizationDebt.prize,100);
+ assert.ok(previewReturnReconciliation(y.policy,'player_fault',state).every(row=>row.balanced));assert.equal(await total(),supply2);
+ const z=await make(96050);await wallet(owner,'adjust',{kind:'player',ownerId:owner,amount:500,reason:'Original personal-award organizer budget'});
+ const source=(await db.query("select u6_coin_account('player',$1) id",[owner])).rows[0].id,target=(await db.query("select u6_coin_account('player',$1) id",[z.player])).rows[0].id;
+ const event=id(96055),fund=id(96056);
+ await db.query("insert into events(id,title,type,organizer_user_id) values($1,'Return worker personal award','tournament',$2)",[event,owner]);
+ await db.query("insert into personal_award_funds(id,event_id,account_id,plan,total,held,closed_at) values($1,$2,$3,'{\"mvp\":100,\"maxKills\":0}',100,0,clock_timestamp())",[fund,event,source]);
+ const award=async(amount,payment)=>{
+   const operation=randomUUID(),plan={contractId:z.contract,revision:1,organizationId:z.org,playerAmount:amount,organizationAmount:0,homeShares:[],winner:{userId:z.player,nickname:'Return award player'}};
+   await db.exec('begin');
+   await db.query("insert into coin_operations(id,action,input,description) values($1,'personal_award_payout','{}','Actual personal award return fixture')",[operation]);
+   await db.query("insert into personal_award_payments(id,fund_id,kind,plan,amount,operation_id) values($1,$2,'mvp',$3::jsonb,$4,$5)",[payment,fund,JSON.stringify(plan),amount,operation]);
+   await db.query('insert into personal_award_receipts(payment_id,account_id,amount) values($1,$2,$3)',[payment,target,amount]);
+   await db.query('select u6_coin_entry($1,$2,$3)',[operation,source,-amount]);await db.query('select u6_coin_entry($1,$2,$3)',[operation,target,amount]);
+   await db.exec('commit');
+ };
+ const originalAward=id(96057);await award(100,originalAward);const supply3=await total();
+ const awardHold=await wallet(z.player,'withdraw_request',{amount:80,note:'Protected personal-award funds'});await z.start();await z.settle();
+ state=await z.state();assert.equal(state.collected.personalAward,20);assert.equal(state.playerDebt.personalAward,30);
+ await db.query('select personal_award_reverse($1)',[originalAward]);state=await z.state();
+ assert.equal(state.paid.personalAward,0);assert.equal(state.refunded.personalAward,20);assert.equal(state.playerDebt.personalAward,0);
+ assert.equal((await db.query('select balance::int,reserved::int from coin_accounts where user_id=$1',[z.player])).rows[0].reserved,80,'correcting the award never spends a protected withdrawal');
+ await wallet(z.player,'withdraw_cancel',{withdrawalId:awardHold.operationId});
+ assert.equal((await db.query('select contract_player_has_debt($1) debt',[z.player])).rows[0].debt,false);
+ await award(60,id(96058));state=await z.state();assert.equal(state.collected.personalAward-state.refunded.personalAward,30,'a corrected personal award is reconciled once at transaction end');
+ assert.equal((await db.query('select balance::int from coin_accounts where user_id=$1',[z.player])).rows[0].balance,30);
+ assert.equal((await z.settle()).changed,false);assert.equal(await total(),supply3);
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await db.query("select has_function_privilege($1,'public.player_return_settle(uuid)','execute') allowed",[role])).rows[0].allowed,false);
+ console.log('PASS: private return-worker SQL/TS equation, protected reserves, partial/deferred debt, no repeated claim, corrected receipt refund, late payment adjustment, manual unfunded organization repayment and coin conservation');
+ console.log('PASS: actual personal-award receipt corrections, protected player holds, no duplicate organization/fund claims, replacement-award reconciliation and deferred source hooks');
+}
