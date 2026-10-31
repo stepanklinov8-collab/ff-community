@@ -96,6 +96,17 @@ test("player reads the exact combined clauses before signing on mobile",async({p
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 
+test("a pending transfer contract cannot be signed or rejected outside its deal",async({page})=>{
+  const writes=await setup(page,[{...contract,isPlayer:true,canEdit:false,canOffer:false,transferPending:true,transferDealId:"00000000-0000-4000-8000-000000091030"}]);
+  await page.goto("/contracts");
+  await expect(page.getByText("Договор подготовлен в рамках перехода игрока.",{exact:false})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Подписать и принять",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Отклонить условия",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Изменить условия",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Отозвать",exact:true})).toHaveCount(0);
+  expect(writes).toHaveLength(0);
+});
+
 test("event exceptions require selected fields and keep an explicit zero", async ({ page }) => {
   const mutations = await setup(page, [{ ...contract, status: "draft" }]);
   await page.goto("/contracts");

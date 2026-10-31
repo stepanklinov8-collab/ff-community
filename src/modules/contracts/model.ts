@@ -116,6 +116,8 @@ export interface ContractListItem {
   terms: ContractTerms; createdAt: string;
   canEdit: boolean; canOffer: boolean; isPlayer: boolean;
   hasSignedHistory?: boolean;
+  transferDealId?: string;
+  transferPending?: boolean;
   effectiveEndsAt?: string | null;
 }
 

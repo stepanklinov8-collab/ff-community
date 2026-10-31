@@ -3,6 +3,7 @@ import { createAdminClient, requireUser, authErrorResponse } from "@/platform/da
 import { mutationSchema, querySchema } from "./model";
 
 const errors: Record<string, [number, string]> = {
+  CONTRACT_TRANSFER_REQUIRED:[409,"Этот договор связан с переходом игрока. Подписание выполняется только при завершении сделки"],
   CONTRACT_RENTAL_ORGANIZATION:[422,"Условия аренды можно задать только для действующих основных организаций этого игрока"],
   CONTRACT_RENTAL_REVIEW:[409,"Загрузите и проверьте условия расчёта со всеми основными организациями в конструкторе аренды"],
   CONTRACT_RENTAL_ENGINE:[503,"Расчёт аренды временно недоступен. Договор не был подписан и деньги не списаны"],
