@@ -60,6 +60,10 @@ const inspectionSql=`select
  to_regprocedure('public.contract_ordinary_rule(jsonb)') is not null as combined_compensation_ready,
  to_regclass('public.contract_ranking_history') is not null as ranking_history_ready,
  to_regprocedure('public.contract_ranking_settle(uuid,uuid)') is not null as ranking_payments_ready,
+ to_regclass('public.market_deals') is not null as market_organizations_ready,
+ to_regprocedure('public.market_mutate(uuid,jsonb)') is not null as market_actions_ready,
+ to_regprocedure('public.market_chat_action(uuid,jsonb)') is not null as market_chat_ready,
+ to_regprocedure('public.market_lock_tree(uuid)') is not null as market_serialization_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -106,6 +110,10 @@ const migrations=[
  ['combined_compensation_ready','202610300018_contract_combined_compensation.sql'],
  ['ranking_history_ready','202610310001_contract_ranking_history.sql'],
  ['ranking_payments_ready','202610310002_contract_ranking_payments.sql'],
+ ['market_organizations_ready','202610310003_market_organization_deals.sql'],
+ ['market_actions_ready','202610310004_market_organization_actions.sql'],
+ ['market_chat_ready','202610310005_market_private_query_chat.sql'],
+ ['market_serialization_ready','202610310006_market_snapshot_serialization.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

@@ -46,7 +46,7 @@ function FeeInput({ label, value, onChange, basis, allowCombined = true }: { lab
       </select></label><p className="text-xs text-slate-300">{feeText(value, basis)}.</p></>}
   </fieldset>;
 }
-function TermsSummary({ terms }: { terms: ContractTerms }) {
+export function TermsSummary({ terms }: { terms: ContractTerms }) {
   const tournamentLimit = terms.limit?.unit === "tournaments";
   return <dl className="grid gap-3 text-sm sm:grid-cols-2">
     <div><dt className="text-slate-400">Действует</dt><dd>{new Date(terms.startsAt).toLocaleString("ru-RU")} — {terms.endsAt ? new Date(terms.endsAt).toLocaleString("ru-RU") : "бессрочно"}</dd></div>
@@ -164,6 +164,7 @@ export default function ContractsPage() {
       <p className="text-slate-300">Условия участия, доли призовых и обязательства перед организацией. Каждое изменение сохраняется новой версией.</p>
       <p className="text-sm text-slate-300">Договор действует после подписания обеими сторонами, не раньше указанной даты. Первоначальная выплата начисляется один раз; при продлении резервируется зарплата по новым условиям с учётом сохранённого календаря. Неподписанные условия не создают обязательств.</p>
       <Link href="/my-organizations" className="text-cyan-300 hover:underline">Мои организации</Link>
+      <Link href="/market" className="ml-4 text-cyan-300 hover:underline">Сделки с организациями</Link>
       {organizations.length > 0 && !editor && <button className="primary-button ml-3" type="button" onClick={() => {
         setError(""); setNotice(""); setChoices([]); setSearch("");
         setEditor({ id: crypto.randomUUID(), revision: 0, organizationId: selectedOrganization ?? organizations[0].id, playerId: "", playerName: "", kind: "main", eventId: null, eventTitle: "", sessionId: null, terms: defaultTerms() });
