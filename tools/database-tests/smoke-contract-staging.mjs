@@ -18,16 +18,20 @@ assert.equal(session.user.id,login.userId);
 assert(session.access_token);
 // Never print credentials, tokens, private contract terms or financial history.
 const headers={Authorization:`Bearer ${session.access_token}`};
-for(const path of ['/api/contracts','/api/wallet']){
+for(const path of ['/api/contracts','/api/wallet','/api/transfers','/api/market']){
  const response=await fetch(origin+path,{headers,signal:AbortSignal.timeout(45000)});
  if(!response.ok)throw Error(`${path}: HTTP ${response.status}`);
  assert.match(response.headers.get('cache-control')??'',/no-store/);
  const data=await response.json();
  if(path==='/api/contracts'){
   assert(Array.isArray(data.contracts));assert(Array.isArray(data.organizations));
-  console.log('PASS: authenticated local contracts API, private response, current organization access');
- }else console.log('PASS: authenticated local wallet remains accessible');
+  console.log('PASS: authenticated staging contracts API, private response, current organization access');
+ }else{
+  if(path==='/api/transfers'||path==='/api/market')assert(Array.isArray(data.deals));
+  console.log('PASS: authenticated isolated endpoint '+path);
+ }
 }
-const anonymous=await fetch(origin+'/api/contracts',{signal:AbortSignal.timeout(45000)});
-assert.equal(anonymous.status,401);
+for(const path of ['/api/contracts','/api/transfers','/api/market']){
+ const anonymous=await fetch(origin+path,{signal:AbortSignal.timeout(45000)});assert.equal(anonymous.status,401,'guest data must remain private at '+path);
+}
 console.log('PASS: guest cannot read contract data; production unchanged');

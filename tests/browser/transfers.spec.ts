@@ -34,6 +34,13 @@ test('an invitation saves a structured new contract without signing or ending th
  expect(writes[0]).not.toHaveProperty('oldContractEnded');expect(writes[0]).not.toHaveProperty('playerSignature');
  expect(writes[0]).toMatchObject({newTerms:{financial:{transferCancellationPenalty:{player_fault:{kind:'fixed',amount:120}}}}});
 });
+
+test('a guest cannot start an invitation before signing in',async({page})=>{
+ await page.goto('/transfers');await expect(page.getByRole('alert').filter({hasText:'Необходима авторизация'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Пригласить игрока',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Предложить свой переход',exact:true})).toBeDisabled();
+ await expect(page.getByRole('form',{name:'Предложение перехода игрока'})).toHaveCount(0);
+});
 test('price funding explicitly confirms the source and reuses a request after a lost reply',async({page})=>{
  await setup(page);const attempts:Record<string,unknown>[]=[];
  await page.route('**/api/transfers',route=>{if(route.request().method()!=='POST'||route.request().postDataJSON().action!=='buyer_fund')return route.fallback();attempts.push(route.request().postDataJSON());return attempts.length===1?route.abort('failed'):route.fallback();});
