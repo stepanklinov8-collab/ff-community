@@ -10,6 +10,7 @@ export const playerTransferDraftSchema=z.object({
  if((value.buyerUserId===null)===(value.buyerOrganizationId===null))ctx.addIssue({code:"custom",message:"Выберите одного плательщика"});
  if(Date.parse(value.expiresAt)<Date.parse(value.newTerms.startsAt))ctx.addIssue({code:"custom",message:"Срок предложения должен включать начало нового договора"});
  if(value.newTerms.financial.rentalCompensations?.length)ctx.addIssue({code:"custom",message:"Основной договор перехода не является арендой"});
+ if(!value.newTerms.financial.transferCancellation)ctx.addIssue({code:"custom",path:["newTerms","financial","transferCancellation"],message:"Согласуйте возврат выплат при отмене перехода"});
  if(new Set(value.compensationOverrides.map(row=>row.contractId)).size!==value.compensationOverrides.length)ctx.addIssue({code:"custom",message:"Компенсация договора повторяется"});
 });
 export type PlayerTransferDraft=z.infer<typeof playerTransferDraftSchema>;

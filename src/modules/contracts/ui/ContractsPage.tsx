@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authFetch } from "@/platform/browser-services";
-import { contractTermsSchema, defaultTerms, defaultRentalTerms, toConstructorTerms, type ConstructorTerms, type Compensation, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
+import { contractTermsSchema, defaultTerms, defaultRentalTerms, toConstructorTerms, type ConstructorTerms, type ContractListItem, type ContractTerms, type ContractVersion } from "../model";
+import FeeInput from "./OrdinaryCompensationField";
 import FinancialTermsEditor, { FinancialTermsSummary } from "./FinancialTermsEditor";
 import ContractPayments from "./ContractPayments";
 import ContractFines from "./ContractFines";
@@ -25,26 +26,6 @@ const feeText = describeOrdinaryCompensation;
 function localDate(iso: string) {
   const date = new Date(iso);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-function FeeInput({ label, value, onChange, basis, allowCombined = true }: { label: string; value: Compensation; onChange: (value: Compensation) => void; basis: string; allowCombined?: boolean }) {
-  return <fieldset className="space-y-2"><legend className="text-sm font-semibold">{label}</legend>
-    <select aria-label={label} className={inputClass} value={value.kind} onChange={event => onChange(event.target.value === "none" ? { kind: "none" } : event.target.value === "fixed" ? { kind: "fixed", amount: 0 } : event.target.value === "combined" ? { kind: "combined", amount: 0, basisPoints: 0, selection: "maximum" } : { kind: "percent", basisPoints: 0 })}>
-      <option value="none">Без компенсации</option><option value="fixed">Фиксированная сумма</option><option value="percent">Процент {basis}</option>
-      {allowCombined && <option value="combined">Выбор из суммы и процента</option>}
-    </select>
-    {(value.kind === "fixed" || value.kind === "combined") && <label className="block text-sm">Сумма, OC
-      <input className={inputClass} type="number" min="0" max={1_000_000_000_000} step={1} value={value.amount}
-        onChange={event => onChange({ ...value, amount: Number(event.target.value) })} />
-    </label>}
-    {(value.kind === "percent" || value.kind === "combined") && <label className="block text-sm">Процент
-      <input className={inputClass} type="number" min="0" max={100} step={0.01} value={value.basisPoints / 100}
-        onChange={event => onChange({ ...value, basisPoints: Math.round(Number(event.target.value) * 100) })} />
-    </label>}
-    {value.kind === "combined" && <><label className="block text-sm">Как выбрать компенсацию
-      <select aria-label="Как выбрать компенсацию" className={inputClass} value={value.selection} onChange={event => onChange({ ...value, selection: event.target.value as "maximum" | "minimum" })}>
-        <option value="maximum">Большее значение</option><option value="minimum">Меньшее значение</option>
-      </select></label><p className="text-xs text-slate-300">{feeText(value, basis)}.</p></>}
-  </fieldset>;
 }
 export function TermsSummary({ terms }: { terms: ContractTerms }) {
   const tournamentLimit = terms.limit?.unit === "tournaments";

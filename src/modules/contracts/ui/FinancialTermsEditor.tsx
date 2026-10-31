@@ -7,6 +7,7 @@ import { financialTermsSchema, type FinancialTerms, type EventOverride } from ".
 import { describeTerminationCompensation, type TerminationCompensation } from "../termination-compensation";
 import { describeNoShowPenalty, type NoShowPenalty } from "../no-show-penalty";
 import {describeRentalCompensation} from "../rental-terms";
+import TransferCancellationEditor, { TransferCancellationSummary } from "./TransferCancellationEditor";
 
 const inputClass = "w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
 const money = (value: number) => `${value.toLocaleString("ru-RU")} OC`;
@@ -68,6 +69,7 @@ export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
     {value.rates.perTournament>0&&<p>Оплата целого турнира фиксируется до его начала и начисляется один раз после завершения всех действующих сессий. Участие в отборе тоже учитывается при выполнении правила участия.</p>}
     <p>{describeTerminationCompensation(value.overdueCompensation)}</p>
     <p>{describeNoShowPenalty(value.noShowPenalty ?? { kind: "none" })}</p>
+    <TransferCancellationSummary value={value.transferCancellation} />
     <p>При первоначальном подписании резервируются разовая оплата и первый период зарплаты. Продление не резервирует первоначальный бонус или оплату выкупа повторно. При долге договор продолжает действовать; погашение выбирает руководитель или владелец. Вывод организации при долге запрещён.</p>
     {value.rankingBonuses.map(row => <p key={row.id}>Бонус {money(row.amount)}: «{rankingLabels[row.ranking]}», топ-{row.top}, {rankingModes[row.mode].toLowerCase()}, {new Date(row.startsAt).toLocaleString("ru-RU")} — {new Date(row.endsAt).toLocaleString("ru-RU")}.</p>)}
     {value.rentalCompensations?.map(row=><p key={row.organizationId}><Link className="text-cyan-300 underline" href={`/teams/${row.organizationId}`}>Основная организация</Link>: {describeRentalCompensation(row.compensation)}</p>)}
@@ -110,6 +112,9 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
     <p className="text-sm text-slate-300">Оплата за целый турнир определяется условиями, подписанными до начала турнира, и начисляется один раз после завершения всех его действующих сессий. Изменения между этапами не заменяют эту сумму. Участие только в отборе учитывается при выполнении договорного правила участия.</p>
     <OverdueEditor value={value.overdueCompensation} onChange={overdueCompensation => onChange({ ...value, overdueCompensation })} />
     <NoShowEditor value={value.noShowPenalty ?? { kind: "none" }} onChange={noShowPenalty => onChange({ ...value, noShowPenalty })} />
+    <TransferCancellationEditor value={value.transferCancellation} onChange={transferCancellation => {
+      const next = { ...value }; if (transferCancellation) next.transferCancellation = transferCancellation; else delete next.transferCancellation; onChange(next);
+    }} />
     <fieldset className="space-y-3"><legend className="font-semibold">Бонусы за рейтинг своей организации</legend>
       <p className="text-sm text-slate-300">Условия фиксируются по подписанной редакции на начало периода. Договор должен непрерывно действовать до его конца; при более раннем завершении бонус не начисляется. Прошлые места без сохранённой истории не восстанавливаются из текущей таблицы.</p>
       {value.rankingBonuses.map((row, index) => {

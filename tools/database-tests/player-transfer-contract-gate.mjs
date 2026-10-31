@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {defaultTerms} from '../../src/modules/contracts/model.ts';
+import {emptyTransferCancellation} from '../../src/modules/contracts/transfer-cancellation.ts';
 export async function verifyPlayerTransferContractGate(db,id){
  const owner=id(91000),player=id(91001),employer=id(91002),oldOrg=id(91010),newOrg=id(91011),oldContract=id(91020),deal=id(91030),newContract=id(91031);
  for(const user of [owner,player,employer]){await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,'Contract gate '+user.slice(-4)]);}
@@ -9,11 +10,18 @@ export async function verifyPlayerTransferContractGate(db,id){
  await db.query("insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,'main',$4)",[oldContract,oldOrg,player,owner]);
  await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status,offered_at) values($1,1,$2::jsonb,$3,'offered',now()-interval '1 day')",[oldContract,JSON.stringify(oldTerms),owner]);
  await db.query("insert into contract_agreements(contract_id,revision,organization_signer,player_signer,ownership_revision,signed_at,effective_at) values($1,1,$2,$3,1,now()-interval '1 day',now()-interval '1 day')",[oldContract,owner,player]);
- const terms=defaultTerms();terms.financial.signingAmount=100;terms.financial.salary={amount:50,periodDays:7};
+ const terms=defaultTerms();terms.financial.signingAmount=100;terms.financial.salary={amount:50,periodDays:7};terms.financial.transferCancellation=emptyTransferCancellation();
  const quote=(await db.query('select player_transfer_quote($1,$2,300) value',[player,newOrg])).rows[0].value;
  await db.query("insert into market_deals(id,kind,player_id,organization_id,buyer_organization_id,created_by) values($1,'player',$2,$3,$3,$4)",[deal,player,newOrg,employer]);
  await db.query("insert into market_versions(deal_id,revision,price,expires_at,asset_revision,buyer_revision,seller_user_id,status,created_by,author_side,transfer_plan,new_terms,new_contract_id) values($1,1,300,now()+interval '7 days',1,1,$2,'offered',$3,'buyer',$4::jsonb,$5::jsonb,$6)",[deal,player,employer,JSON.stringify(quote),JSON.stringify(terms),newContract]);
  await db.query("insert into market_consents(deal_id,revision,party,signed_by) values($1,1,'seller',$2)",[deal,player]);
+ const withoutPolicy=structuredClone(terms);delete withoutPolicy.financial.transferCancellation;
+ const missingPolicyDeal=id(91032);
+ await db.query("insert into market_deals(id,kind,player_id,organization_id,buyer_organization_id,created_by) values($1,'player',$2,$3,$3,$4)",[missingPolicyDeal,player,newOrg,employer]);
+ await db.query("insert into market_versions(deal_id,revision,price,expires_at,asset_revision,buyer_revision,seller_user_id,status,created_by,author_side,transfer_plan,new_terms,new_contract_id) values($1,1,300,now()+interval '7 days',1,1,$2,'offered',$3,'buyer',$4::jsonb,$5::jsonb,$6)",[missingPolicyDeal,player,employer,JSON.stringify(quote),JSON.stringify(withoutPolicy),id(91033)]);
+ await db.query("insert into market_consents(deal_id,revision,party,signed_by) values($1,1,'seller',$2)",[missingPolicyDeal,player]);
+ await assert.rejects(()=>db.query('select player_transfer_prepare_contract($1,$2,1)',[employer,missingPolicyDeal]),/CONTRACT_TRANSFER_CANCELLATION_REQUIRED/);
+ assert.equal((await db.query('select count(*)::int n from organization_contracts where id=$1',[id(91033)])).rows[0].n,0,'missing signed consequences cannot create a receiving contract or reserve');
  const wallet=async(kind,ownerId,amount)=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'adjust',JSON.stringify({kind,ownerId,amount,reason:'Receiving organization start reserve test'})]);
  await wallet('player',employer,1000);await wallet('organization',newOrg,149);
  const prepare=()=>db.query('select player_transfer_prepare_contract($1,$2,1)',[employer,deal]);

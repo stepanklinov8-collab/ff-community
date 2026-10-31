@@ -66,6 +66,7 @@ const inspectionSql=`select
  to_regprocedure('public.market_lock_tree(uuid)') is not null as market_serialization_ready,
  to_regprocedure('public.player_transfer_quote(uuid,uuid,bigint,jsonb)') is not null as player_transfer_plan_ready,
  to_regprocedure('public.player_transfer_prepare_contract(uuid,uuid,integer)') is not null as player_transfer_contract_gate_ready,
+ to_regprocedure('public.contract_transfer_cancellation_quote(jsonb,text,jsonb)') is not null as transfer_cancellation_terms_ready,
  (select count(*)::int from teams) organizations,
  (select count(*)::int from team_members) members,
  (select coalesce(sum(balance),0)::text from coin_accounts) balances,
@@ -118,6 +119,7 @@ const migrations=[
  ['market_serialization_ready','202610310006_market_snapshot_serialization.sql'],
  ['player_transfer_plan_ready','202610310007_player_transfer_plan.sql'],
  ['player_transfer_contract_gate_ready','202610310008_player_transfer_contract_gate.sql'],
+ ['transfer_cancellation_terms_ready','202610310009_contract_transfer_cancellation_terms.sql'],
 ];
 const throughArg=process.argv.find(value=>value.startsWith('--through='))?.slice('--through='.length);
 if(throughArg&&!migrations.some(([,name])=>name===throughArg))throw new Error('Unknown staging migration checkpoint');

@@ -42,6 +42,7 @@ import {verifyContractRankingPayments} from './contract-ranking-payments.mjs';
 import {verifyOrganizationMarket} from './market-organizations.mjs';
 import {verifyPlayerTransferPlan} from './player-transfer-plan.mjs';
 import {verifyPlayerTransferContractGate} from './player-transfer-contract-gate.mjs';
+import {verifyContractTransferCancellation} from './contract-transfer-cancellation.mjs';
 import {verifyContractGuests} from './contract-guests.mjs';
 import {verifyPersonalAwards} from './personal-awards.mjs';
 import {verifyPrizeClosure} from './prize-closure.mjs';
@@ -97,7 +98,8 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--player-gate-only')){await verifyPlayerTransferContractGate(db,migrationId);}
+ if(process.argv.includes('--transfer-cancellation-only')){await verifyContractTransferCancellation(db,migrationId);await verifyPlayerTransferContractGate(db,migrationId);}
+ else if(process.argv.includes('--player-gate-only')){await verifyPlayerTransferContractGate(db,migrationId);}
  else if(process.argv.includes('--player-plan-only')){await verifyPlayerTransferPlan(db,migrationId);}
  else if(process.argv.includes('--market-only')){await verifyOrganizationMarket(db,migrationId);}
  else if(process.argv.includes('--rankings-only')){await verifyContractRankingPayments(db,migrationId);}
@@ -262,6 +264,7 @@ try {
  await verifyOrganizationMarket(db,id);
  await verifyPlayerTransferPlan(db,id);
  await verifyPlayerTransferContractGate(db,id);
+ await verifyContractTransferCancellation(db,id);
  await verifyContractGuests(db,id);
  await verifyPersonalAwards(db,id);
  await verifyPrizeClosure(db,id);

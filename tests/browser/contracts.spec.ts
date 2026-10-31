@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { defaultTerms,defaultRentalTerms } from "../../src/modules/contracts/model";
+import {emptyTransferCancellation} from "../../src/modules/contracts/transfer-cancellation";
 
 const userId = "00000000-0000-4000-8000-000000009700";
 const teamId = "00000000-0000-4000-8000-000000009701";
@@ -94,6 +95,39 @@ test("player reads the exact combined clauses before signing on mobile",async({p
   await expect(dialog.getByRole("button",{name:"Подписать эту редакцию"})).toBeEnabled();
   await dialog.screenshot({path:"tools/database-tests/artifacts/contracts/combined-signature-mobile.png"});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test("cancellation constructor independently records salary, prize, award and welcome returns by cause",async({page})=>{
+  const writes=await setup(page,[{...contract,status:"draft"}]);await page.goto("/contracts");
+  await page.getByRole("button",{name:"Изменить условия",exact:true}).click();
+  await page.getByLabel("Указать возврат выплат по причинам отмены",{exact:true}).check();
+  const cause=page.locator("details").filter({has:page.locator("summary",{hasText:"Нарушение со стороны игрока"})});
+  await cause.locator("summary").click();
+  const welcome=cause.getByRole("group",{name:"Приветственный бонус",exact:true});
+  await welcome.getByRole("combobox",{name:"Приветственный бонус",exact:true}).selectOption("combined");
+  await welcome.getByLabel("Сумма, OC",{exact:true}).fill("40");await welcome.getByLabel("Процент",{exact:true}).fill("50");
+  await welcome.getByLabel("Как выбрать компенсацию",{exact:true}).selectOption("maximum");
+  for(const [label,percent] of [["Зарплата","20"],["Доля призовых","30"]]){
+    const group=cause.getByRole("group",{name:label,exact:true});await group.getByRole("combobox",{name:label,exact:true}).selectOption("percent");
+    await group.getByLabel("Процент",{exact:true}).fill(percent);
+  }
+  const award=cause.getByRole("group",{name:"Личные денежные награды",exact:true});
+  await award.getByRole("combobox",{name:"Личные денежные награды",exact:true}).selectOption("fixed");await award.getByLabel("Сумма, OC",{exact:true}).fill("25");
+  await page.getByRole("button",{name:"Сохранить черновик",exact:true}).click();await expect(page.getByRole("status")).toContainText("Черновик сохранён");
+  expect(writes[0]).toMatchObject({terms:{financial:{transferCancellation:{player_fault:{signing:{kind:"combined",amount:40,basisPoints:5000,selection:"maximum"},salary:{kind:"percent",basisPoints:2000},prize:{kind:"percent",basisPoints:3000},personalAward:{kind:"fixed",amount:25}},mutual:{salary:{kind:"none"},prize:{kind:"none"}},hiring_organization_fault:{salary:{kind:"none"}}}}}});
+});
+
+test("player reads immutable cause-specific return terms before signing on mobile",async({page})=>{
+  const policy=emptyTransferCancellation();policy.player_fault.salary={kind:"percent",basisPoints:2000};policy.no_fault.personalAward={kind:"fixed",amount:25};
+  const writes=await setup(page,[{...contract,isPlayer:true,canEdit:false,canOffer:false,terms:{...contract.terms,financial:{...contract.terms.financial,transferCancellation:policy}}}]);
+  await page.setViewportSize({width:390,height:844});await page.goto("/contracts");await page.getByRole("button",{name:"Подписать и принять",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"Подтверждение договора"});
+  await expect(dialog).toContainText("Нарушение со стороны игрока");await expect(dialog).toContainText("Зарплата: возврат — 20% от фактически полученной суммы этого вида");
+  await expect(dialog).toContainText("Без нарушения сторон");await expect(dialog).toContainText("Личные денежные награды: возврат — 25 OC");
+  await expect(dialog).toContainText("прежний договор не восстанавливается");
+  await dialog.getByText("Выплаты при отмене завершённого перехода",{exact:true}).scrollIntoViewIfNeeded();
+  await dialog.screenshot({path:"tools/database-tests/artifacts/contracts/cancellation-signature-mobile.png"});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);expect(writes).toHaveLength(0);
 });
 
 test("a pending transfer contract cannot be signed or rejected outside its deal",async({page})=>{
