@@ -38,7 +38,9 @@ const inspectionSql=`select
  to_regprocedure('public.contract_freeze_before_roster_change()') is not null as freeze_guards_ready,
  to_regclass('public.contract_session_valuations') is not null
    and to_regprocedure('public.contract_no_show_cancel(uuid,uuid,uuid,text)') is not null as no_show_settlement_ready,
- coalesce(position('hasSignedHistory' in pg_get_functiondef(to_regprocedure('public.contract_query(uuid,jsonb)')))>0,false) as renewal_controls_ready,
+ exists(select 1 from pg_proc where pronamespace='public'::regnamespace
+   and proname in('contract_query','contract_query_before_transfer_contract')
+   and position('hasSignedHistory' in pg_get_functiondef(oid))>0) as renewal_controls_ready,
  to_regprocedure('public.contract_limit_progress(uuid,integer)') is not null as limit_constructor_ready,
  to_regclass('public.contract_limit_closures') is not null
    and to_regprocedure('public.contract_limit_finalize(uuid,integer)') is not null as limit_execution_ready,
@@ -135,6 +137,9 @@ if(!names.length){console.log('The staging schema is already installed');process
 const sources=await Promise.all(names.map(async name=>({name,sql:await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8')})));
 const body=sources.map(({sql})=>sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,'')).join('\n');
 const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+const attempt={project,startedAt:new Date().toISOString(),migrations:sources.map(({name,sql})=>({name,sha256:createHash('sha256').update(sql).digest('hex')})),before,rollbackVerified:false,status:'prepared'};
+const attemptPath=new URL(`staging-attempt-${stamp}.json`,artifactDir);
+await writeFile(attemptPath,JSON.stringify(attempt,null,2));
 const backupFunctions=[
  'is_organization_owner','set_initial_organization_owner','prevent_direct_organization_owner_change','can_manage_organization_contracts',
  'organization_owner_set_leader','organization_owner_set_contract_access','u6_coin_action','contract_query','contract_mutate','contract_validate_terms','contract_history',
@@ -153,12 +158,15 @@ await writeFile(new URL(`before-functions-${stamp}.json`,artifactDir),JSON.strin
 await query(`begin;set local lock_timeout='5s';set local statement_timeout='45s';${body}\nrollback;`);
 const rollback=(await query(inspectionSql,true))[0];
 if(JSON.stringify(rollback)!==JSON.stringify(before))throw new Error('Staging dry-run rollback changed the observed state');
+await writeFile(attemptPath,JSON.stringify({...attempt,status:'rollback-verified',rollbackVerified:true,rollback},null,2));
 await query(`begin;set local lock_timeout='5s';set local statement_timeout='45s';${body}\ncommit;`);
 await query("notify pgrst, 'reload schema';");
 const after=(await query(inspectionSql,true))[0];
+await writeFile(attemptPath,JSON.stringify({...attempt,status:'committed-awaiting-verification',rollbackVerified:true,rollback,after},null,2));
 if(selectedMigrations.some(([ready])=>!after[ready]))throw new Error('Staging schema verification failed');
 for(const key of ['organizations','members','balances','reserved','leaders_hash'])if(after[key]!==before[key])throw new Error(`Unexpected change to ${key}`);
 const owners=(await query('select count(*)::int n from teams where owner_team_id is null and ultimate_owner_user_id is distinct from owner_user_id',true))[0];
 if(owners.n!==0)throw new Error('Unexpected ultimate ownership backfill');
 await writeFile(new URL(`staging-applied-${stamp}.json`,artifactDir),JSON.stringify({project,appliedAt:new Date().toISOString(),migrations:sources.map(({name,sql})=>({name,sha256:createHash('sha256').update(sql).digest('hex')})),before,after,rollbackVerified:true},null,2));
+await writeFile(attemptPath,JSON.stringify({...attempt,status:'verified',rollbackVerified:true,rollback,after},null,2));
 console.log(JSON.stringify({project,applied:names,rollbackVerified:true,after,productionChanged:false}));

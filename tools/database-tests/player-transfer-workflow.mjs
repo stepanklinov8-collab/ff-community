@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import {defaultTerms} from '../../src/modules/contracts/model.ts';import {emptyTransferCancellation} from '../../src/modules/contracts/transfer-cancellation.ts';
-export async function verifyPlayerTransferWorkflow(db,id){
+export async function verifyPlayerTransferWorkflow(db,id,createUser=user=>db.query('insert into auth.users(id) values($1)',[user]),promoteAdmin=user=>db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[user])){
  const owner=id(94000),player=id(94001),employer=id(94002),outsider=id(94003),delegate=id(94004),oldOrg=id(94010),newOrg=id(94011),oldContract=id(94020),deal=id(94030);
- for(const user of [owner,player,employer,outsider,delegate]){await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,'Transfer workflow '+user.slice(-4)]);}
- await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);
- for(const [org,leader] of [[oldOrg,owner],[newOrg,employer]])await db.query("insert into teams(id,name,type,leader_id,verified) values($1,$2,'team',$3,true)",[org,'Transfer workflow '+org.slice(-4),leader]);
+ for(const user of [owner,player,employer,outsider,delegate]){await createUser(user);await db.query('insert into profiles(id,nickname) values($1,$2) on conflict(id) do update set nickname=excluded.nickname',[user,'Twf-'+user.slice(0,6)+'-'+user.slice(-4)]);}
+ await promoteAdmin(owner);
+ for(const [org,leader] of [[oldOrg,owner],[newOrg,employer]])await db.query("insert into teams(id,name,type,leader_id,verified) values($1,$2,'team',$3,true)",[org,'Transfer workflow '+org.slice(0,8)+' '+org.slice(-4),leader]);
  await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main')",[oldOrg,player]);
  await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'main')",[newOrg,delegate]);
  await db.query('insert into organization_contract_access(team_id,user_id,granted_by) values($1,$2,$3)',[newOrg,delegate,employer]);
@@ -59,7 +59,7 @@ export async function verifyPlayerTransferWorkflow(db,id){
  // A dated contract may reserve ahead of time, but cannot move the player
  // early. Cancelling must release both own holds and keep other reserves.
  const freePlayer=id(94005),futureDeal=id(94031);
- await db.query('insert into auth.users(id) values($1)',[freePlayer]);await db.query("insert into profiles(id,nickname) values($1,'Future transfer player')",[freePlayer]);
+ await createUser(freePlayer);await db.query('insert into profiles(id,nickname) values($1,$2) on conflict(id) do update set nickname=excluded.nickname',[freePlayer,'Tfuture-'+freePlayer.slice(0,8)]);
  await db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'adjust',JSON.stringify({kind:'organization',ownerId:newOrg,amount:350,reason:'Future contract cancellation holds'})]);
  await db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[employer,randomUUID(),'withdraw_request',JSON.stringify({teamId:newOrg,amount:50,note:'An unrelated protected organization withdrawal'})]);
  const futureTerms=defaultTerms(new Date(Date.now()+86400000));futureTerms.financial.signingAmount=100;futureTerms.financial.transferCancellation=emptyTransferCancellation();
