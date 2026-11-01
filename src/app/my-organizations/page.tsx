@@ -14,6 +14,8 @@ interface Organization {
   type: "team" | "guild";
   avatar_url: string | null;
   dissolved_at: string | null;
+  ultimate_owner_user_id: string | null;
+  isOwner: boolean;
 }
 
 export default function MyOrganizationsPage() {
@@ -36,16 +38,26 @@ export default function MyOrganizationsPage() {
         return;
       }
 
-      const { data, error } = await supabase.from("team_members")
-        .select("teams(id,name,type,avatar_url,dissolved_at)")
-        .eq("user_id", user.id).abortSignal(controller.signal);
-      if (error) throw error;
+      const [{ data, error }, { data: owned, error: ownerError }] = await Promise.all([
+        supabase.from("team_members")
+          .select("teams(id,name,type,avatar_url,dissolved_at,ultimate_owner_user_id)")
+          .eq("user_id", user.id).abortSignal(controller.signal),
+        supabase.from("teams")
+          .select("id,name,type,avatar_url,dissolved_at,ultimate_owner_user_id")
+          .eq("ultimate_owner_user_id", user.id).abortSignal(controller.signal),
+      ]);
+      if (error || ownerError) throw error ?? ownerError;
       if (controller.signal.aborted) return;
       const memberships = (data ?? []) as unknown as { teams: Organization | Organization[] | null }[];
-      const current = memberships.flatMap(row => {
+      const memberOrganizations = memberships.flatMap(row => {
         const organization = Array.isArray(row.teams) ? row.teams[0] : row.teams;
-        return organization && !organization.dissolved_at ? [organization] : [];
-      }).sort((left, right) => left.name.localeCompare(right.name, "ru"));
+        return organization && !organization.dissolved_at ? [{ ...organization, isOwner: organization.ultimate_owner_user_id === user.id }] : [];
+      });
+      const byId = new Map(memberOrganizations.map(organization => [organization.id, organization]));
+      for (const organization of (owned ?? []) as Omit<Organization, "isOwner">[]) {
+        if (!organization.dissolved_at) byId.set(organization.id, { ...organization, isOwner: true });
+      }
+      const current = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name, "ru"));
       setOrganizations(current);
       if (current.length === 1) {
         // Replace the chooser so Back does not send the user into a redirect loop.
@@ -89,7 +101,7 @@ export default function MyOrganizationsPage() {
               {organization.avatar_url ? <Image src={organization.avatar_url} alt="" fill sizes="96px" unoptimized className="object-contain" />
                 : <div className="grid h-full place-items-center text-xl font-bold text-cyan-300" aria-hidden="true">{organization.name.slice(0, 2).toUpperCase()}</div>}
             </div>
-            <div className="min-w-0 flex-1"><h2 className="break-words text-lg font-bold">{organization.name}</h2><p className="mt-1 text-sm text-slate-400">{t(organization.type === "guild" ? "common.guild" : "common.team")}</p></div>
+            <div className="min-w-0 flex-1"><h2 className="break-words text-lg font-bold">{organization.name}</h2><p className="mt-1 text-sm text-slate-400">{t(organization.type === "guild" ? "common.guild" : "common.team")}{organization.isOwner ? " · Владелец" : ""}</p></div>
             <ChevronRight className="h-5 w-5 shrink-0 text-cyan-300" aria-hidden="true" />
           </Link>
         </li>)}

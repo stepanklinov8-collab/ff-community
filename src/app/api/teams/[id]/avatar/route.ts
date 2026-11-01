@@ -14,7 +14,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const auth = await requireUser(request);
     const supabase = createAdminClient();
     const [{ data: team, error: teamError }, { data: membership, error: membershipError }] = await Promise.all([
-      supabase.from("teams").select("id, avatar_url").eq("id", id).maybeSingle(),
+      supabase.from("teams").select("id, avatar_url, ultimate_owner_user_id").eq("id", id).maybeSingle(),
       supabase.from("team_members").select("role_in_team").eq("team_id", id).eq("user_id", auth.user.id).maybeSingle(),
     ]);
     if (teamError) throw teamError;
@@ -23,6 +23,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const canManage = auth.roles.includes("moderator")
       || auth.roles.includes("admin") || auth.roles.includes("superadmin")
+      || team.ultimate_owner_user_id === auth.user.id
       || ["leader", "senior_deputy", "deputy"].includes(membership?.role_in_team ?? "");
     if (!canManage) throw new ApiAuthError("Недостаточно прав для изменения эмблемы", 403);
 

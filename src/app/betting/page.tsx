@@ -258,7 +258,7 @@ export default function BettingPage() {
           <h1 className="mt-2 text-3xl font-black">{t("betting.title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">{t("betting.description")}</p>
         </div>
-        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">{t("betting.balance")}</span><p className="text-2xl font-black text-amber-300">{formatCoins(data.balance, locale, "full")}</p></div>
+        <div className="cyber-card px-5 py-3"><span className="text-sm text-slate-400">Демо-баланс ставок</span><p className="text-2xl font-black text-amber-300">{formatCoins(data.balance, locale)}</p><p className="mt-2 max-w-sm text-xs text-slate-400">Демо-монеты нельзя переводить игрокам или выводить.</p></div>
       </div>
 
       {message && <p className="mb-4 rounded-xl border border-cyan-800/40 bg-cyan-950/20 p-3 text-sm">{message}</p>}

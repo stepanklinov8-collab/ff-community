@@ -4,16 +4,15 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 
 const source=resolve('../ff-update-2/tools/database-tests/artifacts');
-const output=resolve('tools/database-tests/artifacts/economy-release');
+const output=resolve('tools/database-tests/artifacts/release-backup',new Date().toISOString().replace(/[:.]/g,'-'));
 await mkdir(output,{recursive:true});
 const ref='ojtqdfdqicozzqlgjtnm';
 const token=(await readFile('C:/Users/Lenovo/.supabase/access-token','utf8')).trim();
 const loginResponse=await fetch(`https://api.supabase.com/v1/projects/${ref}/cli/login-role`,{
  method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
  body:JSON.stringify({read_only:false}),signal:AbortSignal.timeout(30000)});
-if(!loginResponse.ok)throw new Error(`Temporary read-only login failed: HTTP ${loginResponse.status}`);
+if(!loginResponse.ok)throw new Error(`Temporary backup login failed: HTTP ${loginResponse.status}`);
 const credentials={ref,...await loginResponse.json()};
-await writeFile(resolve(source,'backup-login-private.json'),JSON.stringify(credentials));
 if(credentials.ref!=='ojtqdfdqicozzqlgjtnm')throw new Error('Unexpected backup project');
 const archive=resolve(output,'database.dump');
 const poolResponse=await fetch(`https://api.supabase.com/v1/projects/${ref}/config/database/pooler`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});
@@ -36,4 +35,4 @@ if(data.length<1000)throw new Error('Backup archive is unexpectedly small');
 const sha256=createHash('sha256').update(data).digest('hex');
 await writeFile(resolve(output,'manifest.json'),JSON.stringify({sourceProject:credentials.ref,capturedAt:new Date().toISOString(),
  bytes:(await stat(archive)).size,sha256,format:'pg_dump custom archive'},null,2));
-console.log(JSON.stringify({fullBackup:true,bytes:data.length,sha256,diagnosticLength:stderr.length}));
+console.log(JSON.stringify({fullBackup:true,directory:output,bytes:data.length,sha256,diagnosticLength:stderr.length}));

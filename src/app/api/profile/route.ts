@@ -19,12 +19,12 @@ export async function GET(request: Request) {
   try {
     const { user } = await requireUser(request);
     const supabase = createAdminClient();
-    const [{ data, error }, { data: wallet }] = await Promise.all([supabase
+    const [{ data, error }, { data: wallet, error: walletError }, {data: demoWallet}] = await Promise.all([supabase
       .from("profiles")
       .select("id, nickname, avatar_url, game_id, bio, phone, contact_social_url, player_roles, locale, profile_level, reputation_score, reputation_events_count, main_rating, updated_at")
       .eq("id", user.id)
-      .maybeSingle(), supabase.from("site_wallets").select("balance").eq("user_id", user.id).maybeSingle()]);
-    if (error) throw error;
+      .maybeSingle(), supabase.from("coin_accounts").select("balance,reserved").eq("user_id", user.id).maybeSingle(), supabase.from("site_wallets").select("balance").eq("user_id",user.id).maybeSingle()]);
+    if (error || walletError) throw error ?? walletError;
     return Response.json({
       profile: {
         id: user.id,
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         reputation: Number(data?.reputation_score ?? 50),
         reputationEvents: data?.reputation_events_count ?? 0,
         rating: data?.main_rating == null ? null : Number(data.main_rating),
-        balance: wallet?.balance ?? 0,
+        balance: wallet?.balance ?? 0, reserved:wallet?.reserved??0, demoBalance:demoWallet?.balance??0,
       },
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

@@ -5,13 +5,13 @@ const user = { id: userId, aud: "authenticated", role: "authenticated", email: "
   app_metadata: {}, user_metadata: { nickname: "Игрок" }, created_at: "2026-01-01T00:00:00Z" };
 const token = [{ alg: "HS256", typ: "JWT" }, { sub: userId, exp: 4102444800 }, "test-only"]
   .map(value => Buffer.from(typeof value === "string" ? value : JSON.stringify(value)).toString("base64url")).join(".");
-interface Organization { id: string; name: string; type: "team" | "guild"; avatar_url: string | null; dissolved_at: string | null }
-const team: Organization = { id: "00000000-0000-4000-8000-000000009201", name: "Северная команда", type: "team", avatar_url: "/brand/omcite-emblem.jpg", dissolved_at: null };
-const guild: Organization = { id: "00000000-0000-4000-8000-000000009202", name: "Гильдия арены", type: "guild", avatar_url: null, dissolved_at: null };
+interface Organization { id: string; name: string; type: "team" | "guild"; avatar_url: string | null; dissolved_at: string | null; ultimate_owner_user_id: string | null }
+const team: Organization = { id: "00000000-0000-4000-8000-000000009201", name: "Северная команда", type: "team", avatar_url: "/brand/omcite-emblem.jpg", dissolved_at: null, ultimate_owner_user_id: null };
+const guild: Organization = { id: "00000000-0000-4000-8000-000000009202", name: "Гильдия арены", type: "guild", avatar_url: null, dissolved_at: null, ultimate_owner_user_id: null };
 type Membership = { teams: Organization | Organization[] | null };
 
 async function setup(page: Page, memberships: Membership[], authenticated = true) {
-  const state = { memberships, reject: false, queries: [] as URL[] };
+  const state = { memberships, owned: [] as Organization[], reject: false, queries: [] as URL[], ownerQueries: [] as URL[] };
   if (authenticated) {
     const value = "base64-" + Buffer.from(JSON.stringify({ access_token: token, refresh_token: "test", expires_at: 4102444800,
       expires_in: 86400, token_type: "bearer", user })).toString("base64url");
@@ -30,7 +30,11 @@ async function setup(page: Page, memberships: Membership[], authenticated = true
       // Returning nothing for an unscoped query also checks membership filtering.
       return rows(url.searchParams.get("user_id") === `eq.${userId}` ? state.memberships : []);
     }
-    if (url.pathname === "/rest/v1/teams") return rows([team, guild].filter(organization => `eq.${organization.id}` === url.searchParams.get("id")));
+    if (url.pathname === "/rest/v1/teams" && url.searchParams.has("ultimate_owner_user_id")) {
+      state.ownerQueries.push(url);
+      return rows(url.searchParams.get("ultimate_owner_user_id") === `eq.${userId}` ? state.owned : []);
+    }
+    if (url.pathname === "/rest/v1/teams") return rows([team, guild].filter(organization => !url.searchParams.has("id") || `eq.${organization.id}` === url.searchParams.get("id")));
     if (url.pathname === "/rest/v1/profiles") return rows([{ id: userId, nickname: "Игрок" }]);
     return rows([]);
   });
@@ -42,7 +46,7 @@ async function setup(page: Page, memberships: Membership[], authenticated = true
 async function openFromMenu(page: Page) {
   await page.goto("/privacy");
   await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
-  await page.locator(".site-drawer").getByRole("link", { name: "Твои организации", exact: true }).click();
+  await page.locator(".site-drawer").getByRole("link", { name: "Мои организации", exact: true }).click();
 }
 
 for (const organization of [team, guild]) {
@@ -61,7 +65,7 @@ test("members see their team and guild with usable mobile cards, excluding disso
   await page.setViewportSize({ width: 375, height: 812 });
   await openFromMenu(page);
   await expect(page).toHaveURL("/my-organizations");
-  await expect(page.getByRole("heading", { name: "Твои организации", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Мои организации", exact: true })).toBeVisible();
   const teamLink = page.getByRole("link", { name: `${team.name} Команда`, exact: true });
   const guildLink = page.getByRole("link", { name: `${guild.name} Гильдия`, exact: true });
   await expect(teamLink).toBeVisible();
@@ -70,10 +74,29 @@ test("members see their team and guild with usable mobile cards, excluding disso
   await expect(guildLink).toHaveAttribute("href", `/teams/${guild.id}`);
   await expect(page.getByText("Распущенная команда")).toHaveCount(0);
   expect(state.queries).toHaveLength(1);
+  expect(state.ownerQueries).toHaveLength(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "tools/database-tests/artifacts/my-organizations-mobile.png" });
   await teamLink.click();
   await expect(page).toHaveURL(`/teams/${team.id}`);
+});
+
+test("a sole off-roster owner is sent directly to the organization profile", async ({ page }) => {
+  const owned = { ...team, ultimate_owner_user_id: userId };
+  const state = await setup(page, []);
+  state.owned = [owned];
+  await openFromMenu(page);
+  await expect(page).toHaveURL(`/teams/${team.id}`);
+});
+
+test("ownership and membership are combined without duplicate organization cards", async ({ page }) => {
+  const owned = { ...team, ultimate_owner_user_id: userId };
+  const state = await setup(page, [{ teams: owned }, { teams: guild }]);
+  state.owned = [owned];
+  await page.goto("/my-organizations");
+  await expect(page.getByRole("link", { name: `${team.name} Команда · Владелец`, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(team.name) })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: `${guild.name} Гильдия`, exact: true })).toBeVisible();
 });
 
 test("a failed request can be retried without falsely showing an empty membership list", async ({ page }) => {
@@ -94,7 +117,7 @@ test("guests have no personal menu item and direct access redirects to sign in",
   await page.goto("/privacy");
   await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
   await expect(page.locator(".site-drawer").getByRole("link", { name: "Войти", exact: true })).toBeVisible();
-  await expect(page.locator(".site-drawer").getByRole("link", { name: "Твои организации", exact: true })).toHaveCount(0);
+  await expect(page.locator(".site-drawer").getByRole("link", { name: "Мои организации", exact: true })).toHaveCount(0);
   await page.goto("/my-organizations");
   await expect(page).toHaveURL("/auth");
   expect(state.queries).toHaveLength(0);

@@ -73,8 +73,8 @@ export async function loadSession(supabase:Database,sessionId:string,auth?:AuthC
 }
 export function publicResults(value:unknown) {
   if(!value || typeof value!=="object")return null;
-  const v=value as {rows:unknown;standings:unknown;mvps:unknown;rules?:Rules};
-  return {rows:v.rows,standings:v.standings,mvps:v.mvps,mode:v.rules?.mode,criterion:v.rules?.criterion};
+  const v=value as {rows:unknown;standings:unknown;mvps:unknown;rules?:Rules;prizes?:Array<{registrationId:string;amount:number}>};
+  return {rows:v.rows,standings:v.standings,mvps:v.mvps,prizes:v.prizes??[],mode:v.rules?.mode,criterion:v.rules?.criterion};
 }
 
 export async function legacySessionDraft(db:Database,sessionId:string,context:CompetitionContext){

@@ -17,6 +17,8 @@ export const sessionConfiguration=z.object({id:z.string().uuid().optional(),star
  .refine(s=>!s.registrationCloseTime||Date.parse(s.registrationCloseTime)<Date.parse(s.startTime),"Регистрация должна закрываться до начала")
  .refine(s=>!s.registrationOpenTime||!s.registrationCloseTime||Date.parse(s.registrationOpenTime)<Date.parse(s.registrationCloseTime),"Проверьте время регистрации");
 export const eventConfiguration=z.object({
+ personalPrizes:z.object({mvp:z.number().int().nonnegative().max(1_000_000_000_000),maxKills:z.number().int().nonnegative().max(1_000_000_000_000)}).strict().optional(),
+ prizePlan:z.array(z.number().int().nonnegative().max(1_000_000_000_000)).max(3).optional(),
  trainingSchedule:z.object({enabled:z.literal(true),startsOn:z.string().date()}).nullable().default(null),
  title:z.string().trim().min(2).max(160),type:z.enum(["training","bo","tournament","kv","solo"]),cost:z.number().int().min(0).max(10000000),
  organizer:z.string().trim().max(160),organizerUserId:z.string().uuid().nullable(),description:z.string().max(10000),rulesText:z.string().max(10000).default(""),
@@ -29,6 +31,7 @@ export const eventConfiguration=z.object({
  ratingEnabled:z.boolean().default(true),winsRequired:z.number().int().positive().default(1)}),
  sessions:z.array(sessionConfiguration).min(1),
 }).superRefine((value,ctx)=>{
+ if(value.personalPrizes&&(value.personalPrizes.mvp>0||value.personalPrizes.maxKills>0)&&!["training","tournament"].includes(value.type))ctx.addIssue({code:"custom",path:["personalPrizes"],message:"Личные денежные награды доступны тренировкам и турнирам"});
  if(value.trainingSchedule&&(value.type!=="training"||!value.sessions.some(s=>s.stage==="ordinary")))ctx.addIssue({code:"custom",message:"Автоматическое расписание доступно для тренировок с обычными сессиями"});
  const solo=value.rules.mode==="solo",round=["bo","kv"].includes(value.rules.mode);
  const ids=new Set<string>();

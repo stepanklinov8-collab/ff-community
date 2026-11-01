@@ -50,6 +50,26 @@ test('past event sessions are collapsed, load details only on expansion and pres
   await expect(page.locator(`[data-session-id="${past}"]`)).toBeVisible();
 });
 
+test('signed event guest is selectable without changing the permanent organization roster',async({page})=>{
+  await fixtures(page,true);
+  const teamId='00000000-0000-4000-8000-000000008010',memberId='00000000-0000-4000-8000-000000008011',guestId='00000000-0000-4000-8000-000000008012';
+  let submitted:Record<string,unknown>|null=null;
+  await page.route('http://127.0.0.1:54321/rest/v1/teams**',route=>route.fulfill({json:[{id:teamId,name:'Принимающая команда',type:'team',verified:true,ultimate_owner_user_id:userId,dissolved_at:null}]}));
+  await page.route('http://127.0.0.1:54321/rest/v1/team_members**',route=>{
+    expect(route.request().method()).toBe('GET');
+    return route.fulfill({json:new URL(route.request().url()).searchParams.has('team_id')?[{user_id:memberId,role_in_team:'main',position:'main'}]:[]});
+  });
+  await page.route('http://127.0.0.1:54321/rest/v1/profiles**',route=>route.fulfill({json:new URL(route.request().url()).searchParams.get('id')?.startsWith('in.')?[{id:memberId,nickname:'Постоянный участник'}]:{id:userId,nickname:'Владелец',locale:'ru'}}));
+  await page.route('http://127.0.0.1:54321/rest/v1/events**',route=>route.fulfill({json:{id:eventId,title:'Тренировка',type:'training',cost:0,organizer:'',organizer_user_id:userId,description:'',rules_text:'',image_url:'',stream_url:'',is_published:true,max_teams:15,show_registrations:true,min_players:1,roster_lock_minutes:10,comments_enabled:false}}));
+  await page.route('http://127.0.0.1:54321/rest/v1/rpc/contract_available_guests',route=>route.fulfill({json:route.request().postDataJSON().p_session===future?[{id:guestId,nickname:'Согласованный гость'}]:[]}));
+  await page.route('http://127.0.0.1:54321/rest/v1/rpc/register_team_for_session',route=>{submitted=route.request().postDataJSON();return route.fulfill({json:[{registration_id:guestId,registration_status:'confirmed'}]});});
+  await page.goto(`/tournaments/${eventId}`);
+  await page.getByRole('button',{name:/Выбрать состав/}).click();
+  await page.getByRole('checkbox',{name:'Согласованный гость (Гость)'}).check();
+  await page.getByRole('button',{name:'Записать команду',exact:true}).click();
+  await expect.poll(()=>submitted).toMatchObject({p_session_id:future,p_team_id:teamId,p_roster:[memberId,guestId]});
+});
+
 test('training template fills the two-week Moscow schedule and is included in the normal save',async({page})=>{
   await fixtures(page,true);
   let submitted:Record<string,unknown>|null=null;
@@ -63,6 +83,8 @@ test('training template fills the two-week Moscow schedule and is included in th
   });
   await page.goto('/tournaments/propose');
   await page.getByLabel('Название',{exact:true}).first().fill('Регулярная тренировка');
+  await page.getByLabel('MVP, 🪙',{exact:true}).fill('40');
+  await page.getByLabel('Максимум киллов, 🪙',{exact:true}).fill('10');
   await page.getByLabel('Автоматически добавлять сессии каждую неделю').check();
   await expect(page.getByRole('heading',{name:/^Сессия \d+$/})).toHaveCount(8);
   await expect(page.getByLabel('Начало',{exact:true}).first()).toHaveValue('2026-10-05T19:00');
@@ -72,6 +94,7 @@ test('training template fills the two-week Moscow schedule and is included in th
   await page.getByRole('button',{name:'Сохранить',exact:true}).click();
   await expect(page.getByRole('status')).toHaveText('Мероприятие сохранено');
   expect(submitted).toMatchObject({trainingSchedule:{enabled:true,startsOn:'2026-10-05'}});
+  expect(submitted).toMatchObject({personalPrizes:{mvp:40,maxKills:10}});
   expect((submitted as unknown as {sessions:unknown[]}).sessions).toHaveLength(8);
   const firstCycle=(submitted as unknown as {sessions:{groups:{games:{map:string}[]}[]}[]}).sessions.slice(0,5).flatMap(s=>s.groups[0].games.map(g=>g.map));
   expect(firstCycle).toHaveLength(15);

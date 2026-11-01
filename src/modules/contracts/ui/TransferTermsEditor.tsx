@@ -1,0 +1,25 @@
+"use client";
+import type {ConstructorTerms} from "../model";
+import FinancialTermsEditor from "./FinancialTermsEditor";
+import FeeInput from "./OrdinaryCompensationField";
+const inputClass="w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-white";
+function localDate(iso:string){const date=new Date(iso);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}
+export default function TransferTermsEditor({value,onChange,organizationId}:{value:ConstructorTerms;onChange:(value:ConstructorTerms)=>void;organizationId:string}){
+ const patch=(fields:Partial<ConstructorTerms>)=>onChange({...value,...fields});
+ return <section className="space-y-5" aria-label="Новый договор игрока">
+  <h3 className="text-lg font-semibold">Новый договор с принимающей организацией</h3>
+  <div className="grid gap-3 sm:grid-cols-2"><label>Начало нового договора<input required type="datetime-local" className={inputClass} value={localDate(value.startsAt)} onChange={e=>{if(e.target.value)patch({startsAt:new Date(e.target.value).toISOString()});}}/></label>
+   <label>Окончание нового договора<input type="datetime-local" className={inputClass} value={value.endsAt?localDate(value.endsAt):""} onChange={e=>patch({endsAt:e.target.value?new Date(e.target.value).toISOString():null})}/></label>
+   {([['trainingShareBps','Доля тренировок, %'],['tournamentShareBps','Доля турниров, %'],['personalShareBps','Доля личных наград, %']] as const).map(([key,label])=><label key={key}>{label}<input required type="number" className={inputClass} min="0" max="100" step="0.01" value={value[key]/100} onChange={e=>patch({[key]:Math.round(Number(e.target.value)*100)})}/></label>)}
+   <label>Участие для выплат<select className={inputClass} value={value.participation.mode} onChange={e=>patch({participation:e.target.value==='minimum'?{mode:'minimum',games:1}:{mode:e.target.value as 'any'|'proportional'}})}><option value="any">Любое фактическое участие</option><option value="proportional">Пропорционально играм</option><option value="minimum">Минимум игр в сессии</option></select></label>
+   {value.participation.mode==='minimum'&&<label>Минимум игр<input required className={inputClass} type="number" min="1" max="10000" value={value.participation.games} onChange={e=>patch({participation:{mode:'minimum',games:Number(e.target.value)}})}/></label>}
+   <label>Лимит выступлений<select className={inputClass} value={value.limit?.unit??'none'} onChange={e=>patch({limit:e.target.value==='none'?null:{unit:e.target.value as NonNullable<ConstructorTerms['limit']>['unit'],count:1,completion:'contract'}})}><option value="none">Без лимита</option><option value="sessions">Сессии</option><option value="trainings">Тренировки</option><option value="tournaments">Турниры целиком</option><option value="games">Игры — с завершением последней сессии</option></select></label>
+   {value.limit&&<><label>Число выступлений<input required className={inputClass} type="number" min="1" max="1000000" value={value.limit.count} onChange={e=>patch({limit:{...value.limit!,count:Number(e.target.value)}})}/></label><label>После лимита<select className={inputClass} value={value.limit.completion??'contract'} onChange={e=>patch({limit:{...value.limit!,completion:e.target.value as 'contract'|'event_payments'}})}><option value="contract">Завершить договор</option><option value="event_payments">Остановить оплату выступлений, сохранить срок и зарплату</option></select></label></>}
+  </div>
+  <div className="grid gap-4 sm:grid-cols-2"><FeeInput label="Компенсация за будущий переход" value={value.transfer} basis="от цены перехода" onChange={transfer=>patch({transfer})}/><FeeInput label="Штраф за выход" value={value.playerExit} basis="от стоимости игрока" onChange={playerExit=>patch({playerExit})}/><FeeInput label="Компенсация при увольнении" value={value.organizationTermination} basis="от стоимости игрока" onChange={organizationTermination=>patch({organizationTermination})}/></div>
+  <label className="flex gap-2"><input type="checkbox" checked={value.transferRequiresConsent} onChange={e=>patch({transferRequiresConsent:e.target.checked})}/>Будущий переход требует согласия организации</label>
+  <label>Выступления за другие коллективы<select className={inputClass} value={value.guestPolicy} onChange={e=>patch({guestPolicy:e.target.value as ConstructorTerms['guestPolicy'],...(e.target.value==='forbidden'?{guestCompensation:{kind:'none' as const}}:{})})}><option value="consent">По согласию организации</option><option value="allowed">Разрешены</option><option value="forbidden">Запрещены, исключение согласуется отдельно</option></select></label>
+  {value.guestPolicy!=='forbidden'&&<FeeInput label="Базовая компенсация за гостевое выступление" value={value.guestCompensation} basis="от выплаты игроку" allowCombined={false} onChange={guestCompensation=>patch({guestCompensation:guestCompensation as ConstructorTerms['guestCompensation']})}/>}
+  <FinancialTermsEditor value={value.financial} onChange={financial=>patch({financial})} startsAt={value.startsAt} endsAt={value.endsAt} organizationId={organizationId}/>
+ </section>;
+}

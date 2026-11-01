@@ -13,13 +13,16 @@ export async function GET(request: Request) {
   const supabaseAdmin = createAdminClient();
   const isAdmin = auth.roles.includes("moderator") || auth.roles.includes("admin") || auth.roles.includes("superadmin");
   if (!isAdmin) {
-    const { data: membership } = await supabaseAdmin
+    const [{ data: membership }, { data: organization }] = await Promise.all([
+      supabaseAdmin
       .from("team_members")
       .select("role_in_team")
       .eq("team_id", teamId)
       .eq("user_id", auth.user.id)
-      .maybeSingle();
-    if (!membership) {
+      .maybeSingle(),
+      supabaseAdmin.from("teams").select("ultimate_owner_user_id").eq("id", teamId).maybeSingle(),
+    ]);
+    if (!membership && organization?.ultimate_owner_user_id !== auth.user.id) {
       return Response.json({ error: "Недостаточно прав" }, { status: 403 });
     }
   }

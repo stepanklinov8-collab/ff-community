@@ -1,0 +1,111 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {defaultTerms} from '../../src/modules/contracts/model.ts';
+
+export async function verifyContractObligations(db,id){
+ const owner=id(9210),leader=id(9211),player=id(9212),delegate=id(9213),outsider=id(9214),team=id(9220),contract=id(9230);
+ for(const [i,user] of [owner,leader,player,delegate,outsider].entries()){
+  await db.query('insert into auth.users(id) values($1)',[user]);
+  await db.query('insert into profiles(id,nickname) values($1,$2)',[user,`Obligations ${i}`]);
+ }
+ await db.query("insert into user_roles(user_id,role) values($1,'superadmin')",[owner]);
+ await db.query("insert into teams(id,name,type,leader_id) values($1,'Obligation organization','team',$2)",[team,owner]);
+ await db.query("insert into team_members(team_id,user_id,role_in_team) values($1,$2,'leader'),($1,$3,'main'),($1,$4,'main')",[team,leader,player,delegate]);
+ await db.query('update teams set leader_id=$2 where id=$1',[team,leader]);
+ await db.query('insert into organization_contract_access(team_id,user_id,granted_by) values($1,$2,$3)',[team,delegate,owner]);
+ await db.query("insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,'main',$4)",[contract,team,player,owner]);
+ const terms=defaultTerms(new Date('2026-01-01T00:00:00Z'));
+ await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status) values($1,1,$2::jsonb,$3,'offered'),($1,2,$2::jsonb,$3,'offered')",[contract,JSON.stringify(terms),owner]);
+ const wallet=async(action,input,actor=owner,key=randomUUID())=>(await db.query('select u6_coin_action($1,$2,$3,$4::jsonb) value',[actor,key,action,JSON.stringify(input)])).rows[0].value;
+ const balance=async()=>(await db.query('select balance::int,reserved::int from coin_accounts where team_id=$1',[team])).rows[0];
+ const obligation=async(key)=>(await db.query('select amount::int,paid::int,held::int,due_at from contract_obligations where id=$1',[key])).rows[0];
+ const create=async(kind,source,amount,reserve=true,due='2020-01-01T00:00:00Z',revision=1)=>(await db.query('select contract_obligation_create($1,$2,$3,$4,$5,$6,$7) value',[contract,revision,kind,source,amount,due,reserve])).rows[0].value;
+ const pay=async(obligationId,amount,actor=owner,key=randomUUID())=>(await db.query('select contract_debt_pay($1,$2,$3,$4) value',[actor,key,obligationId,amount])).rows[0].value;
+ const debt=async()=>(await db.query('select contract_has_debt($1) value',[team])).rows[0].value;
+ const query=async(actor,offset=0)=>(await db.query('select contract_obligation_query($1,$2,$3) value',[actor,contract,offset])).rows[0].value;
+ await assert.rejects(()=>query(player),/CONTRACT_NOT_FOUND/,'player cannot read a private draft');
+ await db.query('update organization_contract_versions set offered_at=now() where contract_id=$1',[contract]);
+ await wallet('adjust',{kind:'organization',ownerId:team,amount:1200,reason:'Test funds'});
+ const initialBalance=await balance();
+ await db.exec('begin');
+ const temporary=await create('signing','initial',300);
+ await assert.rejects(()=>create('salary','first',1000),/CONTRACT_FUNDS/);
+ await db.exec('rollback');
+ assert.deepEqual(await balance(),initialBalance,'failed aggregate initial reserve rolls back first reservation');
+ assert.equal((await db.query('select count(*)::int n from contract_obligations where id=$1',[temporary])).rows[0].n,0);
+ await wallet('adjust',{kind:'organization',ownerId:team,amount:100,reason:'Cover both obligations'});
+ const signing=await create('signing','initial',300),salary=await create('salary','first',1000);
+ assert.equal((await query(player)).obligations.length,2);
+ assert.equal((await query(player)).canPay,false);
+ assert.equal((await query(delegate)).canPay,false);
+ assert.equal((await query(owner)).canPay,true);
+ await assert.rejects(()=>query(outsider),/CONTRACT_NOT_FOUND/);
+ await assert.rejects(()=>query(owner,-1),/CONTRACT_INPUT/);
+ assert.deepEqual(await balance(),{balance:1300,reserved:1300});
+ assert.equal(await create('signing','initial',900,true,'2030-01-01T00:00:00Z',2),signing,'renewal never changes or repeats original signing bonus');
+ assert.equal((await obligation(signing)).amount,300);
+ await assert.rejects(()=>create('signing','renewal',300),/CONTRACT_INPUT/);
+ await assert.rejects(()=>create('salary','first',1001),/CONTRACT_OBLIGATION_CONFLICT/);
+ await assert.rejects(()=>pay(signing,300,delegate),/CONTRACT_FINANCE/);
+ await assert.rejects(()=>pay(signing,300,player),/CONTRACT_FINANCE/);
+ await assert.rejects(()=>pay(signing,300,outsider),/CONTRACT_FINANCE/);
+ const key=randomUUID(),firstPay=await pay(signing,100,leader,key);
+ assert.deepEqual(await pay(signing,100,leader,key),firstPay);
+ await assert.rejects(()=>pay(signing,101,leader,key),/CONTRACT_CONFLICT/);
+ assert.equal((await obligation(signing)).paid,100);
+ assert.equal((await obligation(signing)).held,200);
+ assert.equal(await create('signing','initial',999,true,'2031-01-01T00:00:00Z',2),signing,'partially paid initial bonus survives renewal unchanged');
+ await pay(signing,200);
+ await assert.rejects(()=>pay(signing,1),/CONTRACT_PAYMENT_AMOUNT/);
+ const paymentKey=randomUUID();
+ await pay(salary,1000,leader,paymentKey);
+ assert.deepEqual(await balance(),{balance:0,reserved:0});
+ assert.equal((await db.query('select balance::int from coin_accounts where user_id=$1',[player])).rows[0].balance,1300);
+ assert.equal(await debt(),false);
+ // A formerly authorized leader cannot replay payment details after losing access.
+ await db.query('update teams set leader_id=$2 where id=$1',[team,owner]);
+ await assert.rejects(()=>pay(salary,1000,leader,paymentKey),/CONTRACT_FINANCE/);
+ await db.query('update teams set leader_id=$2 where id=$1',[team,leader]);
+ const due=(await db.query("select now()-interval '1 day' value")).rows[0].value;
+ const future=(await db.query("select now()+interval '1 day' value")).rows[0].value;
+ const futureSalary=await create('salary','next-period',100,false,future);
+ assert.equal(await debt(),false,'unfunded future obligation is not overdue early');
+ await assert.rejects(()=>pay(futureSalary,1),/CONTRACT_NOT_DUE/);
+ await wallet('adjust',{kind:'organization',ownerId:team,amount:500,reason:'Withdrawal before debt'});
+ const withdrawal=await wallet('withdraw_request',{teamId:team,amount:100,note:'Test payment details'},owner);
+ const oldDebt=await create('salary','debt-a',600,false,due);
+ const secondDebt=await create('mvp','debt-b',450,false,due);
+ assert.equal(await debt(),true);
+ await assert.rejects(()=>wallet('withdraw_request',{teamId:team,amount:1,note:'Blocked'},owner),/CONTRACT_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet('withdraw_paid',{withdrawalId:withdrawal.operationId,reason:'Blocked while debt'},owner),/CONTRACT_DEBT_WITHDRAWAL/);
+ await wallet('withdraw_cancel',{withdrawalId:withdrawal.operationId},owner);
+ assert.equal((await obligation(oldDebt)).paid,0,'no automatic allocation on unrelated wallet actions');
+ await pay(secondDebt,450);
+ assert.equal((await obligation(oldDebt)).paid,0,'owner may choose a newer debt, no FIFO enforced');
+ await assert.rejects(()=>pay(oldDebt,51),/CONTRACT_FUNDS/);
+ await pay(oldDebt,50);
+ const originalDue=(await obligation(oldDebt)).due_at;
+ assert.equal(new Date(originalDue).getTime(),new Date(due).getTime(),'partial payment preserves original deadline');
+ await wallet('adjust',{kind:'organization',ownerId:team,amount:1000,reason:'Funding does not automatically pay debt'});
+ assert.equal((await obligation(oldDebt)).paid,50);
+ const reserved=await create('ranking','protected-reserve',900,true,future);
+ await assert.rejects(()=>pay(oldDebt,101),/CONTRACT_FUNDS/,'cannot consume another obligation reserve');
+ await pay(oldDebt,100);
+ assert.equal((await obligation(reserved)).held,900);
+ await wallet('adjust',{kind:'organization',ownerId:team,amount:-800,reason:'Reserve funding shortfall'});
+ await assert.rejects(()=>pay(oldDebt,1),/CONTRACT_FUNDS/);
+ assert.equal((await obligation(oldDebt)).paid,150);
+ assert.equal(await debt(),true);
+ await db.exec('set role service_role');
+ try {
+  await assert.rejects(()=>db.query('select contract_obligation_create($1,1,$2,$3,1,now(),true)',[contract,'signing','initial']),/permission denied/);
+  await assert.rejects(()=>db.query('select contract_obligation_pay(null,$1,$2,1,true)',[randomUUID(),oldDebt]),/permission denied/);
+  await assert.rejects(()=>db.query('update contract_obligations set paid=amount'),/permission denied/);
+ }finally{await db.exec('reset role');}
+ await db.exec('set role authenticated');
+ try { await assert.rejects(()=>db.query('select contract_debt_pay($1,$2,$3,1)',[owner,randomUUID(),oldDebt]),/permission denied/); }
+ finally{await db.exec('reset role');}
+ await assert.rejects(()=>db.query("update contract_obligations set due_at=now() where id=$1",[oldDebt]),/CONTRACT_IMMUTABLE/);
+ assert.equal((await db.query('select count(*)::int n from coin_operations where action=$1 and input->>$2=$3',['contract_payment','obligationId',signing])).rows[0].n,2,'one partial and one final payment, no renewal/retry duplicates');
+ console.log('PASS: contract reserves, aggregate rollback, one-time signing bonus across renewals, partial/idempotent manual payments, current financial ACL, debt deadlines, protected reserves and withdrawal debt guard');
+}

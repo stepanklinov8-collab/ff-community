@@ -1,4 +1,5 @@
 export const modules = [
+  { id: "contracts", href: "/contracts", title: { ru: "Контракты и сделки", kk: "Келісімшарттар мен мәмілелер", ky: "Келишимдер жана бүтүмдөр" } },
   { id: "chat", href: "/chat", title: { ru: "Чат", kk: "Чат", ky: "Чат" } },
   { id: "foundation-demo", href: "/extensions/foundation-demo", title: { ru: "Пример раздела", kk: "Бөлім үлгісі", ky: "Бөлүм үлгүсү" } },
 ] as const;

@@ -310,6 +310,7 @@ export default function AdminPage() {
 
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Виртуальные ставки</h2>
+        <Link href="/admin/wallet" className="inline-block rounded bg-cyan-700 px-4 py-2 mr-3">Балансы и выплаты</Link>
         <Link href="/admin/betting" className="inline-block rounded bg-amber-600 px-4 py-2 hover:bg-amber-700">Рынки и коэффициенты</Link>
       </div>
 

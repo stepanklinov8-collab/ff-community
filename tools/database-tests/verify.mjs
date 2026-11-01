@@ -1,3 +1,4 @@
+import {verifyMainCoins} from './main-coins.mjs';
 import {verifyEconomySnapshot} from './economy-snapshot.mjs';
 import {verifyReserveQueue} from './reserve-queue.mjs';
 import {verifyEconomyValues} from './economy-values.mjs';
@@ -17,11 +18,51 @@ import {verifyRegistrations} from './registrations.mjs';
 import {verifyTrainingSchedule} from './training-schedule.mjs';
 import {verifyChat} from './chat.mjs';
 import {verifyLeaveOrganization} from './leave-organization.mjs';
+import {verifyOrganizationOwnership} from './organization-ownership.mjs';
+import {verifyOrganizationHierarchy} from './organization-hierarchy.mjs';
+import {verifyContractProposals} from './contracts.mjs';
+import {verifyContractPrizeAllocation} from './contract-prize-allocation.mjs';
+import {verifyContractObligations} from './contract-obligations.mjs';
+import {verifyContractSalary} from './contract-salary.mjs';
+import {verifyContractFinancialStart} from './contract-financial-start.mjs';
+import {verifyContractSessionTerms} from './contract-session-terms.mjs';
+import {verifyContractPaymentReturns} from './contract-payment-returns.mjs';
+import {verifyContractAcceptance} from './contract-acceptance.mjs';
+import {verifyContractRuntimeHooks} from './contract-runtime-hooks.mjs';
+import {verifyContractNoShowSettlement} from './contract-no-show-settlement.mjs';
+import {verifyContractLimitProgress} from './contract-limit-progress.mjs';
+import {verifyContractLimitExecution} from './contract-limit-execution.mjs';
+import {verifyContractTournamentCompletion} from './contract-tournament-completion.mjs';
+import {verifyOrganizationWalletTransfers} from './organization-wallet-transfers.mjs';
+import {verifyContractTournamentPayments} from './contract-tournament-payments.mjs';
+import {verifyContractTournamentLimits} from './contract-tournament-limits.mjs';
+import {verifyContractPrizeSettlement} from './contract-prize-settlement.mjs';
+import {verifyContractTermination} from './contract-termination.mjs';
+import {verifyContractRankingPayments} from './contract-ranking-payments.mjs';
+import {verifyOrganizationMarket} from './market-organizations.mjs';
+import {verifyPlayerTransferPlan} from './player-transfer-plan.mjs';
+import {verifyPlayerTransferContractGate} from './player-transfer-contract-gate.mjs';
+import {verifyContractTransferCancellation} from './contract-transfer-cancellation.mjs';
+import {verifyPlayerTransferExecution} from './player-transfer-execution.mjs';
+import {verifyPlayerTransferReversal} from './player-transfer-reversal.mjs';
+import {verifyPlayerTransferReversalWorkflow} from './player-transfer-reversal-workflow.mjs';
+import {verifyPlayerTransferWorkflow} from './player-transfer-workflow.mjs';
+import {verifyPlayerReturnReconciliation} from './player-return-reconciliation.mjs';
+import {verifyContractGuests} from './contract-guests.mjs';
+import {verifyPersonalAwards} from './personal-awards.mjs';
+import {verifyPrizeClosure} from './prize-closure.mjs';
+import {verifyRentalPayments} from './rental-payments.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
 const db=new PGlite();
+let verificationCompleted=false;
+process.on('exit',()=>{if(!verificationCompleted){console.error('FAILED: SQL verification ended before all selected scenarios completed');process.exitCode=1;}});
 try {
  await db.exec(await readFile(new URL('./baseline.sql',import.meta.url),'utf8'));
  await installChatRealtimeFixture(db);
+ // Baseline predates this legacy RPC. Install its real definition so guest
+ // admission exercises both initial registration and the existing roster edit.
+ const rosterEdit=(await readFile(new URL('../../supabase/migrations/202609060004_registration_reentry_roster_edit.sql',import.meta.url),'utf8')).replaceAll('\r\n','\n');
+ await db.exec(rosterEdit.slice(rosterEdit.indexOf('create or replace function public.update_team_registration_roster('),rosterEdit.lastIndexOf('commit;')));
  const dynamic=await readFile(new URL('../../supabase/migrations/202609060005_dynamic_betting.sql',import.meta.url),'utf8');
  await db.exec(dynamic.slice(dynamic.indexOf('create table if not exists public.betting_sources'),dynamic.indexOf('create or replace function public.place_dynamic_site_bet_for(')));
 
@@ -46,12 +87,39 @@ try {
  }
 
  // baseline.sql already represents the pre-update schema; replay only update 2 and later migrations.
+ const migrationId=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  for(const name of (await readdir(new URL('../../supabase/migrations/',import.meta.url))).filter(n=>/^\d{12}_.+\.sql$/.test(n)&&n>='202609220001').sort()){
+  if(name==='202610290005_organization_ownership.sql'){
+   const legacyLeader=migrationId(9951),legacyTeam=migrationId(9952);
+   await db.query(`insert into auth.users(id) values($1)`,[legacyLeader]);
+   await db.query(`insert into public.profiles(id,nickname) values($1,'Legacy leader')`,[legacyLeader]);
+   await db.query(`insert into public.teams(id,name,type,leader_id) values($1,'Backfill organization','team',$2)`,[legacyTeam,legacyLeader]);
+   await db.query(`insert into public.team_members(team_id,user_id,role_in_team) values($1,$2,'leader')`,[legacyTeam,legacyLeader]);
+  }
   const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}
+  if(name==='202610290005_organization_ownership.sql'){
+   const legacyOwner=(await db.query(`select owner_user_id from public.teams where id=$1`,[migrationId(9952)])).rows[0].owner_user_id;
+   assert.equal(legacyOwner,migrationId(9951),'existing organizations must preserve their leader as initial owner');
+   assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
+  }
  }
- if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
+ if(process.argv.includes('--player-reversal-workflow-only')){await verifyPlayerTransferReversalWorkflow(db,migrationId);}
+ else if(process.argv.includes('--player-reversal-only')){await verifyPlayerTransferExecution(db,migrationId);await verifyPlayerTransferReversal(db,migrationId);}
+ else if(process.argv.includes('--player-returns-only')){await verifyPlayerReturnReconciliation(db,migrationId);}
+ else if(process.argv.includes('--player-workflow-only')){await verifyPlayerTransferWorkflow(db,migrationId);}
+ else if(process.argv.includes('--player-execution-only')){await verifyPlayerTransferExecution(db,migrationId);}
+ else if(process.argv.includes('--transfer-cancellation-only')){await verifyContractTransferCancellation(db,migrationId);await verifyPlayerTransferContractGate(db,migrationId);}
+ else if(process.argv.includes('--player-gate-only')){await verifyPlayerTransferContractGate(db,migrationId);}
+ else if(process.argv.includes('--player-plan-only')){await verifyPlayerTransferPlan(db,migrationId);}
+ else if(process.argv.includes('--market-only')){await verifyOrganizationMarket(db,migrationId);}
+ else if(process.argv.includes('--rankings-only')){await verifyContractRankingPayments(db,migrationId);}
+ else if(process.argv.includes('--rentals-only')){await verifyRentalPayments(db,migrationId);}
+ else if(process.argv.includes('--prize-closure-only')){await verifyPrizeClosure(db,migrationId);}
+ else if(process.argv.includes('--personal-awards-only')){await verifyPersonalAwards(db,migrationId);await verifyPrizeClosure(db,migrationId);}
+ else if(process.argv.includes('--guests-only')){await verifyContractGuests(db,migrationId);}
+ else if(process.argv.includes('--production-snapshot')){await verifyEconomySnapshot(db);}else{
  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  await db.query(`insert into auth.users(id) values($1),($2),($3)`,[id(1),id(2),id(3)]);
  await db.query(`insert into public.user_roles values($1,'admin')`,[id(1)]);
@@ -77,7 +145,7 @@ try {
  assert.equal((await db.query(`select count(*)::integer n from public.competition_sanctions where target_id=$1`,[id(2)])).rows[0].n,1);
  console.log('PASS: fixed warning cycle, immediate reputation restoration and no reused warnings');
  const future=new Date(Date.now()+86400000).toISOString(),endFuture=new Date(Date.now()+90000000).toISOString();
- const config={title:'Test event',type:'tournament',cost:0,organizer:'Admin',organizerUserId:id(1),description:'',rulesText:'',streamUrl:'',paymentUrl:'',imageUrl:'',
+ const config={prizePlan:[],title:'Test event',type:'tournament',cost:0,organizer:'Admin',organizerUserId:id(1),description:'',rulesText:'',streamUrl:'',paymentUrl:'',imageUrl:'',
  maxTeams:1024,minPlayers:1,publishAt:null,commentsEnabled:true,allowIndividualRegistration:false,finalSessionId:null,
  rules:{mode:'tournament',criterion:'points',placePoints:[12,9,8,7,6,5,4,3,2,1],killPoints:1,bonuses:{},nominations:['points'],ratingEnabled:true,winsRequired:1},
  sessions:[{id:id(101),startTime:future,endTime:endFuture,registrationOpenTime:null,registrationCloseTime:null,maxTeams:1024,responsibleUserId:id(3),description:'',stage:'ordinary',sourceSessionId:null,qualification:{},reminderMinutes:[60],groups:[{id:id(102),name:'A',capacity:12,games:[{id:id(103),map:'bermuda'},{id:id(104),map:'kalahari'}]}]}]};
@@ -183,6 +251,43 @@ try {
  await verifyEconomyValues(db,id,config);
  await verifyReserveQueue(db,id,config);
  await verifyChat(db,id);
+ await verifyMainCoins(db,id,config);
+ await verifyOrganizationOwnership(db,id);
+ await verifyOrganizationHierarchy(db,id);
+ await verifyContractProposals(db,id);
+ await verifyContractPrizeAllocation(db,id);
+ await verifyContractObligations(db,id);
+ await verifyContractSalary(db,id);
+ await verifyContractFinancialStart(db,id);
+ await verifyContractSessionTerms(db,id);
+ await verifyContractPaymentReturns(db,id);
+ await verifyContractAcceptance(db,id);
+ await verifyContractRuntimeHooks(db,id);
+ await verifyContractNoShowSettlement(db,id);
+ await verifyContractLimitProgress(db,id);
+ await verifyContractLimitExecution(db,id);
+ await verifyContractTournamentCompletion(db,id);
+ await verifyOrganizationWalletTransfers(db,id);
+ await verifyContractTournamentPayments(db,id);
+ await verifyContractTournamentLimits(db,id);
+ await verifyContractPrizeSettlement(db,id);
+ await verifyContractTermination(db,id);
+ await verifyContractRankingPayments(db,id);
+ await verifyOrganizationMarket(db,id);
+ await verifyPlayerTransferPlan(db,id);
+ await verifyPlayerTransferContractGate(db,id);
+ await verifyContractTransferCancellation(db,id);
+ await verifyPlayerTransferExecution(db,id);
+ await verifyPlayerTransferReversal(db,id);
+ await verifyPlayerTransferReversalWorkflow(db,id);
+ await verifyPlayerTransferWorkflow(db,id);
+ await verifyPlayerReturnReconciliation(db,id);
+ await verifyContractGuests(db,id);
+ await verifyPersonalAwards(db,id);
+ await verifyPrizeClosure(db,id);
+ await verifyRentalPayments(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}
+verificationCompleted=true;
+if(!process.exitCode)console.log('PASS: every selected SQL scenario completed');

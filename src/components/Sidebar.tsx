@@ -108,6 +108,7 @@ export default function Sidebar() {
     { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
     { href:"/appeals", label:competitionText(locale,"appeals"), icon:ShieldCheck, auth:true },
     { href:"/organizer", label:competitionText(locale,"organizer"), icon:Trophy, auth:true },
+    { href: "/wallet", label: "Кошелёк", icon: UserRound, auth: true },
     { href: "/profile", label: t("profile"), icon: UserRound, auth: true },
     { href: "/support", label: "Поддержка", icon: Contact },
     { href: "/install", label: t("installShortcut"), icon: Smartphone },
