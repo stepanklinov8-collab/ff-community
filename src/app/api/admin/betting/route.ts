@@ -1,4 +1,4 @@
-import { SITE_CURRENCY_NAME } from "@/lib/economy/currency";
+import { BET_CURRENCY_NAME } from "@/lib/betting-currency";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse, requireAdmin, requireSuperadmin } from "@/utils/supabase/server-auth";
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
       events: (events ?? []).map((event) => ({ ...event, sessions: sessions.filter(session=>session.event_id===event.id)
         .map(session=>({...session,results_published:publishedSessions.has(session.id)})) })),
       wars: wars ?? [],
-      settings: settings ? { ...settings, currency_name: SITE_CURRENCY_NAME } : null,
+      settings: settings ? { ...settings, currency_name: BET_CURRENCY_NAME } : null,
       isOwner: auth.roles.includes("superadmin"),
     });
   } catch (error) {
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
 
     if (payload.action === "settings") {
       const { error } = await supabase.from("economy_settings").update({
-        currency_name: SITE_CURRENCY_NAME,
+        currency_name: BET_CURRENCY_NAME,
         starting_balance: payload.startingBalance,
         minimum_stake: payload.minimumStake,
         maximum_stake: payload.maximumStake,
