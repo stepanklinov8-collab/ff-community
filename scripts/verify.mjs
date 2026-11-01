@@ -13,6 +13,7 @@ await run(["--test","--test-concurrency=1",...domainFiles.map(name=>'tests/'+nam
 await run(["node_modules/eslint/bin/eslint.js", "."]);
 await run(["--test", "tools/database-tests/domain.test.mjs"]);
 await run(["tools/database-tests/analytics.mjs"]);
+await run(["tools/database-tests/event-counts.mjs"]);
 await run(["tools/database-tests/verify.mjs"]);
 await run(["node_modules/next/dist/bin/next", "build"]);
 console.log("PASS: full local verification (isolated databases only)");

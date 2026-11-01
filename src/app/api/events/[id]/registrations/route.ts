@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { ApiAuthError, authErrorResponse, requireUser, type AuthContext } from "@/utils/supabase/server-auth";
 import {allRows} from "@/lib/competition/server";
+import {z} from "zod";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -26,11 +27,14 @@ function parseRoster(rosterJson: unknown, legacyRoster: unknown) {
 export async function GET(request: Request, context: RouteContext) {
   try {
     const { id: eventId } = await context.params;
+    z.string().uuid().parse(eventId);
+    const sessionId=new URL(request.url).searchParams.get("sessionId");
+    if(sessionId)z.string().uuid().parse(sessionId);
     const auth = await optionalAuth(request);
     const supabase = createAdminClient();
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, show_registrations, organizer_user_id,is_published,moderation_status,max_teams")
+      .select("id, show_registrations, organizer_user_id,is_published,publish_at,moderation_status,max_teams")
       .eq("id", eventId)
       .single();
     if (eventError) throw eventError;
@@ -44,25 +48,26 @@ export async function GET(request: Request, context: RouteContext) {
     );
     const {data: assignedSessions} = auth ? await supabase.from("event_sessions").select("id").eq("event_id",eventId).eq("responsible_user_id",auth.user.id) : {data: []};
     const assignedIds = new Set((assignedSessions ?? []).map(row => row.id));
-    if ((!event.is_published || event.moderation_status !== "approved") && !isPrivileged && !assignedIds.size) return Response.json({error:"Мероприятие не найдено"},{status:404});
-    const { data: memberships } = auth
-      ? await supabase.from("team_members").select("team_id").eq("user_id", auth.user.id)
-      : { data: [] };
-    const ownTeamIds = new Set((memberships ?? []).map((row) => row.team_id));
+    if (((!event.is_published&&(!event.publish_at||Date.parse(event.publish_at)>Date.now())) || event.moderation_status !== "approved") && !isPrivileged && !assignedIds.size) return Response.json({error:"Мероприятие не найдено"},{status:404});
+    const [{data:memberships,error:membershipError},{data:owned,error:ownedError}]=auth?await Promise.all([
+      supabase.from("team_members").select("team_id").eq("user_id",auth.user.id),
+      supabase.from("teams").select("id").eq("ultimate_owner_user_id",auth.user.id).is("dissolved_at",null),
+    ]):[{data:[],error:null},{data:[],error:null}];
+    if(membershipError||ownedError)throw membershipError??ownedError;
+    const ownTeamIds = new Set([...(memberships??[]).map(row=>row.team_id),...(owned??[]).map(row=>row.id)]);
 
-    const rows = await allRows((a,b)=>supabase
+    const [rows,countsResponse] = await Promise.all([allRows((a,b)=>{
+      let query=supabase
       .from("event_registrations")
       .select("id, session_id, team_id, participant_user_id, status, is_winner, created_at, roster, roster_json, roster_snapshot, name_snapshot, team_name_override")
       .eq("event_id", eventId)
-      .order("created_at", { ascending: true }).order("id").range(a,b));
-
-    const sessions = await allRows((a, b) => supabase
-      .from("event_sessions")
-      .select("id, max_teams")
-      .eq("event_id", eventId)
-      .order("id")
-      .range(a, b));
-    const activeCounts = new Map<string, number>();
+      .order("created_at", { ascending: true }).order("id");
+      if(sessionId)query=query.eq("session_id",sessionId);
+      return query.range(a,b);
+    }),supabase.rpc("u5_event_registration_counts",{p_event:eventId})]);
+    if(countsResponse.error)throw countsResponse.error;
+    const registrationCounts=(countsResponse.data??[]).map((row:{session_id:string;registered:number;waiting:number;capacity:number|null})=>({...row,registered:Number(row.registered),waiting:Number(row.waiting)}));
+    if(sessionId&&!registrationCounts.some((row:{session_id:string})=>row.session_id===sessionId))return Response.json({error:"Сессия не найдена в этом мероприятии"},{status:404});
     const waitingCounts = new Map<string, number>();
     const queuePositions = new Map<string, number>();
     for (const row of rows ?? []) {
@@ -70,16 +75,7 @@ export async function GET(request: Request, context: RouteContext) {
         const position=(waitingCounts.get(row.session_id)??0)+1;
         waitingCounts.set(row.session_id,position);queuePositions.set(row.id,position);
       }
-      if (row.session_id && row.status === "confirmed") {
-        activeCounts.set(row.session_id, (activeCounts.get(row.session_id) ?? 0) + 1);
-      }
     }
-    const registrationCounts = (sessions ?? []).map((session) => ({
-      session_id: session.id,
-      registered: activeCounts.get(session.id) ?? 0,
-      waiting: waitingCounts.get(session.id) ?? 0,
-      capacity: session.max_teams ?? event.max_teams ?? null,
-    }));
 
     const visibleRows = event.show_registrations || isPrivileged
       ? rows ?? []
@@ -137,8 +133,9 @@ export async function GET(request: Request, context: RouteContext) {
       registrations,
       registrationCounts,
       visibility: event.show_registrations ? "public" : isPrivileged ? "privileged" : "own",
-    });
+    },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
+    if(error instanceof z.ZodError)return Response.json({error:"Проверьте мероприятие и сессию"},{status:400});
     if (error instanceof ApiAuthError) return authErrorResponse(error);
     return authErrorResponse(error);
   }

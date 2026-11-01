@@ -45,7 +45,7 @@ test('reserve number remains visible to an ordinary member when the event partic
   const rows:Record<string,unknown>={events:{id:event,title:'Резерв тренировки',type:'training',cost:0,organizer_user_id:id(88),description:'',is_published:true,max_teams:12,show_registrations:false,min_players:4,roster_lock_minutes:10,comments_enabled:false},event_sessions_public:[{id:session,start_time:'2026-10-29T16:00:00Z',end_time:'2026-10-29T17:00:00Z',registration_open_time:'2026-10-29T07:00:00Z',registration_close_time:'2026-10-29T15:59:00Z',max_teams:12}],profiles:{id:player,nickname:'Участник',locale:'ru'},user_roles:[],team_members:[]};
   return route.fulfill({json:rows[table??'']??[]});
  });
- await page.route(`**/api/events/${event}/registrations`,route=>route.fulfill({json:{registrations:[{id:reg,session_id:session,team_id:team,participant_user_id:null,status:'waiting',queue_position:3,is_own:true,team_name:'Север',roster:[],roster_players:[]}],registrationCounts:[{session_id:session,registered:12,waiting:3,capacity:12}],visibility:'own'}}));
+ await page.route(`**/api/events/${event}/registrations*`,route=>{expect(new URL(route.request().url()).searchParams.get('sessionId')).toBe(session);return route.fulfill({json:{registrations:[{id:reg,session_id:session,team_id:team,participant_user_id:null,status:'waiting',queue_position:3,is_own:true,team_name:'Север',roster:[],roster_players:[]}],registrationCounts:[{session_id:session,registered:12,waiting:3,capacity:12}],visibility:'own'}});});
  await page.goto(`/tournaments/${event}`);
  await expect(page.getByRole('heading',{name:'Резерв тренировки',exact:true})).toBeVisible();
  await expect(page.getByRole('status').filter({hasText:'Север: запас №3'})).toBeVisible();

@@ -153,7 +153,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
             {upcomingEvents.length === 0 ? (
               <div className="empty-state"><CalendarDays /><p>{t("home.scheduleEmpty")}</p></div>
             ) : upcomingEvents.map((event) => (
-              <Link key={event.sessionId} href={`/tournaments/${event.eventId}`} className="event-row">
+              <Link key={event.sessionId} href={`/tournaments/${event.eventId}?sessionId=${event.sessionId}`} className="event-row">
                 <div className="event-date">
                   <strong>{formatDate(event.startTime, { day: "2-digit", timeZone })}</strong>
                   <span>{formatDate(event.startTime, { month: "short", timeZone })}</span>

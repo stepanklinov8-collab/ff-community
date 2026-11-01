@@ -1124,6 +1124,14 @@ body.knowledge-garena-mode .app-main {
 }
 
 .drawer-nav-group { display: grid; gap: 4px; }
+.drawer-menu-section { display: grid; gap: 4px; min-width: 0; }
+.drawer-menu-title { margin: 14px 12px 5px; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8da4b4; }
+.competition-table-scroll { max-width: 100%; overflow-x: auto; isolation: isolate; border: 1px solid #213747; border-radius: 12px; background: #08151c; }
+.competition-table { min-width: 590px; border-collapse: separate; border-spacing: 0; }
+.competition-table th, .competition-table td { padding: 12px; }
+.competition-table th { color: #a9c2d1; font-weight: 700; }
+.competition-table .competition-place { position: sticky; left: 0; width: 64px; min-width: 64px; max-width: 64px; z-index: 2; background: #08151c; text-align: center; }
+.competition-table .competition-name { position: sticky; left: 64px; min-width: 150px; max-width: 220px; z-index: 2; background: #08151c; text-align: left; box-shadow: 5px 0 8px -8px #71b8dd; }
 
 .drawer-subnav {
   display: grid;

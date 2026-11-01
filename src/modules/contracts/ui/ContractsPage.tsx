@@ -79,6 +79,9 @@ export default function ContractsPage() {
   const [accepting, setAccepting] = useState<(ContractListItem & { terms: ConstructorTerms }) | null>(null);
   const [guestReady, setGuestReady] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [editorStep,setEditorStep]=useState(0),[allConditions,setAllConditions]=useState(false);
+  const formRef=useRef<HTMLFormElement>(null);
+  const stepNames=["Стороны","Срок","Выплаты","Ограничения","Проверка"];
   const pendingOperation = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [search, setSearch] = useState(""), [choices, setChoices] = useState<Choice[]>([]);
   const [searchKind, setSearchKind] = useState<"players" | "events">("players");
@@ -149,6 +152,7 @@ export default function ContractsPage() {
       <Link href="/transfers" className="ml-4 text-cyan-300 hover:underline">Переходы игроков</Link>
       {organizations.length > 0 && !editor && <button className="primary-button ml-3" type="button" onClick={() => {
         setError(""); setNotice(""); setChoices([]); setSearch("");
+        setEditorStep(0);setAllConditions(false);
         setEditor({ id: crypto.randomUUID(), revision: 0, organizationId: selectedOrganization ?? organizations[0].id, playerId: "", playerName: "", kind: "main", eventId: null, eventTitle: "", sessionId: null, terms: defaultTerms() });
       }}>Создать договор</button>}
     </section>
@@ -156,7 +160,7 @@ export default function ContractsPage() {
     {notice && <p role="status" className="cyber-card p-4 text-cyan-200">{notice}</p>}
     <GuestApprovals />
     <RentalIncoming />
-    {editor && terms && <form className="cyber-card space-y-6 p-5" onSubmit={event => {
+    {editor && terms && <form ref={formRef} noValidate className="cyber-card space-y-6 p-5" onSubmit={event => {
       event.preventDefault();
       const parsed = contractTermsSchema.safeParse(terms);
       if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
@@ -164,6 +168,9 @@ export default function ContractsPage() {
       void mutate({ action: "save", contractId: editor.id, expectedRevision: editor.revision, organizationId: editor.organizationId, playerId: editor.playerId, kind: editor.kind, eventId: editor.eventId, sessionId: editor.sessionId, terms: parsed.data });
     }}>
       <h2 className="text-xl font-bold">{editor.revision ? `Новая версия договора №${editor.revision + 1}` : "Новый договор"}</h2>
+      <nav aria-label="Шаги договора" className="flex flex-wrap gap-2">{stepNames.map((title,index)=><button type="button" key={title} aria-current={!allConditions&&editorStep===index?"step":undefined} className={editorStep===index&&!allConditions?"primary-button":"secondary-button"} onClick={()=>{setEditorStep(index);setAllConditions(false);}}>{index+1}. {title}</button>)}</nav>
+      <button className="text-sm text-cyan-300 underline" type="button" onClick={()=>setAllConditions(value=>!value)}>{allConditions?"Вернуться к шагам":"Показать все условия"}</button>
+      <section data-contract-step="0" hidden={!allConditions&&editorStep!==0} className="space-y-4"><h3 className="text-lg font-semibold">Стороны договора</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Организация<select required disabled={editor.revision > 0} className={inputClass} value={editor.organizationId} onChange={event => { setEditor({ ...editor, organizationId: event.target.value, playerId: "", playerName: "" }); setChoices([]); }}>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>
         <label>Вид договора<select disabled={editor.revision > 0} className={inputClass} value={editor.kind} onChange={event => {const defaults=event.target.value==="guest"?defaultRentalTerms():defaultTerms();setEditor({ ...editor, kind: event.target.value as Editor["kind"], eventId: null, sessionId: null, eventTitle: "",terms:{...editor.terms,trainingShareBps:defaults.trainingShareBps,tournamentShareBps:defaults.tournamentShareBps,personalShareBps:defaults.personalShareBps,financial:{...editor.terms.financial,rentalCompensations:[]}} });}}><option value="main">Основной</option><option value="guest">Аренда / гостевое выступление</option></select></label>
@@ -182,6 +189,8 @@ export default function ContractsPage() {
         </>}
         {editor.kind === "guest" && editor.eventId && <GuestScopeEditor key={editor.eventId} eventId={editor.eventId} sessionId={editor.sessionId} disabled={editor.revision > 0} onScope={(sessionId, endsAt) => setEditor(current => current ? { ...current, sessionId, terms: { ...current.terms, endsAt } } : null)} />}
       </div>
+      </section>
+      <section data-contract-step="1" hidden={!allConditions&&editorStep!==1} className="space-y-4">
       <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-3 font-semibold">Срок</legend>
         <label>Начало<input type="datetime-local" required className={inputClass} value={localDate(terms.startsAt)} onChange={event => { if (event.target.value) updateTerms({ startsAt: new Date(event.target.value).toISOString() }); }} /></label>
         <label>Окончание (пусто — бессрочно)<input type="datetime-local" className={inputClass} value={terms.endsAt ? localDate(terms.endsAt) : ""} onChange={event => updateTerms({ endsAt: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
@@ -190,6 +199,8 @@ export default function ContractsPage() {
           <label>После достижения лимита<select className={inputClass} value={terms.limit.completion ?? "contract"} onChange={event => updateTerms({ limit: { ...terms.limit!, completion: event.target.value as "contract" | "event_payments" } })}><option value="contract">Закончить договор и начисление зарплаты</option><option value="event_payments">Закончить оплату выступлений, сохранить договор и зарплату до срока</option></select></label>
           <p className="text-sm text-slate-300 sm:col-span-2">{terms.limit.unit === "tournaments" ? "Один турнир расходует одну единицу после завершения всех этапов. Участие только в отборе засчитывается при выполнении правила участия. Договор и ставка за целый турнир фиксируются до его начала; продление между этапами не меняет эти условия. Если договор заканчивается по лимиту, зарплата рассчитывается до окончания всего турнира." : "Неявка не расходует лимит. Последняя сессия оплачивается полностью, даже если её игры превышают остаток. Если договор заканчивается по лимиту, зарплата рассчитывается до окончания последней сессии."} Полная неявка не расходует лимит. При продлении новый лимит считается заново.</p></>}
       </fieldset>
+      </section>
+      <section data-contract-step="2" hidden={!allConditions&&editorStep!==2} className="space-y-4">
       <fieldset className="grid gap-4 sm:grid-cols-3"><legend className="mb-3 font-semibold">Доля игрока от призовых</legend>
         {([['trainingShareBps', 'Тренировка, %'], ['tournamentShareBps', 'Турнир, %'], ['personalShareBps', 'Личная награда, %']] as const).map(([key, label]) => <label key={key}>{label}<input required className={inputClass} type="number" min="0" max="100" step="0.01" value={terms[key] / 100} onChange={event => updateTerms({ [key]: Math.round(Number(event.target.value) * 100) })} /></label>)}
       </fieldset>
@@ -198,6 +209,8 @@ export default function ContractsPage() {
         {terms.participation.mode === "minimum" && <label>Минимум игр<input className={inputClass} type="number" min="1" max="10000" value={terms.participation.games} onChange={event => updateTerms({ participation: { mode: "minimum", games: Number(event.target.value) } })} /></label>}
         {terms.participation.mode === "minimum" && <p className="text-sm text-slate-300">Если минимум не выполнен, выплаты за эту сессию не начисляются, включая оплату игр и бонусы за киллы/MVP. Зарплата по времени действия договора рассчитывается отдельно. Штраф за полную неявку задаётся ниже.</p>}
       </div>
+      </section>
+      <section data-contract-step="3" hidden={!allConditions&&editorStep!==3} className="space-y-4">
       <div className="grid gap-6 sm:grid-cols-2">
         <FeeInput label="Компенсация при переходе" value={terms.transfer} basis="от цены перехода" onChange={transfer => updateTerms({ transfer })} />
         <FeeInput label="Штраф за выход игрока" value={terms.playerExit} basis="от стоимости игрока" onChange={playerExit => updateTerms({ playerExit })} />
@@ -207,8 +220,20 @@ export default function ContractsPage() {
         {terms.guestPolicy !== "forbidden" && <FeeInput label="Компенсация основной организации за гостя" value={terms.guestCompensation} basis="от выплаты игроку" allowCombined={false} onChange={guestCompensation => { if (guestCompensation.kind !== "combined") updateTerms({ guestCompensation }); }} />}
       </div>
       {editor.kind==="guest"&&editor.playerId&&editor.eventId&&<RentalConditionsEditor key={`${editor.organizationId}:${editor.playerId}:${editor.eventId}:${editor.sessionId}`} organizationId={editor.organizationId} playerId={editor.playerId} eventId={editor.eventId} sessionId={editor.sessionId} value={terms.financial.rentalCompensations??[]} onChange={rentalCompensations=>updateTerms({financial:{...terms.financial,rentalCompensations}})}/>}
-      <FinancialTermsEditor key={editor.organizationId} value={terms.financial} onChange={financial => updateTerms({ financial })} startsAt={terms.startsAt} endsAt={terms.endsAt} organizationId={editor.organizationId} />
-      <div className="rounded border border-cyan-700 p-4"><h3 className="mb-3 font-semibold">Проверьте условия перед сохранением</h3><TermsSummary terms={terms} /></div>
+      </section>
+      <FinancialTermsEditor section={allConditions?"all":editorStep===2?"payments":editorStep===3?"restrictions":"none"} key={editor.organizationId} value={terms.financial} onChange={financial => updateTerms({ financial })} startsAt={terms.startsAt} endsAt={terms.endsAt} organizationId={editor.organizationId} />
+      <section data-contract-step="4" hidden={!allConditions&&editorStep!==4} className="space-y-4 rounded border border-cyan-700 p-4"><h3 className="font-semibold">Проверьте условия перед сохранением</h3>
+        <p><strong>{organizations.find(org=>org.id===editor.organizationId)?.name}</strong> → <strong>{editor.playerName||"Игрок не выбран"}</strong></p>
+        <p>При первом заключении: разовая выплата {number(terms.financial.signingAmount)} OC{terms.financial.salary?` и резерв зарплаты первого периода до ${number(terms.financial.salary.amount)} OC`:"; зарплата не предусмотрена"}. При продлении разовая выплата не повторяется; точный резерв зарплаты определяется с учётом уже оплаченного периода и срока договора при подписании.</p>
+        <p>Доля призовых и условные бонусы зависят от результатов. Арендные расчёты — по отдельным указанным условиям. Сохранение черновика не резервирует и не списывает монеты.</p>
+        <TermsSummary terms={terms}/>
+      </section>
+      {!allConditions&&<div className="flex flex-wrap gap-3">{editorStep>0&&<button type="button" className="secondary-button" onClick={()=>setEditorStep(value=>value-1)}>Назад</button>}{editorStep<4&&<button type="button" className="primary-button" onClick={()=>{
+        if(editorStep===0&&(!editor.playerId||(editor.kind==="guest"&&!editor.eventId))){setError("Выберите стороны договора и мероприятие для гостевого выступления");return;}
+        const fields=formRef.current?.querySelectorAll<HTMLInputElement|HTMLSelectElement>(`[data-contract-step="${editorStep}"] input, [data-contract-step="${editorStep}"] select`);
+        for(const field of fields??[]){if(!field.checkValidity()){field.reportValidity();return;}}
+        setError("");setEditorStep(value=>value+1);
+      }}>Далее</button>}</div>}
       <div className="flex flex-wrap gap-3"><button type="submit" disabled={busy} className="primary-button">{busy ? "Сохранение…" : "Сохранить черновик"}</button><button type="button" disabled={busy} className="secondary-button" onClick={() => setConfirmClose(true)}>Закрыть</button></div>
       {confirmClose && <div className="space-y-3 rounded border border-amber-600 p-4"><p>Закрыть форму без сохранения изменений?</p><div className="flex flex-wrap gap-3"><button type="button" className="secondary-button" onClick={() => { setEditor(null); setConfirmClose(false); }}>Да, закрыть</button><button type="button" className="secondary-button" onClick={() => setConfirmClose(false)}>Продолжить заполнение</button></div></div>}
     </form>}
@@ -218,7 +243,7 @@ export default function ContractsPage() {
       {contract.status === "completed" && contract.effectiveEndsAt && <p className="text-sm text-cyan-200">Договор завершён {new Date(contract.effectiveEndsAt).toLocaleString("ru-RU")}. Исправление старых результатов автоматически его не возобновляет.</p>}
       {contract.hasSignedHistory && ["draft", "offered"].includes(contract.status) && <p className="text-sm text-cyan-200">Это новая редакция существующего договора. Для её действия нужны подписи обеих сторон. Первоначальный бонус и цена выкупа повторно не начисляются.</p>}
       <div className="flex flex-wrap gap-3">
-        {contract.canEdit && ["draft", "offered", "rejected", "signed", "completed"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : contract.status === "signed" ? "Продление сохраняется новой редакцией того же договора. Текущие подписанные условия действуют до принятия новой редакции." : contract.status === "completed" ? "Прежний договор завершён. Продление оформляется новой редакцией с подписями обеих сторон." : ""); }}>{["signed", "completed"].includes(contract.status) ? "Изменить или продлить" : "Изменить условия"}</button>}
+        {contract.canEdit && ["draft", "offered", "rejected", "signed", "completed"].includes(contract.status) && <button type="button" disabled={busy || !!editor} className="secondary-button" onClick={() => { setEditorStep(0);setAllConditions(false);setEditor({ id: contract.id, revision: contract.revision, organizationId: contract.organizationId, playerId: contract.playerId, playerName: contract.playerName, kind: contract.kind, eventId: contract.eventId, eventTitle: contract.eventTitle ?? "", sessionId: contract.sessionId, terms: toConstructorTerms(contract.terms) }); setChoices([]); setNotice("note" in contract.terms ? "Старые пояснения остаются в истории. Для новой версии задайте все условия полями конструктора." : contract.status === "signed" ? "Продление сохраняется новой редакцией того же договора. Текущие подписанные условия действуют до принятия новой редакции." : contract.status === "completed" ? "Прежний договор завершён. Продление оформляется новой редакцией с подписями обеих сторон." : ""); }}>{["signed", "completed"].includes(contract.status) ? "Изменить или продлить" : "Изменить условия"}</button>}
         {contract.canOffer && contract.status === "draft" && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => void mutate({ action: "offer", contractId: contract.id, revision: contract.revision })}>Направить игроку</button>}
         {contract.canEdit && ["draft", "offered"].includes(contract.status) && <button type="button" disabled={busy} className="secondary-button" onClick={() => void mutate({ action: "cancel", contractId: contract.id, revision: contract.revision })}>Отозвать</button>}
         {contract.isPlayer && contract.status === "offered" && !contract.transferPending && "schemaVersion" in contract.terms && <button type="button" disabled={busy} className="primary-button" onClick={() => { setGuestReady(contract.kind === "main"); setAccepting({ ...contract, terms: contract.terms as ConstructorTerms }); }}>Подписать и принять</button>}

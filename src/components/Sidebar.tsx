@@ -32,7 +32,8 @@ import { authFetch } from "@/utils/api/auth-fetch";
 import { localeNames, locales } from "@/i18n/messages";
 import {competitionText} from "@/i18n/competition";
 import { useLanguage } from "@/components/LanguageProvider";
-import ModuleNavigation from "@/components/ModuleNavigation";
+import ModuleNavigation,{useNavigationModules} from "@/components/ModuleNavigation";
+import {getBrowserUser} from "@/utils/supabase/browser-identity";
 import { knowledgeSections } from "@/lib/knowledge/navigation";
 
 export default function Sidebar() {
@@ -45,13 +46,19 @@ export default function Sidebar() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { locale, setLocale, t } = useLanguage();
+  const moduleItems=useNavigationModules(user?.id,open);
 
   useEffect(() => {
     let active = true;
+    let loadingUser=false,queued=false,identityVersion=0;
 
     async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      if (!active) return;
+      if(loadingUser){queued=true;return;}
+      loadingUser=true;
+      const version=identityVersion;
+      try {
+      const { data,error } = await getBrowserUser();
+      if (!active||version!==identityVersion||error) return;
       setUser(data.user);
 
       if (data.user) {
@@ -59,12 +66,11 @@ export default function Sidebar() {
         if (!window.localStorage.getItem("omcite-locale") && locales.includes(profileLocale)) {
           setLocale(profileLocale, false);
         }
-        const response = await authFetch("/api/admin/capabilities");
-        const capabilities = response.ok ? await response.json() as { canOpenAdmin?: boolean } : null;
-        if (active) setIsAdmin(Boolean(capabilities?.canOpenAdmin));
-        const { data: profile } = await supabase.from("profiles").select("nickname").eq("id", data.user.id).maybeSingle();
-        if (active) setProfileNickname(profile?.nickname ?? null);
+        const [response,{data:profile}]=await Promise.all([authFetch("/api/admin/capabilities"),supabase.from("profiles").select("nickname").eq("id",data.user.id).maybeSingle()]);
+        const capabilities=response.ok?await response.json() as {canOpenAdmin?:boolean}:null;
+        if(active&&version===identityVersion){setIsAdmin(Boolean(capabilities?.canOpenAdmin));setProfileNickname(profile?.nickname??null);}
       }
+      }finally{loadingUser=false;if(active&&queued){queued=false;void loadUser().catch(()=>undefined);}}
     }
 
     void loadUser().catch(() => undefined);
@@ -74,9 +80,10 @@ export default function Sidebar() {
     };
     window.addEventListener("omcite-profile-updated", profileUpdated);
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if(["SIGNED_IN","SIGNED_OUT","USER_UPDATED"].includes(_event)){identityVersion++;setIsAdmin(false);setProfileNickname(null);}
       setUser(session?.user ?? null);
       if (!session?.user) { setIsAdmin(false); setProfileNickname(null); }
-      if (session?.user) void loadUser().catch(() => undefined);
+      if (session?.user&&["SIGNED_IN","USER_UPDATED"].includes(_event)) void loadUser().catch(() => undefined);
     });
 
     return () => {
@@ -104,7 +111,7 @@ export default function Sidebar() {
     { href: "/bloggers", label: t("bloggers"), icon: UserRound },
     { href: "/betting", label: t("betting"), icon: Trophy },
     { href: "/knowledge", label: t("knowledge"), icon: BookOpen },
-    { href: "/messages", label: t("messages"), icon: Mail, auth: true },
+    { href: "/messages", label: locale==="ru"?"Входящие сообщения":t("messages"), icon: Mail, auth: true },
     { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
     { href:"/appeals", label:competitionText(locale,"appeals"), icon:ShieldCheck, auth:true },
     { href:"/organizer", label:competitionText(locale,"organizer"), icon:Trophy, auth:true },
@@ -114,6 +121,8 @@ export default function Sidebar() {
     { href: "/install", label: t("installShortcut"), icon: Smartphone },
     { href: "/contacts", label: t("contacts"), icon: Contact },
   ];
+  const groupFor=(href:string)=>["/my-organizations","/messages","/notifications","/wallet","/profile"].includes(href)?"personal":["/bloggers","/knowledge","/chat"].includes(href)?"community":["/appeals","/organizer","/support","/install","/contacts"].includes(href)?"help":"play";
+  const groups=[{id:"play",title:locale==="kk"?"Ойнау":locale==="ky"?"Ойноо":"Играть"},{id:"personal",title:locale==="kk"?"Менің аренам":locale==="ky"?"Менин аренам":"Моя арена"},{id:"community",title:locale==="kk"?"Қауымдастық":locale==="ky"?"Коомчулук":"Сообщество"},{id:"help",title:locale==="kk"?"Басқару және көмек":locale==="ky"?"Башкаруу жана жардам":"Управление и помощь"}];
 
   return (
     <>
@@ -168,7 +177,9 @@ export default function Sidebar() {
             </div>
 
             <nav className="drawer-nav">
-              {menuItems.filter((item) => !item.auth || user).map((item) => {
+              {groups.map(group=><section className="drawer-menu-section" key={group.id} aria-label={group.title}>
+              <h2 className="drawer-menu-title">{group.title}</h2>
+              {menuItems.filter((item) => (!item.auth || user)&&groupFor(item.href)===group.id).map((item) => {
                 const Icon = item.icon;
                 const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
                 return (
@@ -185,14 +196,15 @@ export default function Sidebar() {
                 );
               })}
 
-              <ModuleNavigation userId={user?.id} onNavigate={() => setOpen(false)} />
-              {isAdmin && (
+              <ModuleNavigation items={moduleItems.filter(item=>(item.id==="chat"?"community":"personal")===group.id)} userId={user?.id} onNavigate={() => setOpen(false)} />
+              {group.id==="help"&&isAdmin && (
                 <Link href="/admin" onClick={() => setOpen(false)} className={pathname.startsWith("/admin") ? "nav-item admin active" : "nav-item admin"}>
                   <ShieldCheck size={19} />
                   <span>{t("admin")}</span>
                   <ChevronRight size={16} className="nav-chevron" />
                 </Link>
               )}
+              </section>)}
             </nav>
 
             <div className="drawer-footer">

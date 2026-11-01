@@ -82,10 +82,21 @@ const tables=restoredCounts.filter(row=>platformSchemas.has(row.schema)&&row.row
 const preamble=`begin;set local lock_timeout='5s';set local statement_timeout='120s';set local session_replication_role=replica;\n`+
  [...customSchemas].map(schema=>`drop schema if exists ${quote(schema)} cascade;`).join('\n')+'\ncreate schema public;\n'+
  tables.map(table=>'delete from '+table+';').join('\n')+'\n';
-const updateFiles=process.argv.includes('--rehearse-update')?(await readdir(resolve('supabase/migrations'))).filter(name=>/^\d{12}_.+\.sql$/.test(name)&&name>='202610290003').sort():[];
+const optimization=process.argv.includes('--rehearse-optimization');
+if(optimization&&process.argv.includes('--rehearse-update'))throw Error('Select one exact release boundary');
+const updateFiles=optimization?['202611010001_user_activity_and_forecast_points.sql','202611020001_event_registration_counts.sql']:process.argv.includes('--rehearse-update')?(await readdir(resolve('supabase/migrations'))).filter(name=>/^\d{12}_.+\.sql$/.test(name)&&name>='202610290003'&&name<='202610310018_player_transfer_cancellation_penalty.sql').sort():[];
 const updateSources=await Promise.all(updateFiles.map(async name=>({name,sql:await readFile(resolve('supabase/migrations',name),'utf8')})));
 const updateBody=updateSources.map(({sql})=>sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,'')).join('\n');
-const updateChecks=updateFiles.length?`set local session_replication_role=origin;
+const optimizationChecks=`set local session_replication_role=origin;set local search_path=public,extensions;set local check_function_bodies=on;set local row_security=on;
+create temporary table optimization_before as select (select count(*) from profiles) profiles,(select count(*) from teams) organizations,(select count(*) from team_members) members,(select count(*) from event_registrations) registrations,(select coalesce(sum(balance),0)::numeric from coin_accounts) main,(select coalesce(sum(reserved),0)::numeric from coin_accounts) reserved,(select coalesce(sum(balance),0)::numeric from site_wallets) forecasts;
+${optimization?updateBody:''}
+do $$begin
+ if exists(select 1 from optimization_before b where b.profiles<>(select count(*) from profiles) or b.organizations<>(select count(*) from teams) or b.members<>(select count(*) from team_members) or b.registrations<>(select count(*) from event_registrations) or b.main<>(select coalesce(sum(balance),0)::numeric from coin_accounts) or b.reserved<>(select coalesce(sum(reserved),0)::numeric from coin_accounts) or b.forecasts<>(select coalesce(sum(balance),0)::numeric from site_wallets)) then raise exception 'OPTIMIZATION_DATA_CHANGED';end if;
+ if to_regprocedure('public.u5_event_registration_counts(uuid)') is null or not (select relrowsecurity from pg_class where oid='public.analytics_visits'::regclass) then raise exception 'OPTIMIZATION_SCHEMA';end if;
+ if has_function_privilege('authenticated','public.analytics_report(uuid,timestamptz,timestamptz,text,integer,uuid)','execute') or has_function_privilege('anon','public.u5_event_registration_counts(uuid)','execute') then raise exception 'OPTIMIZATION_ACL';end if;
+end $$;select 'RESTORE_PHASE:update_migrations';
+`;
+const updateChecks=optimization?optimizationChecks:updateFiles.length?`set local session_replication_role=origin;
 set local search_path=public,extensions;set local check_function_bodies=on;set local row_security=on;set local statement_timeout='150s';
 create temporary table release_wallet_before as select sum(balance)::numeric total from public.site_wallets;
 ${updateBody}
