@@ -31,10 +31,25 @@ async function setup(page: Page, rows: object[] = [], canOffer = true) {
   return mutations;
 }
 
+test("contract wizard keeps terms between steps and previews commitments without making payments",async({page})=>{
+ const mutations=await setup(page);await page.goto('/contracts');await page.getByRole('button',{name:'Создать договор',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Стороны договора',exact:true})).toBeVisible();await expect(page.getByLabel('Тренировка, %',{exact:true})).toBeHidden();
+ await page.getByRole('button',{name:'Далее',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'Выберите стороны'})).toBeVisible();expect(mutations).toHaveLength(0);
+ await page.getByRole('textbox',{name:'Поиск по имени'}).fill('Игрок');await page.getByRole('button',{name:'Найти',exact:true}).click();await page.getByRole('button',{name:'Игрок договора',exact:true}).click();
+ await page.getByRole('button',{name:'Далее',exact:true}).click();await page.getByRole('combobox',{name:'Ограничение выступлений',exact:true}).selectOption('sessions');await page.getByLabel('Количество',{exact:true}).fill('12');
+ await page.getByRole('button',{name:'Далее',exact:true}).click();await page.getByLabel('Тренировка, %',{exact:true}).fill('25');await page.getByLabel('Предусмотреть зарплату',{exact:true}).check();await page.getByLabel('Зарплата за период, OC',{exact:true}).fill('1000');await page.getByLabel('Период зарплаты, суток',{exact:true}).fill('9');
+ await page.getByRole('button',{name:'Далее',exact:true}).click();await page.getByRole('combobox',{name:'Способ штрафа',exact:true}).selectOption('fixed');await page.getByLabel('Сумма штрафа, OC',{exact:true}).fill('100');
+ await page.getByRole('button',{name:'Далее',exact:true}).click();await expect(page.getByText('Проверьте условия перед сохранением',{exact:true})).toBeVisible();await expect(page.getByText(/Сохранение черновика не резервирует/)).toBeVisible();expect(mutations).toHaveLength(0);
+ await page.getByRole('button',{name:'3. Выплаты',exact:true}).click();await expect(page.getByLabel('Зарплата за период, OC',{exact:true})).toHaveValue('1000');await expect(page.getByLabel('Тренировка, %',{exact:true})).toHaveValue('25');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'tools/database-tests/artifacts/contracts/optimization-contract-wizard-mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'5. Проверка',exact:true}).click();await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click();await expect(page.getByRole('status')).toHaveText('Черновик сохранён');
+ expect(mutations).toHaveLength(1);expect(mutations[0]).toMatchObject({action:'save',terms:{trainingShareBps:2500,limit:{unit:'sessions',count:12},financial:{salary:{amount:1000,periodDays:9},noShowPenalty:{kind:'fixed',amount:100}}}});
+});
+
 test("manager prepares a private contract with structured financial conditions", async ({ page }) => {
   const mutations = await setup(page);
   await page.goto("/contracts");
-  await page.getByRole("button", { name: "Создать договор", exact: true }).click();
+  await page.getByRole("button", { name: "Создать договор", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await page.getByRole("textbox", { name: "Поиск по имени" }).fill("Игрок");
   await page.getByRole("button", { name: "Найти", exact: true }).click();
   await page.getByRole("button", { name: "Игрок договора", exact: true }).click();
@@ -74,7 +89,7 @@ test("manager prepares a private contract with structured financial conditions",
 
 test("ordinary transfer and exit clauses select a fixed-percent minimum or maximum", async ({ page }) => {
   const writes=await setup(page,[{...contract,status:"draft"}]);
-  await page.goto("/contracts");await page.getByRole("button",{name:"Изменить условия",exact:true}).click();
+  await page.goto("/contracts");await page.getByRole("button",{name:"Изменить условия",exact:true}).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   for(const [label,selection] of [["Компенсация при переходе","maximum"],["Штраф за выход игрока","minimum"],["Выплата игроку при расторжении организацией","maximum"]]){
     const clause=page.getByRole("group",{name:label,exact:true});
     await clause.getByRole("combobox",{name:label,exact:true}).selectOption("combined");
@@ -99,7 +114,7 @@ test("player reads the exact combined clauses before signing on mobile",async({p
 
 test("cancellation constructor independently records salary, prize, award and welcome returns by cause",async({page})=>{
   const writes=await setup(page,[{...contract,status:"draft"}]);await page.goto("/contracts");
-  await page.getByRole("button",{name:"Изменить условия",exact:true}).click();
+  await page.getByRole("button",{name:"Изменить условия",exact:true}).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await page.getByLabel("Указать возврат выплат по причинам отмены",{exact:true}).check();
   const cause=page.locator("details").filter({has:page.locator("summary",{hasText:"Нарушение со стороны игрока"})});
   await cause.locator("summary").click();
@@ -144,7 +159,7 @@ test("a pending transfer contract cannot be signed or rejected outside its deal"
 test("event exceptions require selected fields and keep an explicit zero", async ({ page }) => {
   const mutations = await setup(page, [{ ...contract, status: "draft" }]);
   await page.goto("/contracts");
-  await page.getByRole("button", { name: "Изменить условия", exact: true }).click();
+  await page.getByRole("button", { name: "Изменить условия", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await page.getByLabel("Поиск мероприятия для исключения").fill("Турнир");
   await page.getByRole("button", { name: "Найти мероприятие", exact: true }).click();
   await page.getByRole("button", { name: "Турнир ноября", exact: true }).click();
@@ -166,7 +181,7 @@ test("legacy prose is displayed in history but excluded from a new constructor v
   await page.goto("/contracts");
   await expect(page.getByText("Историческое условие", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Направить игроку", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Изменить условия", exact: true }).click();
+  await page.getByRole("button", { name: "Изменить условия", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await expect(page.getByRole("status")).toContainText("Старые пояснения остаются в истории");
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Черновик сохранён");
@@ -191,7 +206,7 @@ test("retry after a lost save response reuses the same operation and terms", asy
     return route.fulfill({ json: { success: true } });
   });
   await page.goto("/contracts");
-  await page.getByRole("button", { name: "Изменить условия", exact: true }).click();
+  await page.getByRole("button", { name: "Изменить условия", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
   await expect(page.locator('p[role="alert"]')).toBeVisible();
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
@@ -423,7 +438,7 @@ test("player sees no-show debt without owner cancellation controls", async ({ pa
 
 test("signed agreement renews through a new revision of the same contract", async ({ page }) => {
   const writes = await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true }]);
-  await page.goto("/contracts"); await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await expect(page.getByRole("status")).toContainText("Текущие подписанные условия действуют");
   await page.getByRole("button", { name: "Сохранить черновик", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Черновик сохранён");
@@ -448,7 +463,7 @@ test("completed contract shows its fixed end and can only continue through a new
   await page.goto("/contracts");
   await expect(page.getByText("Завершён", { exact: true })).toBeVisible();
   await expect(page.getByText(/Исправление старых результатов автоматически его не возобновляет/)).toBeVisible();
-  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await expect(page.getByRole("status")).toContainText("Прежний договор завершён");
 });
 
@@ -457,7 +472,7 @@ test("tournament-count renewal explains whole-event expiry and retains its struc
   const writes = await setup(page, [{ ...contract, status: "signed", hasSignedHistory: true, terms }]);
   await page.goto("/contracts");
   await expect(page.getByText(/Участие только в отборе считается/)).toBeVisible();
-  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click();
+  await page.getByRole("button", { name: "Изменить или продлить", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await expect(page.getByRole("combobox", { name: "Ограничение выступлений", exact: true })).toHaveValue("tournaments");
   await expect(page.getByText(/Один турнир расходует одну единицу/)).toBeVisible();
   await page.getByRole("spinbutton", { name: "Количество", exact: true }).fill("3");
@@ -521,7 +536,7 @@ test("guest training contract selects one session and fills its real ending", as
     if (!new URL(route.request().url()).searchParams.has("guestSessionsEventId")) return route.fallback();
     return route.fulfill({ json: { eventType: "training", sessions: [{ id: sessionId, startsAt: "2026-12-01T16:00:00Z", endsAt: "2026-12-01T17:00:00Z" }] } });
   });
-  await page.goto("/contracts"); await page.getByRole("button", { name: "Создать договор", exact: true }).click();
+  await page.goto("/contracts"); await page.getByRole("button", { name: "Создать договор", exact: true }).click(); await page.getByRole("button",{name:"Показать все условия",exact:true}).click();
   await page.getByLabel("Вид договора").selectOption("guest");
   await page.getByRole("textbox", { name: "Поиск по имени" }).fill("Игрок"); await page.getByRole("button", { name: "Найти", exact: true }).click();
   await page.getByRole("button", { name: "Игрок договора", exact: true }).click();

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {allRows,publicResults} from "@/lib/competition/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { authErrorResponse } from "@/utils/supabase/server-auth";
+import {selectResultsSession} from "@/lib/competition/session-selection";
 
 const paramsSchema = z.object({ id: z.string().uuid() });
 interface LegacyResult {
@@ -36,25 +37,37 @@ async function enrichResults(rows: Array<{
   }));
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = paramsSchema.parse(await context.params);
+    const requested=new URL(request.url).searchParams.get("sessionId");
+    if(requested)z.string().uuid().parse(requested);
     const supabase = createAdminClient();
-    const {data:event,error:eventError}=await supabase.from("events").select("id,title,type,public_number,is_published,publish_at,moderation_status").eq("id",id).single();
-    if(eventError||!event||event.moderation_status!=="approved"||(!event.is_published&&(!event.publish_at||Date.parse(event.publish_at)>Date.now())))return Response.json({error:"Мероприятие не найдено"},{status:404});
+    const {data:event,error:eventError}=await supabase.from("events").select("id,title,type,public_number,is_published,publish_at,moderation_status,cancelled_at").eq("id",id).single();
+    if(eventError||!event||event.cancelled_at||event.moderation_status!=="approved"||(!event.is_published&&(!event.publish_at||Date.parse(event.publish_at)>Date.now())))return Response.json({error:"Мероприятие не найдено"},{status:404});
     const sessions=await allRows((a,b)=>supabase.from("event_sessions").select("id,start_time,public_number").eq("event_id",id).neq("status","cancelled").order("start_time").order("id").range(a,b));
-    const publicSessions=[];
-    for(const session of sessions){
-      const [{data:pub,error:pubError},games,groups]=await Promise.all([
-        supabase.from("competition_publications").select("published,first_published_at,corrected_at").eq("session_id",session.id).maybeSingle(),
-        allRows((a,b)=>supabase.from("event_games").select("id,group_id,game_number,public_number,map_name").eq("session_id",session.id).neq("status","cancelled").order("game_number").order("id").range(a,b)),
-        allRows((a,b)=>supabase.from("event_groups").select("id,public_number").eq("session_id",session.id).order("public_number").range(a,b)),
-      ]);if(pubError)throw pubError;
-      const prefix=`${event.public_number}-${String(session.public_number).padStart(2,"0")}`;
-      publicSessions.push({id:session.id,startTime:session.start_time,publicId:prefix,publishedAt:pub?.first_published_at,correctedAt:pub?.corrected_at,results:pub?.first_published_at?publicResults(pub.published):null,
-        games:games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,publicId:`${prefix}-${String(groups.find(gr=>gr.id===g.group_id)?.public_number).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`}))});
+    // Read only publication metadata for the selector; never load every result snapshot.
+    const publications:Array<{session_id:string;first_published_at:string|null;corrected_at:string|null}>=[];
+    for(let start=0;start<sessions.length;start+=200){
+      const ids=sessions.slice(start,start+200).map(session=>session.id);
+      publications.push(...await allRows((a,b)=>supabase.from("competition_publications").select("session_id,first_published_at,corrected_at").in("session_id",ids).order("session_id").range(a,b)));
     }
-    const publicData={event:{id:event.id,title:event.title,type:event.type},sessions:publicSessions};
+    const publicationBySession=new Map(publications.map(pub=>[pub.session_id,pub]));
+    const publicSessions=sessions.map(session=>({id:session.id,startTime:session.start_time,publicId:`${event.public_number}-${String(session.public_number).padStart(2,"0")}`,
+      publishedAt:publicationBySession.get(session.id)?.first_published_at??null,correctedAt:publicationBySession.get(session.id)?.corrected_at??null,
+      results:null as ReturnType<typeof publicResults>,games:[] as Array<{id:string;groupId:string;number:number;map:string;publicId:string}>}));
+    const selected=selectResultsSession(publicSessions,requested);
+    if(requested&&!selected)return Response.json({error:"Сессия не найдена в этом мероприятии"},{status:404,headers:{"Cache-Control":"no-store"}});
+    if(selected?.publishedAt){
+      const [{data:pub,error:pubError},games,groups]=await Promise.all([
+        supabase.from("competition_publications").select("published,first_published_at,corrected_at").eq("session_id",selected.id).maybeSingle(),
+        allRows((a,b)=>supabase.from("event_games").select("id,group_id,game_number,public_number,map_name").eq("session_id",selected.id).neq("status","cancelled").order("game_number").order("id").range(a,b)),
+        allRows((a,b)=>supabase.from("event_groups").select("id,public_number").eq("session_id",selected.id).order("public_number").range(a,b)),
+      ]);if(pubError)throw pubError;
+      selected.results=pub?.first_published_at?publicResults(pub.published):null;
+      selected.games=games.map(g=>({id:g.id,groupId:g.group_id,number:g.game_number,map:g.map_name,publicId:`${selected.publicId}-${String(groups.find(gr=>gr.id===g.group_id)?.public_number).padStart(2,"0")}-${String(g.public_number).padStart(2,"0")}`}));
+    }
+    const publicData={event:{id:event.id,title:event.title,type:event.type},selectedSessionId:selected?.id??null,sessions:publicSessions};
     if(publicSessions.length>0)return Response.json({...publicData,results:[]},{headers:{"Cache-Control":"no-store"}});
     const normalized = await supabase
       .from("event_team_results")

@@ -10,6 +10,13 @@ export async function GET(request: Request) {
   try {
     const { data, error } = await createAdminClient().rpc("contract_maintenance_run");
     if (error) throw error;
+    // Retention failure must not undo or misreport completed contract maintenance.
+    try {
+      const cleanup = await createAdminClient().rpc("analytics_cleanup");
+      if (cleanup.error) console.error("Activity retention cleanup failed", cleanup.error.message);
+    } catch (cleanupError) {
+      console.error("Activity retention cleanup failed", cleanupError);
+    }
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Contract maintenance failed", error);

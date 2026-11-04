@@ -135,6 +135,8 @@ export default function AdminPage() {
     <div className="min-h-screen p-6">
       <h1 className="text-3xl font-bold mb-6 text-red-500">Админ-панель</h1>
 
+      <Link href="/admin/analytics" className="secondary-button inline-flex mb-4">Активность пользователей</Link>
+
       {message && (
         <div className="mb-4 p-3 bg-gray-800 rounded">{message}</div>
       )}

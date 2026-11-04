@@ -112,6 +112,15 @@ test("public cache refreshes immediately after settings change; unauthorized req
   expect(count("u2_leaderboard")).toBe(2);
 });
 
+test("preview modules share authentication within one request but recheck roles on the next request",async({request})=>{
+ const endpoint='http://127.0.0.1:3105/api/modules',headers={Authorization:`Bearer ${accessToken}`};
+ expect((await (await request.get(endpoint,{headers})).json()).modules).toHaveLength(3);
+ expect(count('user')).toBe(1);expect(count('user_roles')).toBe(1);
+ expect((await (await request.get(endpoint,{headers})).json()).modules).toHaveLength(3);
+ expect(count('user')).toBe(2);expect(count('user_roles')).toBe(2);
+ expect((await (await request.get(endpoint)).json()).modules).toEqual([]);
+});
+
 test("home serves counters and schedule in HTML, reuses its summary, and debounces search", async ({page,request}) => {
   const clientErrors:string[]=[];
   page.on("pageerror",error=>clientErrors.push(error.message));
@@ -127,6 +136,7 @@ test("home serves counters and schedule in HTML, reuses its summary, and debounc
   await page.goto("/");
   await expect(page.locator(".hero-stats")).toContainText("301");
   await expect(page.getByRole("heading",{name:"Ближайшая тренировка"})).toBeVisible();
+  await expect(page.locator('.event-row').first()).toHaveAttribute('href',`/tournaments/${eventId}?sessionId=${sessionId}`);
   await expect(page.locator(".event-main p")).toContainText("12:00");
   expect(count("event_sessions")).toBe(1);
   expect(browserTables).toEqual([]);

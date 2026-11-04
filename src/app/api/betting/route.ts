@@ -1,4 +1,4 @@
-import { SITE_CURRENCY_NAME } from "@/lib/economy/currency";
+import { BET_CURRENCY_NAME } from "@/lib/betting-currency";
 import { z } from "zod";
 import {
   type BettingMarketType,
@@ -278,7 +278,7 @@ export async function GET(request: Request) {
     }
     return Response.json({
       balance: wallet?.balance ?? 0,
-      currencyName: SITE_CURRENCY_NAME,
+      currencyName: BET_CURRENCY_NAME,
       minimumStake: settings?.minimum_stake ?? 10,
       maximumStake: settings?.maximum_stake ?? 200,
       sources,

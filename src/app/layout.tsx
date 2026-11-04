@@ -4,6 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import LanguageProvider from "@/components/LanguageProvider";
 import SiteFooter from "@/components/SiteFooter";
 import { WebsiteInstallProvider } from "@/components/WebsiteInstall";
+import ActivityTracker from "@/components/ActivityTracker";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body>
         <LanguageProvider>
           <WebsiteInstallProvider>
+            <ActivityTracker />
             <Sidebar />
             <main className="app-main">
               {children}

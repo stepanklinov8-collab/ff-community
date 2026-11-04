@@ -34,7 +34,14 @@ function readBearerToken(request: Request) {
   return token;
 }
 
-export async function requireUser(request: Request): Promise<AuthContext> {
+const requestUsers=new WeakMap<Request,Promise<AuthContext>>();
+/** Reuse authentication only inside the very same HTTP request. */
+export function requireUser(request:Request):Promise<AuthContext>{
+  let result=requestUsers.get(request);
+  if(!result){result=loadUser(request);requestUsers.set(request,result);}
+  return result;
+}
+async function loadUser(request: Request): Promise<AuthContext> {
   const supabase = createAdminClient();
   const token = readBearerToken(request);
   const {

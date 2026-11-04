@@ -20,7 +20,10 @@ test('main wallet transfers use explicit confirmation, update balance and expose
   }return route.fulfill({json:state});
  });
  await page.goto('/wallet');
- await expect(page.getByRole('heading',{name:'Демо-баланс ставок'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Баланс прогнозов — Arena Points'})).toBeVisible();
+ const forecast=page.locator('section').filter({has:page.getByRole('heading',{name:'Баланс прогнозов — Arena Points'})});
+ await expect(forecast).toContainText(/999\s999 AP/);
+ await expect(forecast).not.toContainText('999 999 🪙');
  await expect(page.getByLabel('Откуда списать монеты').locator('option')).toHaveCount(1);
  await page.getByLabel('Найти игрока или организацию',{exact:true}).fill('Получатель');
  await page.getByRole('button',{name:'Получатель · Игрок'}).click();

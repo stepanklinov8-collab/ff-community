@@ -1,13 +1,15 @@
 "use client";
 
 import { formatCoins } from "@/lib/economy/currency";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { authFetch } from "@/utils/api/auth-fetch";
 import TranslatedText from "@/components/TranslatedText";
 import CommentsSection from "@/components/CommentsSection";
 import SessionControls from "@/components/SessionControls";
-import { useParams } from "next/navigation";
+import RegistrationRestrictions from "@/components/RegistrationRestrictions";
+import {getBrowserUser} from "@/utils/supabase/browser-identity";
+import { useParams, useSearchParams } from "next/navigation";
 import {useLanguage} from "@/components/LanguageProvider";
 import Link from "next/link";
 import Image from "next/image";
@@ -119,6 +121,12 @@ export default function EventPage() {
   const [clockNow,setClockNow] = useState(() => Date.now());
   useEffect(() => {const timer=setInterval(()=>setClockNow(Date.now()),30000);return()=>clearInterval(timer);}, []);
   const { id } = useParams<{ id: string }>();
+  const searchParams=useSearchParams(),requestedSession=searchParams.get("sessionId");
+  const [pageError,setPageError]=useState(""),[accountError,setAccountError]=useState(""),[reload,setReload]=useState(0);
+  const [registrationLoading,setRegistrationLoading]=useState(true),[registrationError,setRegistrationError]=useState("");
+  const registrationSequence=useRef(0),organizationSequence=useRef(0),preferredOrganization=useRef("");
+  const invalidateRegistrations=useCallback(()=>{registrationSequence.current++;},[]),invalidateOrganizations=useCallback(()=>{organizationSequence.current++;},[]);
+  const [accountReady,setAccountReady]=useState(false);
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -167,18 +175,30 @@ export default function EventPage() {
   const [responsibleUserId, setResponsibleUserId] = useState("");
 
   const loadRegistrations = useCallback(async (authenticated: boolean) => {
-    const response = authenticated
-      ? await authFetch(`/api/events/${id}/registrations`)
-      : await fetch(`/api/events/${id}/registrations`);
-    if (!response.ok) return [] as Registration[];
-    const payload = await response.json() as { registrations?: Registration[]; registrationCounts?: RegistrationCount[] };
-    const rows = payload.registrations ?? [];
-    setRegistrations(rows);
-    setRegistrationCounts(Object.fromEntries((payload.registrationCounts ?? []).map((count) => [count.session_id, count])));
-    return rows;
-  }, [id]);
+    if(!selectedSessionId)return [] as Registration[];
+    const sequence=++registrationSequence.current;
+    setRegistrationLoading(true);setRegistrationError("");
+    try {
+      const endpoint=`/api/events/${id}/registrations?sessionId=${selectedSessionId}`;
+      const response=await (authenticated?authFetch:fetch)(endpoint,{signal:AbortSignal.timeout(20000)});
+      const payload=await response.json();
+      if(!response.ok)throw Error(payload.error??"Не удалось загрузить заявки");
+      if(sequence!==registrationSequence.current)return [] as Registration[];
+      const rows:Registration[]=payload.registrations??[];
+      setRegistrations(rows);
+      setRegistrationCounts(Object.fromEntries((payload.registrationCounts??[]).map((count:RegistrationCount)=>[count.session_id,count])));
+      return rows;
+    }catch(caught){if(sequence===registrationSequence.current)setRegistrationError(caught instanceof Error?caught.message:"Не удалось загрузить заявки");return [] as Registration[];}
+    finally{if(sequence===registrationSequence.current)setRegistrationLoading(false);}
+  },[id,selectedSessionId]);
+  useEffect(()=>{
+    if(!accountReady||!selectedSessionId)return;
+    const timer=setTimeout(()=>void loadRegistrations(Boolean(currentUser)),0);
+    return()=>{clearTimeout(timer);invalidateRegistrations();};
+  },[accountReady,selectedSessionId,currentUser,loadRegistrations,invalidateRegistrations]);
 
   const loadOrganizationMembers = useCallback(async (team: ManagedOrganization) => {
+    const sequence=++organizationSequence.current;
     setMyTeam(team);
     setCanManageTeam(false);
     setMyMembers([]);
@@ -193,6 +213,7 @@ export default function EventPage() {
           .select("id,nickname")
           .in("id", memberRows.map((membership) => membership.user_id))
       : { data: [] };
+    if(sequence!==organizationSequence.current)return;
     const nicknameById = new Map((memberProfiles ?? []).map((profile) => [profile.id, profile.nickname]));
     const enrichedMembers = memberRows.map((membership) => ({
       ...membership,
@@ -210,91 +231,97 @@ export default function EventPage() {
   }, [supabase]);
 
   useEffect(() => {
-    const init = async () => {
-      const { data: ev } = await supabase.from("events").select("id,title,type,cost,organizer,organizer_user_id,description,rules_text,image_url,stream_url,is_published,max_teams,show_registrations,roster_lock_minutes,min_players,comments_enabled,payment_url,allow_individual_registration").eq("id", id).single();
-      if (ev) setEvent(ev);
-
-      const publicSessions = await supabase
-        .from("event_sessions_public")
-        .select("*")
-        .eq("event_id", id)
-        .order("start_time", { ascending: true });
-      const legacySessions = publicSessions.error
-        ? await supabase
-            .from("event_sessions")
-            .select("id, start_time, end_time, registration_open_time, responsible_user_id")
-            .eq("event_id", id)
-            .order("start_time", { ascending: true })
-        : null;
-      const sess = publicSessions.data ?? legacySessions?.data;
-      if (sess) {
-        setSessions(sess);
-        const requested = sess.find(s => s.id === new URLSearchParams(window.location.search).get("sessionId"));
-        const upcoming = sess.filter(s => !sessionHasEnded(s, Date.now()));
-        const requestedFutureIndex = upcoming.findIndex(s => s.id === requested?.id);
-        setShowFutureSessions(requestedFutureIndex > 0);
-        setFutureLimit(Math.max(10, requestedFutureIndex));
-        if (requested && sessionHasEnded(requested, Date.now())) {
-          setShowPastSessions(true);
-          const past = sess.filter(s => sessionHasEnded(s, Date.now())).reverse();
-          setPastLimit(Math.max(10, past.findIndex(s => s.id === requested.id) + 1));
-        }
-        setSelectedSessionId((current) => current || sess.find(s=>s.id===new URLSearchParams(window.location.search).get("sessionId"))?.id || sess.find(s=>Date.parse(s.end_time||s.start_time)>Date.now())?.id || sess[sess.length-1]?.id || "");
-      }
-      const { data: gameRows } = await supabase.from("event_games").select("id,session_id,game_number,map_name").eq("event_id", id).order("game_number");
-      setGames((gameRows ?? []) as EventGame[]);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
-      const loadedRegistrations = await loadRegistrations(Boolean(user));
-      if (user) {
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .in("role", ["moderator", "admin", "superadmin"])
-          .limit(1);
-        if (roleData?.length) setIsAdmin(true);
-
-        if (ev?.organizer_user_id === user.id) setIsOrganizer(true);
-
-        const [{ data: memberships }, { data: ownedTeams }] = await Promise.all([
-          supabase.from("team_members").select("team_id, role_in_team").eq("user_id", user.id),
-          supabase.from("teams").select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").eq("ultimate_owner_user_id", user.id).is("dissolved_at", null),
+    let alive=true;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),25000);
+    const init=async()=>{
+      setLoading(true);setPageError("");setAccountError("");setAccountReady(false);
+      setEvent(null);setSessions([]);setSelectedSessionId("");setCurrentUser(null);
+      setManagedOrganizations([]);setMyTeam(null);setCanManageTeam(false);setIsAdmin(false);setIsOrganizer(false);setRegistrations([]);
+      preferredOrganization.current="";
+      const identity=getBrowserUser().catch(()=>({data:{user:null},error:new Error("Не удалось проверить вход")}));
+      try{
+        const [eventResponse,publicSessions]=await Promise.all([
+          supabase.from("events").select("id,title,type,cost,organizer,organizer_user_id,description,rules_text,image_url,stream_url,is_published,max_teams,show_registrations,roster_lock_minutes,min_players,comments_enabled,payment_url,allow_individual_registration").eq("id",id).abortSignal(controller.signal).single(),
+          supabase.from("event_sessions_public").select("*").eq("event_id",id).order("start_time").abortSignal(controller.signal),
         ]);
-
-        const membershipRows = memberships ?? [];
-        const organizationIds = [...new Set([...membershipRows.map((membership) => membership.team_id), ...(ownedTeams ?? []).map((team) => team.id)])];
-        if (organizationIds.length) {
-          const { data: membershipTeams } = await supabase.from("teams")
-            .select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").in("id", organizationIds);
-          const eligibleTeamIds = new Set((membershipTeams ?? [])
-            .filter((team) => (team.type === "team" || team.type === "guild") && team.verified && !team.dissolved_at)
-            .map((team) => team.id));
-          const manageableTeamIds = new Set(membershipRows
-            .filter((membership) => ["leader", "senior_deputy", "deputy"].includes(membership.role_in_team))
-            .map((membership) => membership.team_id).concat((ownedTeams ?? []).map((team) => team.id)));
-          const manageableTeams = (membershipTeams ?? [])
-            .filter((team): team is typeof team & { type: "team" | "guild" } =>
-              eligibleTeamIds.has(team.id) && manageableTeamIds.has(team.id) &&
-              (team.type === "team" || team.type === "guild"),
-            )
-            .map(({ id: teamId, name, type }) => ({ id: teamId, name, type }));
-          setManagedOrganizations(manageableTeams);
-
-          const registeredTeamId = loadedRegistrations.find((registration) =>
-            registration.status !== "cancelled" &&
-            Boolean(registration.team_id && manageableTeamIds.has(registration.team_id)),
-          )?.team_id;
-          const team = manageableTeams.find((candidate) => candidate.id === registeredTeamId) ?? manageableTeams[0] ?? null;
-          if (team) await loadOrganizationMembers(team);
-        }
-      }
-
-      setLoading(false);
+        if(eventResponse.error||!eventResponse.data)throw Error("Не удалось загрузить мероприятие. Проверьте соединение или доступ к странице.");
+        let sess=publicSessions.data;
+        if(publicSessions.error){const fallback=await supabase.from("event_sessions").select("id,start_time,end_time,registration_open_time,registration_close_time,max_teams,responsible_user_id").eq("event_id",id).order("start_time").abortSignal(controller.signal);if(fallback.error)throw fallback.error;sess=fallback.data;}
+        if(!alive)return;
+        const ev=eventResponse.data;
+        setEvent(ev);setSessions(sess??[]);
+        const requested=(sess??[]).find(row=>row.id===new URLSearchParams(window.location.search).get("sessionId"));
+        setSelectedSessionId(requested?.id??(sess??[]).find(row=>!sessionHasEnded(row,Date.now()))?.id??sess?.at(-1)?.id??"");
+        setLoading(false);
+        const {data:{user},error:identityError}=await identity;
+        if(!alive)return;
+        if(identityError)throw Error("Не удалось проверить вход. Повторите загрузку для управления заявками.");
+        setCurrentUser(user);
+        if(!user){setAccountReady(true);return;}
+        setIsOrganizer(ev.organizer_user_id===user.id);
+        const [capabilities,{data:memberships,error:membershipsError},{data:ownedTeams,error:ownedError}]=await Promise.all([
+          authFetch("/api/admin/capabilities"),
+          supabase.from("team_members").select("team_id,role_in_team").eq("user_id",user.id).abortSignal(controller.signal),
+          supabase.from("teams").select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").eq("ultimate_owner_user_id",user.id).is("dissolved_at",null).abortSignal(controller.signal),
+        ]);
+        if(!capabilities.ok||membershipsError||ownedError)throw Error("Не удалось загрузить права и организации. Повторите загрузку.");
+        const rights=await capabilities.json();if(!alive)return;
+        setIsAdmin(Boolean(rights.canOpenAdmin));setAccountReady(true);
+        const membershipRows=memberships??[],organizationIds=[...new Set([...membershipRows.map(row=>row.team_id),...(ownedTeams??[]).map(row=>row.id)])];
+        if(!organizationIds.length)return;
+        const {data:teams,error:teamsError}=await supabase.from("teams").select("id,name,type,verified,ultimate_owner_user_id,dissolved_at").in("id",organizationIds).abortSignal(controller.signal);
+        if(teamsError)throw teamsError;if(!alive)return;
+        const manageableIds=new Set(membershipRows.filter(row=>["leader","senior_deputy","deputy"].includes(row.role_in_team)).map(row=>row.team_id).concat((ownedTeams??[]).map(row=>row.id)));
+        const manageable=(teams??[]).filter((team):team is typeof team&{type:"team"|"guild"}=>(team.type==="team"||team.type==="guild")&&team.verified&&!team.dissolved_at&&manageableIds.has(team.id)).map(({id,name,type})=>({id,name,type}));
+        setManagedOrganizations(manageable);
+        if(manageable[0])await loadOrganizationMembers(manageable[0]);
+      }catch(caught){if(alive){const text=caught instanceof Error?caught.message:"Не удалось загрузить страницу";setAccountError(text);setPageError(text);setAccountReady(true);}}
+      finally{if(alive)setLoading(false);}
     };
-    init();
-  }, [id, loadOrganizationMembers, loadRegistrations, supabase]);
+    void init();
+    return()=>{alive=false;clearTimeout(timeout);controller.abort();invalidateRegistrations();invalidateOrganizations();};
+  },[id,reload,loadOrganizationMembers,supabase,invalidateRegistrations,invalidateOrganizations]);
+
+  useEffect(()=>{
+    const requested=sessions.find(row=>row.id===requestedSession);if(!requested)return;
+    const timer=setTimeout(()=>{
+    setSelectedSessionId(requested.id);
+    const upcoming=sessions.filter(row=>!sessionHasEnded(row,Date.now())),futureIndex=upcoming.findIndex(row=>row.id===requested.id);
+    if(futureIndex>0){setShowFutureSessions(true);setFutureLimit(n=>Math.max(n,futureIndex));}
+    if(sessionHasEnded(requested,Date.now())){setShowPastSessions(true);const past=sessions.filter(row=>sessionHasEnded(row,Date.now())).reverse();setPastLimit(n=>Math.max(n,past.findIndex(row=>row.id===requested.id)+1));}
+    },0);return()=>clearTimeout(timer);
+  },[requestedSession,sessions]);
+  useEffect(()=>{
+    if(registrationLoading||!managedOrganizations.length||!selectedSessionId)return;
+    const key=`${id}:${selectedSessionId}`;if(preferredOrganization.current===key)return;
+    preferredOrganization.current=key;
+    const registered=registrations.find(row=>row.status!=="cancelled"&&row.session_id===selectedSessionId&&managedOrganizations.some(team=>team.id===row.team_id));
+    const organization=managedOrganizations.find(team=>team.id===registered?.team_id);
+    if(organization&&organization.id!==myTeam?.id){const timer=setTimeout(()=>void loadOrganizationMembers(organization),0);return()=>clearTimeout(timer);}
+  },[id,selectedSessionId,registrations,registrationLoading,managedOrganizations,myTeam?.id,loadOrganizationMembers]);
+
+  const [gamesError,setGamesError]=useState(""),[gamesRetry,setGamesRetry]=useState(0);
+  const gameCache=useRef<{eventId:string;rows:Map<string,EventGame[]>}>({eventId:id,rows:new Map()});
+  const visibleSessionIds=useMemo(()=>{
+    const upcoming=sessions.filter(row=>!sessionHasEnded(row,clockNow));
+    const visible=isAdmin?upcoming.slice(0,1).concat(showFutureSessions?upcoming.slice(1,futureLimit+1):[]):upcoming;
+    if(showPastSessions)visible.push(...sessions.filter(row=>sessionHasEnded(row,clockNow)).reverse().slice(0,pastLimit));
+    return visible.map(row=>row.id).sort().join(",");
+  },[sessions,clockNow,isAdmin,showFutureSessions,futureLimit,showPastSessions,pastLimit]);
+  useEffect(()=>{
+    if(!accountReady||!visibleSessionIds)return;
+    let alive=true;const controller=new AbortController();
+    if(gameCache.current.eventId!==id)gameCache.current={eventId:id,rows:new Map()};
+    const cache=gameCache.current,missing=visibleSessionIds.split(",").filter(key=>!cache.rows.has(key));
+    void (async()=>{try{
+      for(let start=0;start<missing.length;start+=100){const ids=missing.slice(start,start+100),rows:EventGame[]=[];
+        for(let offset=0;;offset+=500){const {data,error}=await supabase.from("event_games").select("id,session_id,game_number,map_name").in("session_id",ids).neq("status","cancelled").order("game_number").order("id").range(offset,offset+499).abortSignal(controller.signal);if(error)throw error;rows.push(...data??[]);if((data?.length??0)<500)break;}
+        if(!alive)return;for(const key of ids)cache.rows.set(key,rows.filter(row=>row.session_id===key));
+      }
+      if(alive){setGames([...cache.rows.values()].flat());setGamesError("");}
+    }catch{if(alive)setGamesError("Не удалось загрузить карты сессий");}})();
+    return()=>{alive=false;controller.abort();};
+  },[id,visibleSessionIds,accountReady,supabase,gamesRetry]);
 
   const registerTeam = async () => {
     if (!myTeam) { setMessage("У вас нет верифицированной команды или гильдии."); return; }
@@ -308,7 +335,6 @@ export default function EventPage() {
       return;
     }
 
-    setRestrictionLinks([]);
     setMessage("Регистрация...");
     const { data, error } = await supabase.rpc("register_team_for_session", {
       p_session_id: selectedSessionId,
@@ -318,7 +344,6 @@ export default function EventPage() {
 
     if (error) {
       setMessage("Ошибка: " + registrationErrorMessage(error.message));
-      await loadRegistrationRestrictions(myTeam.id);
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы в основном составе!" : "⏳ Вы в листе ожидания.");
@@ -327,16 +352,10 @@ export default function EventPage() {
     }
   };
 
-  const [restrictionLinks,setRestrictionLinks] = useState<Array<{id:string;reason:string;appealUrl:string}>>([]);
-  const loadRegistrationRestrictions = async (teamId?:string) => {
-    try {const r=await authFetch(`/api/events/${id}/eligibility${teamId?`?teamId=${teamId}`:""}`),d=await r.json();if(r.ok)setRestrictionLinks(d.restrictions??[]);}catch { /* Keep the original registration error visible. */ }
-  };
-
   const registerPlayer = async () => {
     if (!currentUser) { setMessage("Войдите, чтобы записаться."); return; }
     if (!selectedSessionId) { setMessage("Выберите время участия."); return; }
 
-    setRestrictionLinks([]);
     setMessage("Регистрация...");
     const { data, error } = await supabase.rpc("register_player_for_session", {
       p_session_id: selectedSessionId,
@@ -344,7 +363,6 @@ export default function EventPage() {
 
     if (error) {
       setMessage("Ошибка: " + registrationErrorMessage(error.message));
-      await loadRegistrationRestrictions();
     } else {
       const status = data?.[0]?.registration_status ?? "confirmed";
       setMessage(status === "confirmed" ? "✅ Вы записаны!" : "⏳ Вы в листе ожидания.");
@@ -458,6 +476,8 @@ export default function EventPage() {
 
   const selectSession = (sessionId: string) => {
     setSelectedSessionId(sessionId);
+    setRegistrations([]);
+    const url=new URL(window.location.href);url.searchParams.set("sessionId",sessionId);window.history.replaceState(null,"",url);
     setSelectedRoster(current => current.filter(userId => myMembers.some(member => member.user_id === userId)));
     setShowRosterForm(false);
     setMessage("");
@@ -491,8 +511,8 @@ export default function EventPage() {
     solo: "Соло-турнир",
   };
 
-  if (loading) return <div className="min-h-screen p-6"><p>Загрузка...</p></div>;
-  if (!event) return <div className="min-h-screen p-6"><p>Мероприятие не найдено.</p></div>;
+  if (loading) return <div className="min-h-screen p-6"><p role="status">Загрузка...</p></div>;
+  if (!event) return <div className="min-h-screen p-6"><p role="alert">{pageError||"Мероприятие не найдено."}</p><button className="secondary-button mt-3" onClick={()=>setReload(n=>n+1)}>Повторить</button></div>;
 
   const sessionRegistrations = registrations.filter((registration) => registration.session_id === selectedSessionId);
   const upcomingSessions = sessions.filter(s => !sessionHasEnded(s, clockNow));
@@ -646,6 +666,7 @@ export default function EventPage() {
       {/* Сессии */}
       <div className="mt-6">
         <h2 className="text-xl font-semibold mb-4">Расписание</h2>
+        {gamesError&&<p role="alert">{gamesError}. <button className="secondary-button" onClick={()=>setGamesRetry(n=>n+1)}>Повторить загрузку карт</button></p>}
         {(isAdmin ? upcomingSessions.slice(0, 1) : upcomingSessions).map(renderSession)}
         {!upcomingSessions.length && <p className="mb-4 text-gray-400">Предстоящих сессий пока нет.</p>}
         {isAdmin && !!futureSessions.length && <>
@@ -669,6 +690,9 @@ export default function EventPage() {
 
       </div>
 
+      {accountError&&<div role="alert" className="mt-4 rounded border border-amber-600 p-4">{accountError} <button className="secondary-button" onClick={()=>setReload(n=>n+1)}>Повторить</button></div>}
+      {!accountReady&&<p role="status" className="mt-4">Загрузка ваших заявок и организаций…</p>}
+      {registrationError&&<div role="alert" className="mt-4">{registrationError} <button className="secondary-button" onClick={()=>void refreshRegistrations()}>Повторить загрузку заявок</button></div>}
       {/* Запись */}
       {allowsCollectiveRegistration && managedOrganizations.length > 1 && myTeam && (
         <div className="mt-6 rounded bg-gray-800 p-4">
@@ -730,10 +754,11 @@ export default function EventPage() {
 
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
           {registrationSummary}
-          <button onClick={registerTeam} disabled={!registrationIsOpen} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
+          <RegistrationRestrictions eventId={id} teamId={myTeam.id} roster={selectedRoster} refreshKey={message}/>
+          <button onClick={registerTeam} disabled={!registrationIsOpen||registrationLoading||!!registrationError||!!accountError} className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50">
             {!registrationIsOpen ? "Регистрация недоступна" : `Записать ${myTeam.type === "guild" ? "гильдию" : "команду"}`}
           </button>
-          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
+          {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
@@ -751,10 +776,11 @@ export default function EventPage() {
           </div>
           <p className={registrationIsOpen ? "mb-3 text-sm text-green-400" : "mb-3 text-sm text-yellow-300"}>{registrationHint}</p>
           {registrationSummary}
-          <button onClick={registerPlayer} disabled={!registrationIsOpen} className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50">
+          <RegistrationRestrictions eventId={id} refreshKey={message}/>
+          <button onClick={registerPlayer} disabled={!registrationIsOpen||registrationLoading||!!registrationError||!!accountError} className="px-4 py-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50">
             {registrationIsOpen ? "Записаться лично" : "Регистрация недоступна"}
           </button>
-          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
+          {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 
@@ -885,7 +911,7 @@ export default function EventPage() {
           )}
 
           <button onClick={cancelRegistration} className="px-4 py-2 bg-red-500 rounded hover:bg-red-600">Отменить запись</button>
-          {message && <p className="mt-3 text-sm">{message}</p>}{restrictionLinks.map(r=><p key={r.id} className="mt-2 text-sm text-amber-200">{r.reason} · <Link className="text-cyan-300 underline" href={r.appealUrl}>{locale==="ru"?"Обжаловать":locale==="kk"?"Шағымдану":"Даттануу"}</Link></p>)}
+          {message && <p className="mt-3 text-sm">{message}</p>}
         </div>
       )}
 

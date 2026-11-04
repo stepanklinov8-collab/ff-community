@@ -79,8 +79,8 @@ export function FinancialTermsSummary({ value }: { value: FinancialTerms }) {
   </div>;
 }
 
-export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt, organizationId }: {
-  value: FinancialTerms; onChange: (value: FinancialTerms) => void; startsAt: string; endsAt: string | null; organizationId: string;
+export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt, organizationId, section="all" }: {
+  value: FinancialTerms; onChange: (value: FinancialTerms) => void; startsAt: string; endsAt: string | null; organizationId: string; section?: "all"|"payments"|"restrictions"|"none";
 }) {
   const [search, setSearch] = useState("");
   const [choices, setChoices] = useState<{ id: string; title: string }[]>([]);
@@ -100,7 +100,8 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
   function updateOverride(index: number, values: EventOverride["values"]) {
     onChange({ ...value, eventOverrides: value.eventOverrides.map((row, i) => i === index ? { ...row, values } : row) });
   }
-  return <div className="space-y-6 border-t border-slate-700 pt-5">
+  return <div hidden={section==="none"} className="space-y-6 border-t border-slate-700 pt-5">
+    <div hidden={section!=="all"&&section!=="payments"} className="space-y-4">
     <h3 className="text-lg font-bold">Оплата и дополнительные бонусы</h3>
     <p className="text-sm text-slate-300">Все договорные выплаты и резервы списываются со счёта организации. Личный баланс владельца автоматически не используется. Эти суммы выплачиваются сверх доли призовых. Ноль означает отсутствие выплаты; сохранение черновика не переводит монеты.</p>
     <Amount label="Разовая оплата при первом подписании" value={value.signingAmount} onChange={signingAmount => onChange({ ...value, signingAmount })} />
@@ -112,12 +113,16 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
     </fieldset>
     <div className="grid gap-3 sm:grid-cols-2">{Object.entries(rateLabels).map(([key, label]) => <Amount key={key} label={label} value={value.rates[key as keyof typeof rateLabels]} onChange={amount => onChange({ ...value, rates: { ...value.rates, [key]: amount } })} />)}</div>
     <p className="text-sm text-slate-300">Оплата за целый турнир определяется условиями, подписанными до начала турнира, и начисляется один раз после завершения всех его действующих сессий. Изменения между этапами не заменяют эту сумму. Участие только в отборе учитывается при выполнении договорного правила участия.</p>
+    </div>
+    <div hidden={section!=="all"&&section!=="restrictions"} className="space-y-4">
     <OverdueEditor value={value.overdueCompensation} onChange={overdueCompensation => onChange({ ...value, overdueCompensation })} />
     <NoShowEditor value={value.noShowPenalty ?? { kind: "none" }} onChange={noShowPenalty => onChange({ ...value, noShowPenalty })} />
     <TransferCancellationPenaltyEditor value={value.transferCancellationPenalty} onChange={transferCancellationPenalty=>{const next={...value};if(transferCancellationPenalty)next.transferCancellationPenalty=transferCancellationPenalty;else delete next.transferCancellationPenalty;onChange(next);}}/>
     <TransferCancellationEditor value={value.transferCancellation} onChange={transferCancellation => {
       const next = { ...value }; if (transferCancellation) next.transferCancellation = transferCancellation; else delete next.transferCancellation; onChange(next);
     }} />
+    </div>
+    <div hidden={section!=="all"&&section!=="payments"} className="space-y-4">
     <fieldset className="space-y-3"><legend className="font-semibold">Бонусы за рейтинг своей организации</legend>
       <p className="text-sm text-slate-300">Условия фиксируются по подписанной редакции на начало периода. Договор должен непрерывно действовать до его конца; при более раннем завершении бонус не начисляется. Прошлые места без сохранённой истории не восстанавливаются из текущей таблицы.</p>
       {value.rankingBonuses.map((row, index) => {
@@ -156,5 +161,6 @@ export default function FinancialTermsEditor({ value, onChange, startsAt, endsAt
         onChange({ ...value, eventOverrides: [...value.eventOverrides, { eventId: choice.id, values: {} }] }); setChoices([]);
       }}>{choice.title}</button></li>)}</ul>
     </fieldset>
+    </div>
   </div>;
 }
