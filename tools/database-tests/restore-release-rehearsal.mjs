@@ -77,7 +77,14 @@ for(const section of ['pre-data','data','post-data']){
 }
 const selectedSql=sections.map((sql,index)=>sql+`\nselect 'RESTORE_PHASE:${['pre_data','data','post_data'][index]}';\n`).join('\n');
 if(/^(?:CREATE EXTENSION|CREATE DATABASE|ALTER DATABASE|\\connect)\b/im.test(selectedSql))throw Error('Unexpected database/platform mutation in the restore selection');
-const checks=restoredCounts.map(row=>`if (select count(*) from ${quote(row.schema)}.${quote(row.table)})<>${row.rows} then raise exception 'RESTORE_COUNT_MISMATCH';end if;`).join('\n');
+// New target-managed Storage bookkeeping may not yet exist on the staging
+// service version. Only these named, empty source tables may be absent; never
+// skip a populated platform table or any application table.
+const targetManagedEmptyTables=['storage.bucket_lifecycle_states','storage.lifecycle_abandoned_artifacts'];
+const checks=restoredCounts.map(row=>{
+ const table=quote(row.schema)+'.'+quote(row.table),check=`if (select count(*) from ${table})<>${row.rows} then raise exception 'RESTORE_COUNT_MISMATCH';end if;`;
+ return row.rows===0&&targetManagedEmptyTables.includes(row.schema+'.'+row.table)?`if to_regclass('${table.replaceAll("'","''")}') is not null then ${check} end if;`:check;
+}).join('\n');
 const tables=restoredCounts.filter(row=>platformSchemas.has(row.schema)&&row.rows>0).map(row=>quote(row.schema)+'.'+quote(row.table));
 const preamble=`begin;set local lock_timeout='5s';set local statement_timeout='120s';set local session_replication_role=replica;\n`+
  [...customSchemas].map(schema=>`drop schema if exists ${quote(schema)} cascade;`).join('\n')+'\ncreate schema public;\n'+
@@ -130,6 +137,6 @@ await writeFile(join(directory,'restore-attempt.json'),JSON.stringify({project:s
 if(restoreFailure)throw restoreFailure;
 if(!out.includes(`RESTORE_VERIFIED_TABLES:${restoredCounts.length}`))throw Error('Restore verification did not finish');
 if(updateFiles.length&&!out.includes('RESTORE_PHASE:update_migrations'))throw Error('Migration rehearsal did not finish');
-const proof={sourceProject:manifest.sourceProject,targetProject:stagingProject,sha256:hash,capturedAt:manifest.capturedAt,restoredAt:new Date().toISOString(),verified:true,tables:restoredCounts.length,rows:restoredCounts.reduce((sum,row)=>sum+row.rows,0),rollbackVerified:true,platformDefinitions:'target-managed',platformAdminDefaults:'target-managed; application-owned defaults restored',platformJournals:[...platformJournals],platformSequenceCounters:'preserved; original recovery values retained in archive',productionChanged:false};
+const proof={sourceProject:manifest.sourceProject,targetProject:stagingProject,sha256:hash,capturedAt:manifest.capturedAt,restoredAt:new Date().toISOString(),verified:true,tables:restoredCounts.length,rows:restoredCounts.reduce((sum,row)=>sum+row.rows,0),rollbackVerified:true,platformDefinitions:'target-managed',platformAdminDefaults:'target-managed; application-owned defaults restored',platformJournals:[...platformJournals],targetManagedEmptyTables:restoredCounts.filter(row=>row.rows===0&&targetManagedEmptyTables.includes(row.schema+'.'+row.table)).map(row=>row.schema+'.'+row.table),platformSequenceCounters:'preserved; original recovery values retained in archive',productionChanged:false};
 if(updateFiles.length)proof.updateMigrations=updateSources.map(({name,sql})=>({name,sha256:createHash('sha256').update(sql).digest('hex')}));
 await writeFile(join(directory,'restore-proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof));
