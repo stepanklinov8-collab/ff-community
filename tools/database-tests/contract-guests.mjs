@@ -137,7 +137,7 @@ export async function verifyContractGuests(db,id){
  const history=(await db.query('select contract_obligation_query($1,$2,0) value',[hp,hc])).rows[0].value;
  assert.ok(history.obligations.some(o=>o.kind==='appearance'&&Number(o.guestShares)===20&&Number(o.playerPaid)===80),'private payment history distinguishes the gross payment, home shares and actual player receipt');
  const count=(await db.query('select count(*)::int n from coin_entries')).rows[0].n;await publish();await db.query('select contract_maintenance_run()');assert.equal((await db.query('select count(*)::int n from coin_entries')).rows[0].n,count);
- const withdraw=await wallet(hp,'withdraw_request',{amount:60,note:'Protect net guest winnings'});await publish(false);
+ const withdraw=await wallet(hp,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:60,note:'Protect net guest winnings'});await publish(false);
  assert.deepEqual(await account(ht),{balance:440,reserved:0});assert.equal((await account(percentOrg)).balance,0);assert.equal((await account(fixedOrg)).balance,0);
  assert.equal((await db.query('select contract_player_debt_summary($1) value',[hp])).rows[0].value.total,60,'return debt is only the unpaid player net, never the home organizations shares');
  await wallet(hp,'withdraw_cancel',{withdrawalId:withdraw.operationId});assert.equal((await account(ht)).balance,500);

@@ -6,15 +6,16 @@ import {formatCoins} from "@/lib/economy/currency";
 import {formatBetPoints} from "@/lib/betting-currency";
 import CoinDeposits,{type CoinDeposit} from "./CoinDeposits";
 import AdminChatButton from "./AdminChatButton";
+import WithdrawalRequestForm from "./WithdrawalRequestForm";
 
 type Account={id:string|null;user_id:string|null;team_id:string|null;name:string;balance:number;reserved:number;canSpend?:boolean};
-type Withdrawal={id:string;account_id:string;user_id:string;amount:number;status:string;note:string;admin_note?:string;created_at:string;organizationId?:string|null;accountName?:string;canCancel?:boolean};
+type Withdrawal={id:string;account_id:string;user_id:string;amount:number;status:string;note:string;full_name_latin?:string|null;transfer_country?:string|null;admin_note?:string;created_at:string;organizationId?:string|null;accountName?:string;canCancel?:boolean};
 type Operation={id:string;action:string;description:string;reverses_id?:string|null;created_at:string;entries?:Array<{account_id:string;amount:number}>};
 type Data={userId?:string;accounts:Account[];demoBalance?:number;canManage?:boolean;isOwner?:boolean;withdrawals:Withdrawal[];
  deposits?:CoinDeposit[];financialNotifications?:{vkConfigured:boolean;pushConfigured:boolean};
  contractDebt?:{total:number;withdrawalBlocked:boolean;personalAwards?:number};
  ledger?:Array<{id:number;account_id:string;amount:number;reserved_change:number;created_at:string;operation:Operation}>;
- operations?:Operation[];profiles?:Array<{id:string;nickname:string}>;admins?:Array<{user_id:string;nickname:string;role:string;enabled:boolean}>};
+ operations?:Operation[];profiles?:Array<{id:string;nickname:string;contact_social_url?:string|null}>;admins?:Array<{user_id:string;nickname:string;role:string;enabled:boolean}>};
 type Target={id:string;name:string;kind:"player"|"organization"};
 const empty:Data={accounts:[],withdrawals:[]};
 const money=(n:number)=>formatCoins(n,"ru");
@@ -25,7 +26,7 @@ const statuses:Record<string,string>={pending:"Ожидает выплаты",pa
 export default function CoinWallet({admin=false}:{admin?:boolean}){
  const [data,setData]=useState<Data>(empty),[loading,setLoading]=useState(true),[error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
  const [query,setQuery]=useState(""),[targets,setTargets]=useState<Target[]>([]),[target,setTarget]=useState<Target|null>(null);
- const [teamId,setTeamId]=useState(""),[amount,setAmount]=useState(""),[withdrawAmount,setWithdrawAmount]=useState(""),[note,setNote]=useState(""),[reason,setReason]=useState("");
+ const [teamId,setTeamId]=useState(""),[amount,setAmount]=useState(""),[reason,setReason]=useState("");
  const [confirmation,setConfirmation]=useState<{operation:Record<string,unknown>;text:string}|null>(null);
  const requestKey=useRef<{body:string;id:string}|null>(null);
  const focusedRequest=useRef<string|null>(null);
@@ -73,10 +74,11 @@ export default function CoinWallet({admin=false}:{admin?:boolean}){
     <div className="flex flex-wrap gap-3"><button className="primary-button" disabled={busy||!target||!Number.isSafeInteger(Number(amount))||Number(amount)===0||(!admin&&(Number(amount)<0||Number(amount)>available||sameAccount||source?.canSpend===false))||(admin&&reason.trim().length<3)} onClick={()=>{if(target)prepare(admin?{action:"adjust",kind:target.kind,ownerId:target.id,amount:Number(amount),reason}:{action:"transfer",...(target.kind==="organization"?{recipientTeamId:target.id}:{userId:target.id}),amount:Number(amount),...sourceFields},admin?`Изменить баланс ${target.name} на ${money(Number(amount))}?`:`Перевести ${money(Number(amount))} ${target.kind==="organization"?"организации":"игроку"} ${target.name} с баланса «${source?.name??"Личный баланс"}»?`);}}>{admin?"Проверить изменение":"Проверить перевод"}</button>
     {admin&&<button className="secondary-button" disabled={busy||!target||reason.trim().length<3} onClick={()=>{if(target)prepare({action:"reset",kind:target.kind,ownerId:target.id,reason},`Обнулить основной баланс ${target.name}? История и действующие резервы сохранятся.`);}}>Обнулить баланс</button>}</div>
    </section>
-   {!admin&&<section className="cyber-card space-y-4 p-5"><h2 className="text-xl font-bold">Запросить вывод</h2><p>Счёт вывода: {source?.name??"Личный баланс"}. Сумма резервируется на этом счёте до решения администратора. Выплату администратор делает вручную по указанным реквизитам.</p><label className="block">Сумма, 🪙<input className={field} type="number" min={1} step={1} value={withdrawAmount} onChange={e=>setWithdrawAmount(e.target.value)}/></label><label className="block">Реквизиты для перевода<textarea className={field} maxLength={2000} value={note} onChange={e=>setNote(e.target.value)} placeholder="Укажите удобные реквизиты и необходимые пояснения"/></label><p className="text-xs text-slate-400">Личные реквизиты видны вам и администраторам с доступом к выплатам. Заявки организации также видны её действующему владельцу и руководителю.</p><button className="primary-button" disabled={busy||source?.canSpend===false||(!teamId&&data.contractDebt?.withdrawalBlocked)||Number(withdrawAmount)<=0||Number(withdrawAmount)>available||!Number.isSafeInteger(Number(withdrawAmount))||note.trim().length<3} onClick={()=>prepare({action:"withdraw_request",amount:Number(withdrawAmount),note,...sourceFields},`Зарезервировать ${money(Number(withdrawAmount))} для вывода с баланса «${source?.name??"Личный баланс"}»?`)}>Подать заявку</button></section>}
+   {!admin&&<WithdrawalRequestForm busy={busy} canSpend={source?.canSpend!==false} blocked={!!(!teamId&&data.contractDebt?.withdrawalBlocked)} available={available} accountName={source?.name??"Личный баланс"} teamId={teamId} prepare={prepare}/>}
    <section className="cyber-card space-y-4 p-5"><h2 className="text-xl font-bold">{admin?"Заявки на выплату":"Заявки на вывод с моих счетов"}</h2>{!data.withdrawals.length&&<p className="text-slate-400">Заявок нет</p>}{data.withdrawals.map(w=><article key={w.id} id={'request-'+w.id} className="space-y-2 rounded-xl border border-white/15 p-4">
      <p className="font-bold">{money(w.amount)} · {statuses[w.status]??w.status}{admin&&` · ${data.profiles?.find(p=>p.id===w.user_id)?.nickname??w.user_id}`}</p>
      <p className="text-sm text-slate-400">Счёт: {w.accountName??data.accounts.find(a=>a.id===w.account_id)?.name??"Счёт"}{w.organizationId?" · от лица организации":""}</p>
+     {w.full_name_latin&&<p>Получатель: {w.full_name_latin}</p>}{w.transfer_country&&<p>Страна перевода: {w.transfer_country}</p>}
      <p className="whitespace-pre-wrap break-words">{w.note}</p>{w.admin_note&&<p>{w.admin_note}</p>}{admin&&<AdminChatButton userId={w.user_id}/>}
      {w.status==="pending"&&<div className="flex flex-wrap gap-3">{admin?<><button className="primary-button" disabled={busy||reason.trim().length<3} onClick={()=>prepare({action:"withdraw_paid",withdrawalId:w.id,reason},`Подтвердить, что перевод на ${money(w.amount)} уже выполнен вручную? Монеты будут списаны из резерва.`)}>Выплата выполнена</button><button className="secondary-button" disabled={busy||reason.trim().length<3} onClick={()=>prepare({action:"withdraw_reject",withdrawalId:w.id,reason},`Отклонить заявку и освободить ${money(w.amount)}?`)}>Отклонить</button></>:w.canCancel!==false&&<button className="secondary-button" disabled={busy} onClick={()=>prepare({action:"withdraw_cancel",withdrawalId:w.id},data.contractDebt?.withdrawalBlocked&&data.accounts.some(a=>a.id===w.account_id&&a.user_id)?"Отменить заявку? Освободившиеся монеты пойдут на погашение долга по договорным выплатам.":"Отменить заявку и вернуть монеты в доступный остаток?")}>Отменить заявку</button>}</div>}
    </article>)}{admin&&<p className="text-sm text-slate-400">Для обработки заявки укажите причину или подтверждение перевода в поле «Причина операции» выше.</p>}</section>

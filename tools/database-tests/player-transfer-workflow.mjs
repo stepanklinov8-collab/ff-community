@@ -61,7 +61,7 @@ export async function verifyPlayerTransferWorkflow(db,id,createUser=user=>db.que
  const freePlayer=id(94005),futureDeal=id(94031);
  await createUser(freePlayer);await db.query('insert into profiles(id,nickname) values($1,$2) on conflict(id) do update set nickname=excluded.nickname',[freePlayer,'Tfuture-'+freePlayer.slice(0,8)]);
  await db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'adjust',JSON.stringify({kind:'organization',ownerId:newOrg,amount:350,reason:'Future contract cancellation holds'})]);
- await db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[employer,randomUUID(),'withdraw_request',JSON.stringify({teamId:newOrg,amount:50,note:'An unrelated protected organization withdrawal'})]);
+ await db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[employer,randomUUID(),'withdraw_request',JSON.stringify({fullNameLatin:'Test Player',transferCountry:'Россия',teamId:newOrg,amount:50,note:'An unrelated protected organization withdrawal'})]);
  const futureTerms=defaultTerms(new Date(Date.now()+86400000));futureTerms.financial.signingAmount=100;futureTerms.financial.transferCancellation=emptyTransferCancellation();
  await mutate(employer,{...input,requestId:randomUUID(),dealId:futureDeal,playerId:freePlayer,price:200,newTerms:futureTerms});
  const futureAction=(actor,name,key=randomUUID())=>mutate(actor,{action:name,requestId:key,dealId:futureDeal,revision:1});

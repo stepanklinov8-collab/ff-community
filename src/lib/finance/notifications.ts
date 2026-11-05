@@ -4,6 +4,7 @@ import {createAdminClient} from '@/utils/supabase/admin';
 import {allowExternalEffects} from '@/platform/server-environment';
 import {sendPushToUsers} from '@/lib/firebase/admin';
 import {sendVkFinanceNotice} from './vk-delivery';
+import {financeNoticeContent} from './notice-content';
 
 export function financeNotificationConfiguration() {
   return {
@@ -11,7 +12,7 @@ export function financeNotificationConfiguration() {
     pushConfigured:!!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY),
   };
 }
-type Delivery={id:number;kind:'deposit'|'withdrawal';request_id:string;channel:'vk'|'push';amount:number};
+type Delivery={id:number;kind:'deposit'|'withdrawal';request_id:string;channel:'vk'|'push';amount:number;requester_nickname?:string|null;requester_contact_url?:string|null};
 /** Durable delivery after the financial transaction. Failure cannot undo money. */
 export async function drainFinanceNotifications() {
   if(!allowExternalEffects())return {disabled:true,processed:0};
@@ -27,8 +28,7 @@ export async function drainFinanceNotifications() {
       const request=await db.from(row.kind==='deposit'?'coin_deposits':'coin_withdrawals').select('status').eq('id',row.request_id).maybeSingle();
       if(request.error)throw new Error('REQUEST_LOOKUP_FAILED');
       if(request.data?.status==='pending'){
-        const title=row.kind==='deposit'?'Заявка на пополнение':'Заявка на вывод';
-        const body=`${Number(row.amount).toLocaleString('ru-RU')} OMCITE Coins. Проверьте заявку в админке.`;
+        const {title,body}=financeNoticeContent(row);
         const link='/admin/wallet?requestId='+row.request_id;
         if(row.channel==='vk'){
           const origin=new URL(process.env.NEXT_PUBLIC_SITE_URL??'https://ff-community-pink.vercel.app');

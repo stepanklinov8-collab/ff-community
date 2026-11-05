@@ -35,6 +35,20 @@ try{
  await call({action:'deposit_cancel',depositId:requestId});pending=false;
  const after=await wallet();assert.equal(after.deposits.find(row=>row.id===requestId).status,'cancelled');assert.deepEqual(balances(after),balances(before));assert.equal(after.demoBalance,before.demoBalance);
 }finally{if(pending)await call({action:'deposit_cancel',depositId:requestId});}
+const available=before.accounts.find(a=>a.user_id===session.user.id);
+let withdrawalChecked=false;
+if(available && Number(available.balance)-Number(available.reserved)>=1){
+ const key=randomUUID();let held=false;
+ try{
+  const input={action:'withdraw_request',amount:1,note:'TEST ONLY - DO NOT PAY',fullNameLatin:'TEST PLAYER',transferCountry:'Россия'};
+  await call(input,key);held=true;await call(input,key);
+  const requested=await wallet(),row=requested.withdrawals.find(row=>row.id===key);
+  assert.equal(row.full_name_latin,'TEST PLAYER');assert.equal(row.transfer_country,'Россия');
+  assert.equal(requested.withdrawals.filter(row=>row.id===key).length,1);
+  await call({action:'withdraw_cancel',withdrawalId:key});held=false;
+  const released=await wallet();assert.deepEqual(balances(released),balances(before));assert.equal(released.demoBalance,before.demoBalance);withdrawalChecked=true;
+ }finally{if(held)await call({action:'withdraw_cancel',withdrawalId:key});}
+}
 assert.equal((await fetch(origin+'/api/wallet')).status,401);
 const browser=await chromium.launch({headless:true});
 try{
@@ -43,9 +57,11 @@ try{
  const page=await context.newPage();await page.goto(origin+'/wallet');
  await page.getByRole('heading',{name:'Пополнить баланс',exact:true}).waitFor({timeout:60000});
  await page.getByRole('heading',{name:'Баланс прогнозов — Arena Points',exact:true}).waitFor();
+ await page.getByLabel('ФИО латиницей',{exact:true}).waitFor();await page.getByLabel('Страна перевода',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('link',{name:'Связаться с администрацией',exact:true}).count(),0);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await page.screenshot({path:new URL('./artifacts/contracts/finance-staging-wallet-mobile.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
  await context.close();
 }finally{await browser.close();}
-await writeFile(new URL('./artifacts/contracts/finance-local-smoke.json',import.meta.url),JSON.stringify({project:stagingProject,verified:true,checkedAt:new Date().toISOString(),depositRequestRetry:true,cancellation:true,balancesUnchanged:true,forecastsUnchanged:true,mobile:true,externalMessagesSent:false},null,2));
+await writeFile(new URL('./artifacts/contracts/finance-local-smoke.json',import.meta.url),JSON.stringify({project:stagingProject,verified:true,checkedAt:new Date().toISOString(),depositRequestRetry:true,cancellation:true,withdrawalDetails:withdrawalChecked,balancesUnchanged:true,forecastsUnchanged:true,mobile:true,externalMessagesSent:false},null,2));
 console.log('PASS: real staging deposit/retry/cancellation, unchanged main/AP funds, guest denial and mobile wallet; no external messages');

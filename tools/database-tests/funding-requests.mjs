@@ -6,6 +6,7 @@ export async function verifyFundingRequests(db,id){
   await db.query('insert into auth.users(id) values($1)',[user]);await db.query('insert into profiles(id,nickname) values($1,$2)',[user,name]);
  }
  await db.query("insert into user_roles(user_id,role) values($1,'superadmin'),($2,'admin')",[owner,admin]);
+ await db.query("update profiles set contact_social_url='https://t.me/funding_player' where id=$1",[alice]);
  await db.query("insert into teams(id,name,type,leader_id,owner_user_id,ultimate_owner_user_id) values($1,'Funding organization','team',$2,$2,$2)",[org,alice]);
  const act=async(actor,action,input,key=randomUUID())=>(await db.query('select coin_deposit_action($1,$2,$3,$4::jsonb) result',[actor,key,action,JSON.stringify(input)])).rows[0].result;
  const balance=async(team=false)=>Number((await db.query(`select balance from coin_accounts where ${team?'team_id':'user_id'}=$1`,[team?org:alice])).rows[0]?.balance??0);
@@ -14,12 +15,30 @@ export async function verifyFundingRequests(db,id){
  await act(alice,'deposit_request',input,key);await act(alice,'deposit_request',input,key);
  assert.equal(await balance(),0);assert.equal((await db.query('select count(*)::int n from coin_deposits where id=$1',[key])).rows[0].n,1);
  assert.equal((await db.query('select count(*)::int n from coin_request_deliveries where request_id=$1',[key])).rows[0].n,2);
+ const identity=(await db.query('select requester_nickname,requester_contact_url from coin_request_deliveries where request_id=$1',[key])).rows[0];
+ assert.deepEqual(identity,{requester_nickname:'Funding player',requester_contact_url:'https://t.me/funding_player'});
+ await db.query("update profiles set nickname='Updated profile',contact_social_url='https://t.me/updated' where id=$1",[alice]);
+ assert.deepEqual((await db.query('select requester_nickname,requester_contact_url from coin_request_deliveries where request_id=$1',[key])).rows[0],identity,'notification identity is snapshotted at creation');
+ assert.match((await db.query('select body from notifications where link=$1 limit 1',['/admin/wallet?requestId='+key])).rows[0].body,/Funding player[\s\S]*https:\/\/t.me\/funding_player/);
  await assert.rejects(()=>act(alice,'deposit_request',{amount:251},key),/Конфликт/);
  await assert.rejects(()=>act(admin,'deposit_credit',{depositId:key,reason:'Paid'}),/Нет прав/);
  await assert.rejects(()=>act(bob,'deposit_cancel',{depositId:key}),/Нет прав/);
  const approval=randomUUID();await act(owner,'deposit_credit',{depositId:key,reason:'Manual payment confirmed'},approval);
  await act(owner,'deposit_credit',{depositId:key,reason:'Manual payment confirmed'},approval);assert.equal(await balance(),250);
  await assert.rejects(()=>act(owner,'deposit_credit',{depositId:key,reason:'Duplicate approval'}),/уже/);
+ const withdraw=async(input,key=randomUUID())=>(await db.query("select u6_coin_action($1,$2,'withdraw_request',$3::jsonb) result",[alice,key,JSON.stringify(input)])).rows[0].result;
+ await assert.rejects(()=>withdraw({amount:1,note:'Details'}),/ФИО/);
+ await assert.rejects(()=>withdraw({amount:1,note:'Details',fullNameLatin:'Иван Иванов',transferCountry:'Россия'}),/ФИО/);
+ await assert.rejects(()=>withdraw({amount:1,note:'Details',fullNameLatin:'Ivan Ivanov'}),/страну/);
+ const payout=await withdraw({amount:40,note:'PRIVATE BANK DETAILS',fullNameLatin:'Ivan Ivanov',transferCountry:'Россия'});
+ const payoutRows=(await db.query('select organization_wallet_withdrawals($1) result',[alice])).rows[0].result;
+ assert.equal(payoutRows.find(row=>row.id===payout.operationId).full_name_latin,'Ivan Ivanov');
+ assert.equal(payoutRows.find(row=>row.id===payout.operationId).transfer_country,'Россия');
+ assert.equal((await db.query('select organization_wallet_withdrawals($1) result',[bob])).rows[0].result.some(row=>row.id===payout.operationId),false);
+ const notices=(await db.query('select body from notifications where link=$1',['/admin/wallet?requestId='+payout.operationId])).rows;
+ for(const notice of notices)assert.doesNotMatch(notice.body,/Ivan|Россия|PRIVATE/);
+ await db.query("select u6_coin_action($1,$2,'withdraw_cancel',$3::jsonb)",[alice,randomUUID(),JSON.stringify({withdrawalId:payout.operationId})]);
+ assert.equal(Number((await db.query('select reserved from coin_accounts where user_id=$1',[alice])).rows[0].reserved),0);
  const teamKey=randomUUID();await act(alice,'deposit_request',{amount:150,teamId:org},teamKey);
  await assert.rejects(()=>act(bob,'deposit_cancel',{depositId:teamKey}),/Нет прав/,'NULL personal account field must not bypass organization authorization');
  await assert.rejects(()=>act(bob,'deposit_request',{amount:1,teamId:org}),/Нет прав/);

@@ -78,7 +78,7 @@ export async function verifyPersonalAwards(db,id){
  const officialTie=document();officialTie.rows[0].players[0].kills=4;officialTie.rows[0].players[1].kills=4;await publish(officialTie);
  assert.equal((await db.query("select personal_award_current_plan($1,'mvp') value",[fund])).rows[0].value.winner.userId,player,'valid published session MVP remains the single source for the monetary award');
  await assert.rejects(()=>awardAction('choose','mvp','user:'+other),/PERSONAL_AWARD_WINNER/,'personal money choice cannot create a second MVP different from the published results');
- const protectedWithdrawal=(await db.query("select u6_coin_action($1,$2,'withdraw_request',$3::jsonb) value",[player,randomUUID(),JSON.stringify({amount:20,note:'Protected award withdrawal'})])).rows[0].value;
+ const protectedWithdrawal=(await db.query("select u6_coin_action($1,$2,'withdraw_request',$3::jsonb) value",[player,randomUUID(),JSON.stringify({fullNameLatin:'Test Player',transferCountry:'Россия',amount:20,note:'Protected award withdrawal'})])).rows[0].value;
  const tie=document();tie.mvps=[];tie.rows[0].players[0].kills=4;tie.rows[0].players[1].kills=4;
  await publish(tie);assert.equal((await distribution()).reason,'winner_choice_required');
  assert.deepEqual(await playerAccount(player),{balance:20,reserved:20});

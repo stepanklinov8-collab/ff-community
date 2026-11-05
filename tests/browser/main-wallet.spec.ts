@@ -39,18 +39,19 @@ test('manual top-up creates a pending request without increasing either balance 
  await expect(page.getByText('Ожидает оплаты и проверки',{exact:false})).toBeVisible();
  await expect(page.getByText('Доступно: 1 000 🪙',{exact:true})).toBeVisible();
  expect(writes[0]).toEqual({action:'deposit_request',amount:250});
- await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveAttribute('href','/chat?support=1');
+ await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Отменить пополнение',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('Отменено',{exact:false})).toBeVisible();expect(writes[1].action).toBe('deposit_cancel');
 });
 
 test('finance admin confirms payment for the saved amount and receives a clear disconnected VK status',async({page})=>{
- await login(page);const state={...initial(),deposits:[{id:id(998050),user_id:bob,amount:250,status:'pending',accountName:'Личный баланс',created_at:'2026-11-05T10:00:00Z'}],financialNotifications:{vkConfigured:false,pushConfigured:true},profiles:[{id:bob,nickname:'Игрок'}],operations:[]};
+ await login(page);const state={...initial(),deposits:[{id:id(998050),user_id:bob,amount:250,status:'pending',accountName:'Личный баланс',created_at:'2026-11-05T10:00:00Z'}],financialNotifications:{vkConfigured:false,pushConfigured:true},profiles:[{id:bob,nickname:'Игрок',contact_social_url:'https://t.me/test_player'}],operations:[]};
  const writes:Array<Record<string,unknown>>=[];
  await page.route('**/api/admin/wallet',route=>route.fulfill({json:state}));
  await page.route('**/api/wallet',route=>{writes.push(route.request().postDataJSON().operation);state.deposits=[];return route.fulfill({json:{success:true}});});
  await page.goto('/admin/wallet');
  await expect(page.getByText(/ВК — не подключён/)).toBeVisible();
+ await expect(page.getByRole('link',{name:'https://t.me/test_player',exact:true})).toHaveAttribute('href','https://t.me/test_player');
  await expect(page.getByRole('button',{name:'Оплата получена — начислить',exact:true})).toBeDisabled();
  await page.getByLabel('Подтверждение оплаты или причина отказа').fill('Получил перевод');
  await page.getByRole('button',{name:'Оплата получена — начислить',exact:true}).click();
@@ -100,10 +101,11 @@ test('withdrawal reserves primary money, preserves free-form details and cancell
  await page.goto('/wallet');
  await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('250');
  await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Тестовый банк, реквизиты для администратора');
+ await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await page.getByRole('button',{name:'Подать заявку'}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('В резерве: 250 🪙',{exact:true})).toBeVisible();
  await expect(page.getByText('Доступно: 750 🪙',{exact:true})).toBeVisible();
- expect(writes[0]).toMatchObject({action:'withdraw_request',amount:250,note:'Тестовый банк, реквизиты для администратора'});
+ expect(writes[0]).toMatchObject({action:'withdraw_request',amount:250,note:'Тестовый банк, реквизиты для администратора',fullNameLatin:'IVAN IVANOV',transferCountry:'Россия'});
  await page.getByRole('button',{name:'Отменить заявку'}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('В резерве: 0 🪙',{exact:true})).toBeVisible();
  expect(writes[1].action).toBe('withdraw_cancel');
@@ -129,6 +131,7 @@ test('contract recovery debt blocks personal withdrawal and explains reserve rel
  await expect(debt.getByRole('link')).toHaveAttribute('href','/contracts');
  await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('10');
  await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank');
+ await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await expect(page.getByRole('button',{name:'Подать заявку'})).toBeDisabled();
  await page.getByRole('button',{name:'Отменить заявку',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('Освободившиеся монеты пойдут на погашение долга');
@@ -180,10 +183,23 @@ test('organization withdrawal uses its account and remains visible to the curren
  });
  await page.goto('/wallet');await page.getByLabel('Откуда списать монеты').selectOption(organization);
  await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('500');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Реквизиты организации');
+ await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await page.getByRole('button',{name:'Подать заявку'}).click();await expect(page.getByRole('dialog')).toContainText('с баланса «Гильдия»');
  await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect(page.getByText('Счёт: Гильдия · от лица организации',{exact:true})).toBeVisible();
  expect(writes[0]).toMatchObject({action:'withdraw_request',teamId:organization,amount:500});
  await expect(page.getByText('Доступно: 1 000 🪙',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Отменить заявку',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('Доступно: 500 🪙',{exact:true})).toBeVisible();expect(writes[1].action).toBe('withdraw_cancel');
+});
+
+
+test('withdrawal requires Latin name and country while top-up has no contact-administration button',async({page})=>{
+ await login(page);await page.route('**/api/wallet',route=>route.fulfill({json:initial()}));await page.goto('/wallet');
+ await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('100');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank details');
+ const button=page.getByRole('button',{name:'Подать заявку',exact:true});await expect(button).toBeDisabled();
+ await page.getByLabel('ФИО латиницей',{exact:true}).fill('Иван Иванов');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
+ await expect(page.getByText('Используйте латинские буквы, пробелы, дефис или апостроф',{exact:true})).toBeVisible();await expect(button).toBeDisabled();
+ await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await expect(button).toBeEnabled();
+ await page.getByLabel('Страна перевода',{exact:true}).fill('');await expect(button).toBeDisabled();
+ await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveCount(0);
 });

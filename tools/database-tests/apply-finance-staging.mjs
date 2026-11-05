@@ -3,8 +3,10 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {assertTestDatabaseTarget,stagingProject} from '../../src/platform/environment.ts';
 assertTestDatabaseTarget(`https://${stagingProject}.supabase.co`);
-if(process.argv.slice(2).some(arg=>arg!=='--apply'))throw Error('Only --apply is accepted');
-const name='202611050001_funding_requests_notifications.sql';
+if(process.argv.slice(2).some(arg=>!['--apply','--details'].includes(arg)))throw Error('Only --apply and --details are accepted');
+const details=process.argv.includes('--details');
+const name=details?'202611050002_withdrawal_details_and_request_contacts.sql':'202611050001_funding_requests_notifications.sql';
+const markerFunction=details?'public.coin_request_notify()':'public.coin_deposit_action(uuid,uuid,text,jsonb)';
 const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
 const sha256=createHash('sha256').update(sql).digest('hex');
 const token=(await readFile('C:/Users/Lenovo/.supabase/access-token','utf8')).trim();
@@ -21,9 +23,9 @@ const inspection=`select jsonb_build_object(
  'coins',(select md5(coalesce(string_agg(id||':'||balance||':'||reserved,',' order by id),'')) from coin_accounts),
  'forecasts',(select md5(coalesce(string_agg(user_id||':'||balance,',' order by user_id),'')) from site_wallets)
  ) protected,
- to_regclass('public.coin_deposits') is not null installed,
- to_regprocedure('public.u6_coin_action(uuid,uuid,text,jsonb)') is not null base_installed,
- case when to_regprocedure('public.coin_deposit_action(uuid,uuid,text,jsonb)') is not null then obj_description(to_regprocedure('public.coin_deposit_action(uuid,uuid,text,jsonb)'),'pg_proc') end marker`;
+ ${details?"exists(select 1 from information_schema.columns where table_schema='public' and table_name='coin_withdrawals' and column_name='full_name_latin')":"to_regclass('public.coin_deposits') is not null"} installed,
+ to_regprocedure('public.u6_coin_action(uuid,uuid,text,jsonb)') is not null ${details?"and to_regclass('public.coin_deposits') is not null":''} base_installed,
+ case when to_regprocedure('${markerFunction}') is not null then obj_description(to_regprocedure('${markerFunction}'),'pg_proc') end marker`;
 const before=(await query(inspection))[0];
 if(!before.base_installed)throw Error('Staging financial foundation missing');
 if(before.installed){
@@ -36,9 +38,9 @@ if(before.installed){
  await query(`begin;set local lock_timeout='5s';${body}\nrollback;`,false);
  const rolled=(await query(inspection))[0];
  if(JSON.stringify(before)!==JSON.stringify(rolled))throw Error('Staging rollback changed protected state');
- await query(`begin;set local lock_timeout='5s';${body}\ncomment on function public.coin_deposit_action(uuid,uuid,text,jsonb) is 'OMCITE staging migration ${name} SHA256 ${sha256}';commit;notify pgrst,'reload schema';`,false);
+ await query(`begin;set local lock_timeout='5s';${body}\ncomment on function ${markerFunction} is 'OMCITE staging migration ${name} SHA256 ${sha256}';commit;notify pgrst,'reload schema';`,false);
  const after=(await query(inspection))[0];
  if(JSON.stringify(before.protected)!==JSON.stringify(after.protected)||!after.installed)throw Error('Staging integrity check failed');
- await writeFile(new URL('./artifacts/contracts/finance-staging-proof.json',import.meta.url),JSON.stringify({project:stagingProject,name,sha256,verified:true,rollbackVerified:true,checkedAt:new Date().toISOString(),before,after},null,2));
+ await writeFile(new URL(details?'./artifacts/contracts/finance-details-staging-proof.json':'./artifacts/contracts/finance-staging-proof.json',import.meta.url),JSON.stringify({project:stagingProject,name,sha256,verified:true,rollbackVerified:true,checkedAt:new Date().toISOString(),before,after},null,2));
  console.log('PASS: staging finance migration, rollback rehearsal and unchanged users/organizations/registrations/main/AP account fingerprints');
 }

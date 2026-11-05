@@ -72,11 +72,11 @@ export async function verifyContractObligations(db,id){
  assert.equal(await debt(),false,'unfunded future obligation is not overdue early');
  await assert.rejects(()=>pay(futureSalary,1),/CONTRACT_NOT_DUE/);
  await wallet('adjust',{kind:'organization',ownerId:team,amount:500,reason:'Withdrawal before debt'});
- const withdrawal=await wallet('withdraw_request',{teamId:team,amount:100,note:'Test payment details'},owner);
+ const withdrawal=await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:team,amount:100,note:'Test payment details'},owner);
  const oldDebt=await create('salary','debt-a',600,false,due);
  const secondDebt=await create('mvp','debt-b',450,false,due);
  assert.equal(await debt(),true);
- await assert.rejects(()=>wallet('withdraw_request',{teamId:team,amount:1,note:'Blocked'},owner),/CONTRACT_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:team,amount:1,note:'Blocked'},owner),/CONTRACT_DEBT_WITHDRAWAL/);
  await assert.rejects(()=>wallet('withdraw_paid',{withdrawalId:withdrawal.operationId,reason:'Blocked while debt'},owner),/CONTRACT_DEBT_WITHDRAWAL/);
  await wallet('withdraw_cancel',{withdrawalId:withdrawal.operationId},owner);
  assert.equal((await obligation(oldDebt)).paid,0,'no automatic allocation on unrelated wallet actions');
