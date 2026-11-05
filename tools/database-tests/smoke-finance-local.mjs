@@ -67,8 +67,15 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844}});
  await context.addCookies([{name:`sb-${stagingProject}-auth-token`,value:'base64-'+Buffer.from(JSON.stringify(session)).toString('base64url'),domain:'127.0.0.1',path:'/',sameSite:'Lax'}]);
  const page=await context.newPage();await page.goto(origin+'/wallet');
- await page.getByRole('heading',{name:'Пополнить баланс',exact:true}).waitFor({timeout:60000});
+ const ownBalance=page.getByRole('region',{name:'Баланс: Личный баланс',exact:true});
+ await ownBalance.waitFor({timeout:60000});
+ assert.equal(await page.getByRole('region',{name:'Пополнение монет',exact:true}).count(),0);
+ assert.equal(await page.getByRole('region',{name:'Запрос на вывод',exact:true}).count(),0);
  await page.getByRole('heading',{name:'Баланс прогнозов — Arena Points',exact:true}).waitFor();
+ await ownBalance.getByRole('button',{name:'Пополнить',exact:true}).click();
+ await page.getByRole('heading',{name:'Пополнить баланс',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Назад к балансу',exact:true}).click();
+ await ownBalance.getByRole('button',{name:'Вывести',exact:true}).click();
  await page.getByLabel('ФИО латиницей',{exact:true}).waitFor();await page.getByLabel('Страна перевода',{exact:true}).waitFor();
  assert.equal(await page.getByRole('link',{name:'Связаться с администрацией',exact:true}).count(),0);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

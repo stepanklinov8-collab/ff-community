@@ -15,6 +15,7 @@ export default function WithdrawalRequestForm({busy,canSpend,blocked,available,a
  return <section className="cyber-card space-y-4 p-5" aria-label="Запрос на вывод">
   <h2 className="text-xl font-bold">Запросить вывод</h2>
   <p>Счёт вывода: {accountName}. Сумма резервируется на этом счёте до решения администратора. Выплату администратор делает вручную по указанным реквизитам.</p>
+  {blocked&&<p className="text-amber-300">Вывод недоступен до погашения задолженности по возвратам и штрафам.</p>}
   <label className="block">Сумма, 🪙<input className={field} type="number" min={1} max={1000000000000} step={1} value={amount} onChange={e=>setAmount(e.target.value)}/></label>
   <div className="grid gap-4 md:grid-cols-2">
    <div><label className="block">ФИО латиницей<input className={field} autoComplete="name" lang="en" maxLength={160} value={name} placeholder="IVAN IVANOV" onChange={e=>setName(e.target.value)} onBlur={()=>setTouched(v=>({...v,name:true}))} aria-required="true" aria-invalid={touched.name&&!nameResult.success}/></label>{touched.name&&!nameResult.success&&<span className="mt-1 block text-sm text-red-300">{nameResult.error.issues[0].message}</span>}</div>

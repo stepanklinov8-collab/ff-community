@@ -4,7 +4,7 @@ import {useCallback,useEffect,useRef,useState} from "react";
 import {authFetch} from "@/utils/api/auth-fetch";
 import {formatCoins} from "@/lib/economy/currency";
 import {formatBetPoints} from "@/lib/betting-currency";
-import CoinDeposits,{type CoinDeposit} from "./CoinDeposits";
+import CoinDeposits,{DepositRequestForm,type CoinDeposit} from "./CoinDeposits";
 import AdminChatButton from "./AdminChatButton";
 import WithdrawalRequestForm from "./WithdrawalRequestForm";
 
@@ -28,9 +28,13 @@ export default function CoinWallet({admin=false}:{admin?:boolean}){
  const [query,setQuery]=useState(""),[targets,setTargets]=useState<Target[]>([]),[target,setTarget]=useState<Target|null>(null);
  const [teamId,setTeamId]=useState(""),[amount,setAmount]=useState(""),[reason,setReason]=useState("");
  const [confirmation,setConfirmation]=useState<{operation:Record<string,unknown>;text:string}|null>(null);
+ const [requestForm,setRequestForm]=useState<{kind:"deposit"|"withdrawal";teamId:string}|null>(null);
+ const overviewRef=useRef<HTMLElement>(null),formRef=useRef<HTMLDivElement>(null);
  const requestKey=useRef<{body:string;id:string}|null>(null);
  const focusedRequest=useRef<string|null>(null);
  const load=useCallback(async()=>{const response=await authFetch(admin?"/api/admin/wallet":"/api/wallet"),value=await response.json();if(!response.ok)throw Error(value.error??"Не удалось загрузить кошелёк");setData(value);},[admin]);
+ useEffect(()=>{if(requestForm){formRef.current?.focus({preventScroll:true});formRef.current?.scrollIntoView({block:"start"});}},[requestForm]);
+ const returnToOverview=()=>{setRequestForm(null);requestAnimationFrame(()=>{overviewRef.current?.focus({preventScroll:true});overviewRef.current?.scrollIntoView({block:"start"});});};
  useEffect(()=>{let alive=true;const timer=setTimeout(()=>{void load().catch(e=>{if(alive)setError(e.message);}).finally(()=>{if(alive)setLoading(false);});},0);return()=>{alive=false;clearTimeout(timer);};},[load]);
  useEffect(()=>{
   if(loading||!admin)return;
@@ -47,23 +51,32 @@ export default function CoinWallet({admin=false}:{admin?:boolean}){
  const send=async()=>{if(!confirmation||busy)return;setBusy(true);setError("");
   const body=JSON.stringify(confirmation.operation);if(requestKey.current?.body!==body)requestKey.current={body,id:crypto.randomUUID()};
   try{const response=await authFetch("/api/wallet",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId:requestKey.current.id,operation:confirmation.operation})});const value=await response.json();if(!response.ok)throw Error(value.error??"Операция не выполнена");
-   setConfirmation(null);requestKey.current=null;setMessage("Операция выполнена");await load();
+   const action=confirmation.operation.action;
+   setConfirmation(null);requestKey.current=null;
+   setMessage(action==="withdraw_request"?"Заявка на вывод успешно оформлена":action==="deposit_request"?"Заявка на пополнение успешно оформлена":"Операция выполнена");
+   if(action==="withdraw_request"||action==="deposit_request")returnToOverview();
+   await load();
   }catch(e){setError(e instanceof Error?e.message:"Ошибка соединения. Повторите запрос.");}finally{setBusy(false);}
  };
  const source=data.accounts.find(a=>teamId?a.team_id===teamId:!!a.user_id);
  const sourceFields=teamId?{teamId}:{};
  const sameAccount=target?.kind==="organization"?target.id===teamId:!teamId&&target?.id===data.userId;
  const available=Math.max(0,(source?.balance??0)-(source?.reserved??0));
- return <main className="page-shell space-y-6">
+ const requestAccount=requestForm?data.accounts.find(a=>requestForm.teamId?a.team_id===requestForm.teamId:a.user_id===data.userId):undefined;
+ return <main ref={overviewRef} tabIndex={-1} className="page-shell space-y-6 outline-none">
   <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-3xl font-bold">{admin?"Балансы и выплаты":"Кошелёк"}</h1>{!admin&&<Link className="secondary-button" href="/my-organizations">Мои организации</Link>}<Link className="secondary-button" href={admin?"/wallet":"/profile"}>{admin?"Мой кошелёк":"Профиль"}</Link>{!admin&&data.canManage&&<Link className="secondary-button" href="/admin/wallet">Управление балансами</Link>}</div>
   {loading&&<p>Загрузка…</p>}{error&&<p role="alert" className="rounded-xl border border-red-400/50 bg-red-950/40 p-4">{error}</p>}{message&&<p role="status" className="text-emerald-300">{message}</p>}
   {!admin&&!!data.contractDebt?.total&&<section className="cyber-card space-y-2 p-5" aria-label="Задолженность по возвратам и штрафам"><h2 className="font-bold">Задолженность: {money(data.contractDebt.total)}</h2><p>Свободные поступления автоматически погашают долг по возвратам выплат, исправленным личным наградам и договорным штрафам. Зарезервированные монеты не списываются. Вывод личных монет недоступен до погашения.</p>{!!data.contractDebt.personalAwards&&<p>Из них возврат личных призов: {money(data.contractDebt.personalAwards)}.</p>}<Link href="/contracts" className="text-cyan-300">Посмотреть начисления и штрафы по договорам →</Link></section>}
-  {!loading&&data.accounts.length>0&&<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{data.accounts.map(account=><section key={account.id??account.team_id??"own"} className="cyber-card space-y-2 p-5"><h2 className="font-bold">{account.name}</h2>{account.team_id&&<p className="text-sm text-slate-400">Счёт организации · отдельно от личного баланса владельца</p>}<p className="text-2xl font-bold">{formatCoins(account.balance,"ru",!admin&&account.user_id===data.userId?"full":"compact")}</p><p>В резерве: {money(account.reserved)}</p><p>Доступно: {money(Math.max(0,account.balance-account.reserved))}</p>{account.balance<0&&<p className="text-amber-300">Долг: {money(-account.balance)}. Поступления погашают его автоматически.</p>}</section>)}</div>}
+  {!loading&&data.accounts.length>0&&<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{data.accounts.map(account=><section key={account.id??account.team_id??"own"} aria-label={`Баланс: ${account.name}`} className="cyber-card space-y-2 p-5"><h2 className="font-bold">{account.name}</h2>{account.team_id&&<p className="text-sm text-slate-400">Счёт организации · отдельно от личного баланса владельца</p>}<p className="text-2xl font-bold">{formatCoins(account.balance,"ru",!admin&&account.user_id===data.userId?"full":"compact")}</p><p>В резерве: {money(account.reserved)}</p><p>Доступно: {money(Math.max(0,account.balance-account.reserved))}</p>{account.balance<0&&<p className="text-amber-300">Долг: {money(-account.balance)}. Поступления погашают его автоматически.</p>}{!admin&&account.canSpend!==false&&<div className="flex flex-wrap gap-3 pt-2">{([['deposit','Пополнить'],['withdrawal','Вывести']] as const).map(([kind,label])=><button key={kind} type="button" className={kind==="deposit"?"primary-button":"secondary-button"} disabled={busy} aria-expanded={requestForm?.kind===kind&&requestForm.teamId===(account.team_id??"")} aria-controls="wallet-request-form" onClick={()=>{setError("");setMessage("");setRequestForm({kind,teamId:account.team_id??""});}}>{label}</button>)}</div>}</section>)}</div>}
+  {!admin&&requestForm&&requestAccount&&<div ref={formRef} id="wallet-request-form" tabIndex={-1} className="scroll-mt-24 space-y-3 outline-none">
+   <button type="button" className="secondary-button" disabled={busy} onClick={returnToOverview}>Назад к балансу</button>
+   {requestForm.kind==="deposit"?<DepositRequestForm key={`deposit:${requestForm.teamId}`} busy={busy} teamId={requestForm.teamId} accountName={requestAccount.name} canSpend={requestAccount.canSpend!==false} prepare={prepare}/>:<WithdrawalRequestForm key={`withdrawal:${requestForm.teamId}`} busy={busy} canSpend={requestAccount.canSpend!==false} blocked={!!(!requestForm.teamId&&data.contractDebt?.withdrawalBlocked)} available={Math.max(0,requestAccount.balance-requestAccount.reserved)} accountName={requestAccount.name} teamId={requestForm.teamId} prepare={prepare}/>}
+  </div>}
   {!admin&&<section className="cyber-card space-y-2 p-5"><h2 className="font-bold">Баланс прогнозов — Arena Points</h2><p className="text-xl">{formatBetPoints(data.demoBalance??0)}</p><p className="text-sm text-slate-400">Отдельные игровые очки. Их нельзя обменять на OMCITE Coins, передать игроку, потратить на контракт или вывести.</p><Link className="text-cyan-300" href="/betting">Перейти к ставкам →</Link></section>}
   {!loading&&(!error||data.accounts.length>0)&&<>
    {!admin&&<label className="block space-y-2"><span>Откуда списать монеты</span><select className={field} value={teamId} onChange={e=>setTeamId(e.target.value)}><option value="">Личный баланс</option>{data.accounts.filter(a=>a.team_id&&a.canSpend).map(a=><option key={a.team_id} value={a.team_id!}>{a.name}</option>)}</select></label>}
    {admin&&data.financialNotifications&&<p className="text-sm text-slate-300">Уведомления о заявках: ВК — {data.financialNotifications.vkConfigured?"ключ подключён":"не подключён"}; push — {data.financialNotifications.pushConfigured?"сервер настроен (нужна подписка устройства)":"не настроен"}. Уведомления на сайте создаются независимо.</p>}
-   <CoinDeposits admin={admin} busy={busy} rows={data.deposits??[]} teamId={teamId} accountName={source?.name??"Личный баланс"} canSpend={source?.canSpend!==false} profiles={data.profiles} prepare={prepare}/>
+   <CoinDeposits admin={admin} busy={busy} rows={data.deposits??[]} profiles={data.profiles} prepare={prepare}/>
    <section className="cyber-card space-y-4 p-5"><h2 className="text-xl font-bold">{admin?"Начисление и списание":"Перевести игроку или организации"}</h2>
     <label className="block">Найти игрока или организацию<input className={field} value={query} onChange={e=>{setQuery(e.target.value);setTarget(null);}} placeholder="Введите название или ник"/></label>
     {targets.length>0&&!target&&<div className="grid gap-2">{targets.filter(t=>admin||(t.kind==="organization"?t.id!==teamId:!!teamId||t.id!==data.userId)).map(t=><button type="button" key={`${t.kind}:${t.id}`} className="secondary-button text-left" onClick={()=>{setTarget(t);setQuery(t.name);}}>{t.name} · {t.kind==="player"?"Игрок":"Организация"}</button>)}</div>}
@@ -74,7 +87,6 @@ export default function CoinWallet({admin=false}:{admin?:boolean}){
     <div className="flex flex-wrap gap-3"><button className="primary-button" disabled={busy||!target||!Number.isSafeInteger(Number(amount))||Number(amount)===0||(!admin&&(Number(amount)<0||Number(amount)>available||sameAccount||source?.canSpend===false))||(admin&&reason.trim().length<3)} onClick={()=>{if(target)prepare(admin?{action:"adjust",kind:target.kind,ownerId:target.id,amount:Number(amount),reason}:{action:"transfer",...(target.kind==="organization"?{recipientTeamId:target.id}:{userId:target.id}),amount:Number(amount),...sourceFields},admin?`Изменить баланс ${target.name} на ${money(Number(amount))}?`:`Перевести ${money(Number(amount))} ${target.kind==="organization"?"организации":"игроку"} ${target.name} с баланса «${source?.name??"Личный баланс"}»?`);}}>{admin?"Проверить изменение":"Проверить перевод"}</button>
     {admin&&<button className="secondary-button" disabled={busy||!target||reason.trim().length<3} onClick={()=>{if(target)prepare({action:"reset",kind:target.kind,ownerId:target.id,reason},`Обнулить основной баланс ${target.name}? История и действующие резервы сохранятся.`);}}>Обнулить баланс</button>}</div>
    </section>
-   {!admin&&<WithdrawalRequestForm busy={busy} canSpend={source?.canSpend!==false} blocked={!!(!teamId&&data.contractDebt?.withdrawalBlocked)} available={available} accountName={source?.name??"Личный баланс"} teamId={teamId} prepare={prepare}/>}
    <section className="cyber-card space-y-4 p-5"><h2 className="text-xl font-bold">{admin?"Заявки на выплату":"Заявки на вывод с моих счетов"}</h2>{!data.withdrawals.length&&<p className="text-slate-400">Заявок нет</p>}{data.withdrawals.map(w=><article key={w.id} id={'request-'+w.id} className="space-y-2 rounded-xl border border-white/15 p-4">
      <p className="font-bold">{money(w.amount)} · {statuses[w.status]??w.status}{admin&&` · ${data.profiles?.find(p=>p.id===w.user_id)?.nickname??w.user_id}`}</p>
      <p className="text-sm text-slate-400">Счёт: {w.accountName??data.accounts.find(a=>a.id===w.account_id)?.name??"Счёт"}{w.organizationId?" · от лица организации":""}</p>
