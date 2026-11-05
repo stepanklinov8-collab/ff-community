@@ -61,7 +61,7 @@ export async function verifyContractTournamentPayments(db,id){
  const beforeRepeat=(await db.query('select count(*)::int n from coin_entries')).rows[0].n;
  await final.publish(finalDoc,key,0);await final.publish(finalDoc);await db.query('select contract_maintenance_run()');
  assert.equal((await db.query('select count(*)::int n from coin_entries')).rows[0].n,beforeRepeat,'publication retries and the scheduler cannot pay twice');
- const withdrawal=await wallet(players[0],'withdraw_request',{amount:100,note:'Protected tournament prize reserve'});
+ const withdrawal=await wallet(players[0],'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:100,note:'Protected tournament prize reserve'});
  await wallet(players[0],'transfer',{userId:owner,amount:20});
  const correction=qualifier.doc(players.slice(1));await qualifier.publish(correction);
  assert.equal((await db.query('select contract_player_debt_summary($1) value',[players[0]])).rows[0].value.total,120);

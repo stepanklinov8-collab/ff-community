@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import {drainFinanceNotifications} from "@/lib/finance/notifications";
 
 export const maxDuration = 300;
 
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
     } catch (cleanupError) {
       console.error("Activity retention cleanup failed", cleanupError);
     }
+    try { await drainFinanceNotifications(); }
+    catch { console.error("Finance notification queue will retry"); }
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Contract maintenance failed", error);

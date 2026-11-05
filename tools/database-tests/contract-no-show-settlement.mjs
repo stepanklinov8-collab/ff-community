@@ -42,7 +42,7 @@ export async function verifyContractNoShowSettlement(db,id){
  const fines=async(session)=>(await db.query("select * from contract_player_claims where session_id=$1 and contract_id=$2 and kind='no_show' order by generation",[session,contract])).rows;
  const cancel=async(claim,actor=owner,key=randomUUID(),reason='Owner cancels absence fine')=>(await db.query('select contract_no_show_cancel($1,$2,$3,$4) value',[actor,key,claim,reason])).rows[0].value;
  await adjust('player',player,100);
- const protectedWithdrawal=await wallet('withdraw_request',{amount:80,note:'Keep earmarked player coins'},player);
+ const protectedWithdrawal=await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:80,note:'Keep earmarked player coins'},player);
  const first=await makeSession(9873),oldPrice=Number(await price());assert.ok(oldPrice>200);
  await db.query("update competition_ratings set exact_rating=200,display_rating=200 where target_type='player' and target_id=$1 and mode='main'",[player]);
  const snapshot=(await db.query('select value from contract_session_valuations where session_id=$1 and player_id=$2',[first.session,player])).rows[0];
@@ -52,7 +52,7 @@ export async function verifyContractNoShowSettlement(db,id){
  assert.deepEqual(await account('player',player),{balance:80,reserved:80});assert.equal(await debt(),expected-20);
  const entries=(await db.query('select count(*)::int n from coin_entries')).rows[0].n;
  await first.publish(first.document);assert.equal((await db.query('select count(*)::int n from coin_entries')).rows[0].n,entries);
- await assert.rejects(()=>wallet('withdraw_request',{amount:1,note:'Debt guard'},player),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:1,note:'Debt guard'},player),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
  for(const actor of [player,leader,outsider])await assert.rejects(()=>cancel(fine.id,actor),/CONTRACT_OWNER/);
  const query=async(actor)=>(await db.query('select contract_fine_query($1,$2) value',[actor,contract])).rows[0].value;
  assert.equal((await query(player)).canCancel,false);assert.equal((await query(leader)).canCancel,false);assert.equal((await query(owner)).canCancel,true);

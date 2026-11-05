@@ -25,6 +25,7 @@ function loadRoute({ secret = "test-cron", databaseError = null, clientError = n
     } },
     "@/lib/firebase/admin": { sendPushToUsers() { calls.push("push"); throw new Error("Unexpected notification"); } },
     "@/lib/competition/server": { allRows() { calls.push("allRows"); throw new Error("Unexpected maintenance"); } },
+    "@/lib/finance/notifications": { drainFinanceNotifications() { calls.push("finance"); throw new Error("Unexpected financial alert"); } },
   };
   runInNewContext(compiled, {
     exports, require(name) { assert.ok(name in imports); return imports[name]; },

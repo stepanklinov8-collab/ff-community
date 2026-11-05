@@ -1,5 +1,6 @@
 import "server-only";
-import { createAdminClient, requireUser, authErrorResponse } from "@/platform/database";
+import { createAdminClient, requireUser, requireAdmin, authErrorResponse } from "@/platform/database";
+import { z } from "zod";
 import { mutationSchema, querySchema } from "./model";
 
 function response(body: unknown, status = 200) {
@@ -40,3 +41,35 @@ async function handle(request: Request, write: boolean) {
 }
 export const chatGet = (request: Request) => handle(request, false);
 export const chatPost = (request: Request) => handle(request, true);
+
+/** Open an administration conversation; never send a message as its owner. */
+export async function chatOpenForAdmin(request: Request) {
+  try {
+    const auth = await requireAdmin(request);
+    const raw = await request.text();
+    if (raw.length > 1000) return response({ error: "Слишком большой запрос" }, 413);
+    let input: unknown;
+    try { input = JSON.parse(raw); }
+    catch { return response({ error: "Некорректный запрос" }, 400); }
+    const parsed = z.object({ toUserId: z.string().uuid() }).strict().safeParse(input);
+    if (!parsed.success) return response({ error: "Выберите игрока. Сообщения отправляются из чата." }, 400);
+    const db = createAdminClient();
+    // Check the actor's confirmed account / ban status using chat rules too.
+    const actor = await db.rpc("chat_query", { p_actor: auth.user.id, p_input: { summary: "true" } });
+    if (actor.error) return response({ error: "Чат недоступен для вашего аккаунта" }, 403);
+    // Only this fixed action may use the recipient's identity: it creates their
+    // unique support room. Messages always use the signed-in author's identity.
+    const { data, error } = await db.rpc("chat_mutate", { p_actor: parsed.data.toUserId, p_input: { action: "open_support" } });
+    if (error) {
+      if (error.message === "CHAT_AUTH") return response({ error: "Чат игрока недоступен: аккаунт должен быть подтверждён и не заблокирован" }, 409);
+      console.error("Could not open administration conversation", error.code);
+      return response({ error: "Не удалось открыть чат. Попробуйте ещё раз." }, 503);
+    }
+    if (!data?.roomId) return response({ error: "Не удалось открыть чат" }, 503);
+    return response({ success: true, link: "/chat?room=" + data.roomId });
+  } catch (error) {
+    const result = authErrorResponse(error);
+    result.headers.set("Cache-Control", "private, no-store");
+    return result;
+  }
+}

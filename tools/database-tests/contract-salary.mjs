@@ -28,7 +28,7 @@ export async function verifyContractSalary(db,id){
  await initialize(contract,stamp-25*day);
  assert.deepEqual(await account(),{balance:2500,reserved:1000});
  assert.equal((await db.query('select contract_has_debt($1) value',[team])).rows[0].value,true,'late payroll processing must not permit withdrawal after payday');
- await assert.rejects(()=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'withdraw_request',JSON.stringify({teamId:team,amount:100,note:'Test payment details'})]),/CONTRACT_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>db.query('select u6_coin_action($1,$2,$3,$4::jsonb)',[owner,randomUUID(),'withdraw_request',JSON.stringify({fullNameLatin:'Test Player',transferCountry:'Россия',teamId:team,amount:100,note:'Test payment details'})]),/CONTRACT_DEBT_WITHDRAWAL/);
  await initialize(contract,stamp-25*day);
  assert.deepEqual(await account(),{balance:2500,reserved:1000},'schedule retry must not reserve twice');
  assert.equal((await process(contract)).processed,3);

@@ -24,13 +24,13 @@ export async function verifyMainCoins(db,id,base){
  await action(alice,'transfer',transfer,transferKey);await action(alice,'transfer',transfer,transferKey);
  assert.equal((await account(alice)).balance,300);assert.equal((await account(bob)).balance,200);
  await assert.rejects(()=>action(alice,'transfer',{...transfer,amount:201},transferKey),/Конфликт/);
- const withdrawal=await action(alice,'withdraw_request',{amount:250,note:'Тестовые реквизиты'});
+ const withdrawal=await action(alice,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:250,note:'Тестовые реквизиты'});
  assert.equal((await account(alice)).reserved,250);
  await assert.rejects(()=>action(alice,'transfer',{userId:bob,amount:51}),/Недостаточно/);
  await assert.rejects(()=>action(bob,'withdraw_cancel',{withdrawalId:withdrawal.operationId}),/Нет прав/);
  await action(owner,'withdraw_reject',{withdrawalId:withdrawal.operationId,reason:'Requisites correction'});
  assert.equal((await account(alice)).reserved,0);assert.equal((await account(alice)).balance,300);
- const paid=await action(alice,'withdraw_request',{amount:100,note:'Тестовые реквизиты'}),paidKey=randomUUID();
+ const paid=await action(alice,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:100,note:'Тестовые реквизиты'}),paidKey=randomUUID();
  await action(owner,'withdraw_paid',{withdrawalId:paid.operationId,reason:'External transfer confirmed'},paidKey);
  await action(owner,'withdraw_paid',{withdrawalId:paid.operationId,reason:'External transfer confirmed'},paidKey);
  assert.equal((await account(alice)).balance,200);assert.equal((await account(alice)).reserved,0);

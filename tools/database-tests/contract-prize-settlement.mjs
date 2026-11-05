@@ -61,7 +61,7 @@ export async function verifyContractPrizeSettlement(db,id){
  const obligations=(await db.query("select o.* from contract_prize_charges c join contract_obligations o on o.id=c.obligation_id where c.session_id=$1 and o.cancelled_at is null order by o.contract_id",[first.session])).rows;
  assert.deepEqual(obligations.map(o=>Number(o.amount)),[50,16]);
  assert.equal((await db.query('select count(*)::int n from contract_session_terms where session_id=$1 and contract_id=$2',[first.session,contracts[2]])).rows[0].n,0,'post-start signing cannot take historical prizes');
- const withdrawal=await wallet(players[0],'withdraw_request',{amount:50,note:'Protect all prize coins'});
+ const withdrawal=await wallet(players[0],'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:50,note:'Protect all prize coins'});
  await first.publish(first.doc({absent:true}));assert.equal(await balance(0),50);assert.equal((await org()).balance,184);
  assert.equal((await db.query('select contract_player_debt_summary($1) value',[players[0]])).rows[0].value.total,50);
  await db.query('select contract_obligation_cancel($1,$2,$3,$4)',[owner,randomUUID(),obligations[1].id,'Owner cancels player prize share']);

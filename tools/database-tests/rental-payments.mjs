@@ -71,7 +71,7 @@ export async function verifyRentalPayments(db,id){
  const second=await fixture(21200,{rule:{kind:'combined',amount:40,basisPoints:2000,basis:'player_payments',selection:'minimum'},personalShare:5000});
  await second.publish();assert.deepEqual(await balance(second.host),{balance:1138,reserved:0});assert.equal((await balance(home)).balance,76);assert.equal((await balance(player,false)).balance,210,'rental fees never reduce player salary or the explicitly assigned personal prize');
  assert.equal((await second.query()).rows[0].amount,22);assert.equal((await second.query()).rows[0].plan.basis.playerPayments,110);
- const protectedWithdrawal=await wallet('withdraw_request',{amount:200,note:'Rental player protected reserve'},player);
+ const protectedWithdrawal=await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:200,note:'Rental player protected reserve'},player);
  await second.publish(false);assert.equal((await balance(home)).balance,54);assert.deepEqual(await balance(player,false),{balance:200,reserved:200});assert.equal((await second.query()).rows[0].amount,0);
  assert.equal((await db.query('select contract_player_debt_summary($1) value',[player])).rows[0].value.total,100,'player refund debt includes only actual salary/personal receipts, never the separate 22-coin host fee');
  await wallet('withdraw_cancel',{withdrawalId:protectedWithdrawal.operationId},player);assert.equal((await balance(player,false)).balance,100);
@@ -80,7 +80,7 @@ export async function verifyRentalPayments(db,id){
  assert.equal((await balance(other,false)).balance,125,'all player prize entitlements are funded before additional rental expenses');assert.equal((await balance(home)).balance,54);
  assert.equal((await db.query('select contract_has_debt($1) value',[debt.host])).rows[0].value,true);
  await wallet('adjust',{kind:'organization',ownerId:debt.host,amount:100,reason:'Manual repayment funding'});await db.query('select contract_maintenance_run()');row=(await debt.query()).rows[0];assert.equal(row.paid,0,'old unfunded rental debt does not automatically consume top-ups');
- await assert.rejects(()=>wallet('withdraw_request',{teamId:debt.host,amount:1,note:'Debt blocks organization withdrawal'}),/CONTRACT_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:debt.host,amount:1,note:'Debt blocks organization withdrawal'}),/CONTRACT_DEBT_WITHDRAWAL/);
  const key=randomUUID();const pay=async(actor=owner)=>(await db.query('select contract_rental_pay($1,$2,$3,100) value',[actor,key,row.id])).rows[0].value;
  await assert.rejects(()=>pay(other),/CONTRACT_FINANCE/);await pay();await pay();assert.equal((await debt.query()).rows[0].paid,100);assert.equal((await balance(home)).balance,154);
  assert.equal((await balance(owner,false)).balance,4480,'only organizer-funded awards affect the organizer; rental fees never fall back to its personal account');

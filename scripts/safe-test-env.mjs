@@ -6,7 +6,7 @@ export function safeTestEnv(source = process.env) {
   for (const name of readdirSync(".").filter(name => name.startsWith(".env"))) {
     for (const match of readFileSync(name, "utf8").matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=/gm)) env[match[1]] = "";
   }
-  for (const key of Object.keys(env)) if (/SUPABASE|FIREBASE|OPENAI|CRON_SECRET|OMCITE_|VERCEL_ENV|DEPLOYMENT_ENV/.test(key)) env[key] = "";
+  for (const key of Object.keys(env)) if (/SUPABASE|FIREBASE|OPENAI|CRON_SECRET|OMCITE_|VK_FINANCE_|VERCEL_ENV|DEPLOYMENT_ENV/.test(key)) env[key] = "";
   const endpoint = "http://127.0.0.1:54321";
   assertTestDatabaseTarget(endpoint);
   return { ...env, NEXT_PUBLIC_DEPLOYMENT_ENV: "test", NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3103",

@@ -27,7 +27,7 @@ export async function verifyOrganizationWalletTransfers(db,id){
  assert.equal((await account('organization',recipient)).balance,150);
  await assert.rejects(()=>action(member,'transfer',{teamId:organization,recipientTeamId:recipient,amount:1}),/владелец или руководитель/);
  for(const invalid of[{recipientTeamId:dissolved,amount:1},{recipientTeamId:organization,userId:sender,amount:1},{amount:1},{teamId:organization,recipientTeamId:organization,amount:1}])await assert.rejects(()=>action(owner,'transfer',invalid),/распущена|одного получателя|тот же счёт/);
- const withdrawal=await action(owner,'withdraw_request',{teamId:organization,amount:100,note:'Organization bank details'});
+ const withdrawal=await action(owner,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:organization,amount:100,note:'Organization bank details'});
  assert.equal((await account('organization',organization)).reserved,100);assert.equal((await account('player',owner)).reserved,0);
  await assert.rejects(()=>action(owner,'transfer',{teamId:organization,recipientTeamId:recipient,amount:51}),/Недостаточно/);
  await action(owner,'transfer',{teamId:organization,recipientTeamId:recipient,amount:50});
@@ -36,7 +36,7 @@ export async function verifyOrganizationWalletTransfers(db,id){
  assert.equal((await requests(member)).some(row=>row.id===withdrawal.operationId),false,'ordinary members do not read organization bank details');
  await action(leader,'withdraw_cancel',{withdrawalId:withdrawal.operationId});
  assert.equal((await account('organization',organization)).reserved,0);
- const pending=await action(owner,'withdraw_request',{teamId:organization,amount:80,note:'Pending organization withdrawal'});
+ const pending=await action(owner,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:organization,amount:80,note:'Pending organization withdrawal'});
  await db.query("select set_config('omcite.allow_organization_owner_transfer','on',false)");
  await db.query('update teams set owner_user_id=$2 where id=$1',[organization,buyer]);
  await db.query("select set_config('omcite.allow_organization_owner_transfer','off',false)");
@@ -63,7 +63,7 @@ export async function verifyOrganizationWalletTransfers(db,id){
  assert.deepEqual(await account('player',buyer),afterExplicitFunding,'contract bonus/reserve never falls back to its signing owner');
  assert.equal((await account('organization',organization)).balance,200);assert.equal((await account('organization',organization)).reserved,200);
  assert.equal((await account('player',player)).balance,100);
- const withdrawalPaid=await action(owner,'withdraw_request',{teamId:recipient,amount:200,note:'Recipient guild payout'});
+ const withdrawalPaid=await action(owner,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:recipient,amount:200,note:'Recipient guild payout'});
  await action(admin,'withdraw_paid',{withdrawalId:withdrawalPaid.operationId,reason:'External guild payout completed'});
  assert.equal((await account('organization',recipient)).balance,0);assert.equal((await account('player',owner)).balance,5100,'external organization payout debits only organization coins');
  const conservation=(await db.query("select e.operation_id,sum(e.amount)::int total from coin_entries e join coin_operations op on op.id=e.operation_id where op.action='transfer' and op.actor_id=any($1::uuid[]) group by e.operation_id",[[sender,owner,buyer]])).rows;

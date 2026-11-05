@@ -70,7 +70,7 @@ export async function verifyOrganizationOwnership(db, id) {
  await db.query(`select public.u6_coin_action($1,$2,'transfer',$3::jsonb)`,[owner,id(8810),JSON.stringify(transferInput)]);
  assert.equal(Number((await db.query(`select balance from public.coin_accounts where id=$1`,[orgAccount])).rows[0].balance),400,'owner can transfer organizational funds while outside the roster');
  await assert.rejects(()=>db.query(`select public.u6_coin_action($1,$2,'transfer',$3::jsonb)`,[oldLeader,id(8811),JSON.stringify({...transferInput,amount:10})]),/владелец или руководитель/);
- const withdrawal={teamId:team,amount:50,note:'Тестовые реквизиты'};
+ const withdrawal={fullNameLatin:'Test Player',transferCountry:'Россия',teamId:team,amount:50,note:'Тестовые реквизиты'};
  await db.query(`select public.u6_coin_action($1,$2,'withdraw_request',$3::jsonb)`,[owner,id(8812),JSON.stringify(withdrawal)]);
  assert.equal(Number((await db.query(`select reserved from public.coin_accounts where id=$1`,[orgAccount])).rows[0].reserved),50,'owner can reserve an organization withdrawal');
 

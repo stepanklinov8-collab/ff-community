@@ -134,6 +134,13 @@ test("administrator edits, pins and deletes messages and chooses a targeted noti
   await expect(page.getByText("Закреплённые сообщения · 1")).toHaveCount(0);
 });
 
+test('wallet contact link opens administration directly instead of the common chat',async({page})=>{
+ const state=await setup(page);await page.goto('/chat?support=1');
+ await expect(page).toHaveURL('/chat?room='+support);
+ await expect(page.getByText('Переписку видите только вы и администрация.')).toBeVisible();
+ expect(state.requests.filter(row=>row.action==='open_support')).toHaveLength(1);
+});
+
 test("muted users can read and open administration; revoked access removes private content", async ({ page }) => {
   const state = await setup(page);
   state.canWrite = false;

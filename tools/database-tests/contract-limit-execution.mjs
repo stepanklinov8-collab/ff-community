@@ -54,7 +54,7 @@ export async function verifyContractLimitExecution(db,id){
  const ended=await makeContract(12010,{unit:'sessions',count:1,completion:'contract'});
  assert.deepEqual(await account('player',ended.player),{balance:2000,reserved:0});
  assert.deepEqual(await account('organization',ended.team),{balance:3000,reserved:1000});
- const withdrawal=await wallet('withdraw_request',{amount:1500,note:'Protect already reserved player coins'},ended.player);
+ const withdrawal=await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:1500,note:'Protect already reserved player coins'},ended.player);
  await wallet('transfer',{userId:recipient,amount:400},ended.player);
  const final=await makeSession(ended,12030,start+2*day+16*3600000),key=randomUUID();
  const beforeFailure={player:await account('player',ended.player),organization:await account('organization',ended.team),entries:await countEntries()};

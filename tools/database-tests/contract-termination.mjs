@@ -45,7 +45,7 @@ export async function verifyContractTermination(db,id){
  await db.query('select leave_organization($1)',[mutual.team]);assert.equal(await member(mutual),0,'ordinary exit is available after the agreement really ended');
  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[owner]);
  const exit=await make(18020);await wallet(owner,'adjust',{kind:'player',ownerId:exit.player,amount:100,reason:'Player exit fee'});
- const reserved=await wallet(exit.player,'withdraw_request',{amount:80,note:'Do not spend reserved player money'});
+ const reserved=await wallet(exit.player,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:80,note:'Do not spend reserved player money'});
  await assert.rejects(()=>terminate(exit.player,exit,'player_exit',101),/CONTRACT_QUOTE_CHANGED/);
  await assert.rejects(()=>terminate(exit.player,exit,'player_exit',100),/CONTRACT_FUNDS/);assert.equal((await quote(exit.player,exit)).active,true);
  await wallet(exit.player,'withdraw_cancel',{withdrawalId:reserved.operationId});const exitKey=randomUUID();
@@ -60,7 +60,7 @@ export async function verifyContractTermination(db,id){
  assert.equal((await quote(owner,dismissal)).active,true);assert.equal((await db.query('select count(*)::int n from coin_entries')).rows[0].n,beforeFailure,'failed compensation rolls back expiry and every money movement');
  const dismissed=await terminate(owner,dismissal,'organization',200);assert.equal(dismissed.ended,true);assert.equal(await balance(owner),ownerBalance);
  assert.deepEqual((await db.query('select amount::int,paid::int,held::int from contract_obligations where id=$1',[dismissed.obligationId])).rows[0],{amount:200,paid:0,held:0});
- await assert.rejects(()=>wallet(owner,'withdraw_request',{teamId:dismissal.team,amount:1,note:'Debt must block withdrawal'}),/CONTRACT_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet(owner,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:dismissal.team,amount:1,note:'Debt must block withdrawal'}),/CONTRACT_DEBT_WITHDRAWAL/);
  const unpaid=await make(18040);
  await db.query("select contract_obligation_create($1,1,'kill','overdue-test',100,$2,false)",[unpaid.contract,iso(now-8*day)]);
  assert.equal((await quote(unpaid.player,unpaid)).overdueSevenDays,true);assert.equal((await quote(unpaid.player,unpaid)).active,true,'even overdue salary never ends the contract automatically');

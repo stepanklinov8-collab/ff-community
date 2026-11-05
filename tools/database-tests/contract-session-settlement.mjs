@@ -25,7 +25,7 @@ export async function verifyContractSessionSettlement(db,{owner,player,team,sess
  assert.equal((await settle()).created,4);
  assert.deepEqual(await account('player',player),{balance:130,reserved:0});
  const count=await moves();assert.equal((await settle()).unchanged,true);assert.equal(await moves(),count);
- await wallet('withdraw_request',{amount:80,note:'Test protected reserve'},player);
+ await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:80,note:'Test protected reserve'},player);
  await wallet('transfer',{userId:owner,amount:30},player);
 
  // Remove all recorded participation after the player has spent some money.

@@ -34,7 +34,7 @@ await action(op,transferId);await action(op,transferId);
 assert.equal((await wallet()).accounts[0].balance,999990);
 await action({action:'reverse',operationId:transferId,reason:'Локальная проверка: отмена тестового перевода'});
 const withdrawId=randomUUID();
-await action({action:'withdraw_request',amount:250,note:'ТЕСТ: свободный текст реквизитов, реальная выплата не требуется'},withdrawId);
+await action({action:'withdraw_request',fullNameLatin:'Test Player',transferCountry:'Россия',amount:250,note:'ТЕСТ: свободный текст реквизитов, реальная выплата не требуется'},withdrawId);
 assert.equal((await wallet()).accounts[0].reserved,250);
 assert.ok((await api('/api/admin/wallet')).withdrawals.some(w=>w.id===withdrawId));
 await action({action:'withdraw_cancel',withdrawalId:withdrawId});

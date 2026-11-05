@@ -2,6 +2,7 @@ import { invalidatePublicData } from "@/lib/public-data/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendPushToUsers } from "@/lib/firebase/admin";
 import { allRows } from "@/lib/competition/server";
+import {drainFinanceNotifications} from "@/lib/finance/notifications";
 
 export const maxDuration = 300;
 
@@ -45,6 +46,10 @@ export async function GET(request: Request) {
     }
   }
 
+  // Existing five-minute scheduler also retries financial notifications. Its
+  // check-only mode above must never deliver real messages.
+  try { await drainFinanceNotifications(); }
+  catch { console.error("Finance notification queue will retry"); }
   const supabase = createAdminClient();
   for(const action of ["u2_expire_moderation","u2_publish_scheduled","u3_extend_training_schedules","u4_snapshot_game_forecasts","u2_flush_notifications"]){
     const {error}=await supabase.rpc(action);if(error){console.error("Competition maintenance",action,error);return Response.json({error:"Не удалось завершить обработку мероприятий"},{status:500});}

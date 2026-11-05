@@ -20,7 +20,7 @@ export async function verifyContractPaymentReturns(db,id){
  const query=async(actor=owner)=>(await db.query('select contract_obligation_query($1,$2) value',[actor,contract])).rows[0].value;
  await adjust('organization',team,1000);
  const original=await create('one',1000);await pay(original,1000);
- const withdrawal=await wallet('withdraw_request',{amount:200,note:'Reserved details'},player);
+ const withdrawal=await wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:200,note:'Reserved details'},player);
  await wallet('transfer',{userId:stranger,amount:650},player);
  assert.deepEqual(await account('player',player),{balance:350,reserved:200});
  assert.equal((await query(leader)).canCancel,false);assert.equal((await query(owner)).canCancel,true);
@@ -36,7 +36,7 @@ export async function verifyContractPaymentReturns(db,id){
  await assert.rejects(()=>cancel(original,owner,key,'Other reason'),/CONTRACT_CONFLICT/);
  await assert.rejects(()=>pay(original,1),/CONTRACT_CANCELLED/);
  assert.equal((await db.query('select contract_has_debt($1) value',[team])).rows[0].value,false,'cancelled liability is no longer payable organization debt');
- await assert.rejects(()=>wallet('withdraw_request',{amount:1,note:'Blocked'},player),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
+ await assert.rejects(()=>wallet('withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:1,note:'Blocked'},player),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
  await assert.rejects(()=>wallet('withdraw_paid',{withdrawalId:withdrawal.operationId,reason:'Blocked by debt'}),/CONTRACT_PLAYER_DEBT_WITHDRAWAL/);
  await wallet('withdraw_cancel',{withdrawalId:withdrawal.operationId},player);
  assert.deepEqual(await account('player',player),{balance:0,reserved:0});

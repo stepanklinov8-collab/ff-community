@@ -13,7 +13,7 @@ export async function verifyOrganizationMarket(db,id){
  await wallet(cash,'adjust',{kind:'player',ownerId:buyer,amount:1000,reason:'Market actual main funds'});await wallet(cash,'adjust',{kind:'organization',ownerId:asset,amount:77,reason:'Asset wallet must remain with the organization'});
  await wallet(cash,'adjust',{kind:'organization',ownerId:parent,amount:300,reason:'Buying organization isolated balance'});
  await db.query('insert into site_wallets(user_id,balance) values($1,1000000) on conflict(user_id) do update set balance=1000000',[buyer]);
- await wallet(buyer,'withdraw_request',{amount:100,note:'Protected unrelated buyer withdrawal'});await wallet(seller,'withdraw_request',{teamId:asset,amount:5,note:'Protected asset withdrawal'});
+ await wallet(buyer,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:100,note:'Protected unrelated buyer withdrawal'});await wallet(seller,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',teamId:asset,amount:5,note:'Protected asset withdrawal'});
  const contract=id(27020),terms=defaultTerms(new Date(Date.now()-day));await db.query("insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,'main',$4)",[contract,asset,player,seller]);
  await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status,offered_at) values($1,1,$2::jsonb,$3,'offered',now()-interval '1 day')",[contract,JSON.stringify(terms),seller]);
  await db.query("insert into contract_agreements(contract_id,revision,organization_signer,player_signer,ownership_revision,signed_at,effective_at) values($1,1,$2,$3,1,now()-interval '1 day',now()-interval '1 day')",[contract,seller,player]);

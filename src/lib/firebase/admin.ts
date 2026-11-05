@@ -10,6 +10,7 @@ interface PushPayload {
   title: string;
   body: string;
   link?: string;
+  tag?: string;
 }
 
 function getFirebaseAdminApp() {
@@ -57,7 +58,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
     notification: { title: payload.title, body: payload.body },
     data: { link: payload.link ?? "/notifications" },
     webpush: {
-      notification: { icon: "/brand/omcite-emblem.jpg", badge: "/brand/omcite-emblem.jpg" },
+      notification: { icon: "/brand/omcite-emblem.jpg", badge: "/brand/omcite-emblem.jpg", ...(payload.tag ? {tag:payload.tag} : {}) },
       fcmOptions: { link: payload.link ?? "/notifications" },
     },
   }));

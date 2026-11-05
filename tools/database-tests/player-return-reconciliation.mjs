@@ -26,7 +26,7 @@ export async function verifyPlayerReturnReconciliation(db,id){
    return{player,org,contract,deal,job,policy,pay,state,settle,start};
  };
  const x=await make(96010),original=await x.pay('prize',1000,'initial-prize');const supply=await total();
- const hold=await wallet(x.player,'withdraw_request',{amount:950,note:'Protected player withdrawal while a return is due'});
+ const hold=await wallet(x.player,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:950,note:'Protected player withdrawal while a return is due'});
  await x.start();
  let result=await x.settle(),state=await x.state();assert.equal(result.targets.prize,200);assert.equal(state.collected.prize,50);assert.equal(state.playerDebt.prize,150);
  assert.ok(previewReturnReconciliation(x.policy,'player_fault',state).every(row=>row.balanced));
@@ -65,7 +65,7 @@ export async function verifyPlayerReturnReconciliation(db,id){
    await db.exec('commit');
  };
  const originalAward=id(96057);await award(100,originalAward);const supply3=await total();
- const awardHold=await wallet(z.player,'withdraw_request',{amount:80,note:'Protected personal-award funds'});await z.start();await z.settle();
+ const awardHold=await wallet(z.player,'withdraw_request',{fullNameLatin:'Test Player',transferCountry:'Россия',amount:80,note:'Protected personal-award funds'});await z.start();await z.settle();
  state=await z.state();assert.equal(state.collected.personalAward,20);assert.equal(state.playerDebt.personalAward,30);
  await db.query('select personal_award_reverse($1)',[originalAward]);state=await z.state();
  assert.equal(state.paid.personalAward,0);assert.equal(state.refunded.personalAward,20);assert.equal(state.playerDebt.personalAward,0);
