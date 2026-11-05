@@ -25,11 +25,22 @@ const wallet=async()=>{
  assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/private, no-store/);return response.json();
 };
 const balances=value=>value.accounts.map(a=>({user:a.user_id,team:a.team_id,balance:a.balance,reserved:a.reserved}));
+async function readStaging(path){
+ const response=await fetch(config.NEXT_PUBLIC_SUPABASE_URL+path,{headers:{apikey:config.NEXT_PUBLIC_SUPABASE_ANON_KEY,Authorization:'Bearer '+config.SUPABASE_SERVICE_ROLE_KEY},signal:AbortSignal.timeout(30000)});
+ assert.equal(response.status,200);return response.json();
+}
+const [profile]=await readStaging('/rest/v1/profiles?id=eq.'+session.user.id+'&select=nickname,contact_social_url');
+async function checkNoticeIdentity(id,kind){
+ const rows=await readStaging('/rest/v1/coin_request_deliveries?request_id=eq.'+id+'&select=kind,requester_nickname,requester_contact_url');
+ assert.equal(rows.length,2);
+ for(const row of rows){assert.equal(row.kind,kind);assert.equal(row.requester_nickname,profile.nickname.replace(/[\s\u0000-\u001f\u007f]+/g,' ').slice(0,80));assert.equal(row.requester_contact_url,profile.contact_social_url||null);}
+}
 const before=await wallet(),requestId=randomUUID();let pending=false;
 try{
  await call({action:'deposit_request',amount:1},requestId);pending=true;
  await call({action:'deposit_request',amount:1},requestId);
  const requested=await wallet();assert.equal(requested.deposits.filter(row=>row.id===requestId).length,1);
+ await checkNoticeIdentity(requestId,'deposit');
  assert.equal(requested.deposits.find(row=>row.id===requestId).status,'pending');assert.deepEqual(balances(requested),balances(before));
  assert.equal(requested.demoBalance,before.demoBalance);
  await call({action:'deposit_cancel',depositId:requestId});pending=false;
@@ -45,6 +56,7 @@ if(available && Number(available.balance)-Number(available.reserved)>=1){
   const requested=await wallet(),row=requested.withdrawals.find(row=>row.id===key);
   assert.equal(row.full_name_latin,'TEST PLAYER');assert.equal(row.transfer_country,'Россия');
   assert.equal(requested.withdrawals.filter(row=>row.id===key).length,1);
+  await checkNoticeIdentity(key,'withdrawal');
   await call({action:'withdraw_cancel',withdrawalId:key});held=false;
   const released=await wallet();assert.deepEqual(balances(released),balances(before));assert.equal(released.demoBalance,before.demoBalance);withdrawalChecked=true;
  }finally{if(held)await call({action:'withdraw_cancel',withdrawalId:key});}
@@ -63,5 +75,5 @@ try{
  await page.screenshot({path:new URL('./artifacts/contracts/finance-staging-wallet-mobile.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
  await context.close();
 }finally{await browser.close();}
-await writeFile(new URL('./artifacts/contracts/finance-local-smoke.json',import.meta.url),JSON.stringify({project:stagingProject,verified:true,checkedAt:new Date().toISOString(),depositRequestRetry:true,cancellation:true,withdrawalDetails:withdrawalChecked,balancesUnchanged:true,forecastsUnchanged:true,mobile:true,externalMessagesSent:false},null,2));
+await writeFile(new URL('./artifacts/contracts/finance-local-smoke.json',import.meta.url),JSON.stringify({project:stagingProject,verified:true,checkedAt:new Date().toISOString(),depositRequestRetry:true,cancellation:true,depositContacts:true,withdrawalContacts:withdrawalChecked,withdrawalDetails:withdrawalChecked,balancesUnchanged:true,forecastsUnchanged:true,mobile:true,externalMessagesSent:false},null,2));
 console.log('PASS: real staging deposit/retry/cancellation, unchanged main/AP funds, guest denial and mobile wallet; no external messages');

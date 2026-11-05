@@ -36,7 +36,9 @@ export async function verifyFundingRequests(db,id){
  assert.equal(payoutRows.find(row=>row.id===payout.operationId).transfer_country,'Россия');
  assert.equal((await db.query('select organization_wallet_withdrawals($1) result',[bob])).rows[0].result.some(row=>row.id===payout.operationId),false);
  const notices=(await db.query('select body from notifications where link=$1',['/admin/wallet?requestId='+payout.operationId])).rows;
- for(const notice of notices)assert.doesNotMatch(notice.body,/Ivan|Россия|PRIVATE/);
+ for(const notice of notices){assert.doesNotMatch(notice.body,/Ivan|Россия|PRIVATE/);assert.match(notice.body,/Updated profile[\s\S]*https:\/\/t.me\/updated/);}
+ const payoutIdentity=(await db.query('select requester_nickname,requester_contact_url from coin_request_deliveries where request_id=$1',[payout.operationId])).rows;
+ assert.equal(payoutIdentity.length,2);for(const identity of payoutIdentity)assert.deepEqual(identity,{requester_nickname:'Updated profile',requester_contact_url:'https://t.me/updated'});
  await db.query("select u6_coin_action($1,$2,'withdraw_cancel',$3::jsonb)",[alice,randomUUID(),JSON.stringify({withdrawalId:payout.operationId})]);
  assert.equal(Number((await db.query('select reserved from coin_accounts where user_id=$1',[alice])).rows[0].reserved),0);
  const teamKey=randomUUID();await act(alice,'deposit_request',{amount:150,teamId:org},teamKey);

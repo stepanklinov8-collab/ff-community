@@ -1,7 +1,7 @@
 // Restore the complete logical archive inside a single ROLLBACK transaction
 // in the dedicated staging project. Existing staging fixtures remain intact.
 import {readFile,writeFile,realpath,readdir} from 'node:fs/promises';
-import {resolve,relative,join} from 'node:path';
+import {resolve,relative,join,isAbsolute} from 'node:path';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {stagingProject,assertTestDatabaseTarget} from '../../src/platform/environment.ts';
@@ -9,7 +9,7 @@ assertTestDatabaseTarget(`https://${stagingProject}.supabase.co`);
 const argument=process.argv.find(value=>value.startsWith('--backup='))?.slice(9);
 if(!argument)throw Error('Select the local backup directory with --backup=...');
 const root=await realpath(resolve('tools/database-tests/artifacts/release-backup')),directory=await realpath(resolve(argument));
-if(relative(root,directory).startsWith('..')||directory===root)throw Error('Backup must be a captured release-backup child directory');
+if(relative(root,directory).startsWith('..')||directory===root||isAbsolute(relative(root,directory)))throw Error('Backup must be a captured release-backup child directory');
 const manifest=JSON.parse(await readFile(join(directory,'manifest.json'),'utf8')),archive=join(directory,'database.dump');
 const hash=createHash('sha256').update(await readFile(archive)).digest('hex');
 if(manifest.sourceProject!=='ojtqdfdqicozzqlgjtnm'||manifest.sha256!==hash)throw Error('Backup project/hash mismatch');
@@ -89,9 +89,9 @@ const tables=restoredCounts.filter(row=>platformSchemas.has(row.schema)&&row.row
 const preamble=`begin;set local lock_timeout='5s';set local statement_timeout='120s';set local session_replication_role=replica;\n`+
  [...customSchemas].map(schema=>`drop schema if exists ${quote(schema)} cascade;`).join('\n')+'\ncreate schema public;\n'+
  tables.map(table=>'delete from '+table+';').join('\n')+'\n';
-const optimization=process.argv.includes('--rehearse-optimization');
-if(optimization&&process.argv.includes('--rehearse-update'))throw Error('Select one exact release boundary');
-const updateFiles=optimization?['202611010001_user_activity_and_forecast_points.sql','202611020001_event_registration_counts.sql']:process.argv.includes('--rehearse-update')?(await readdir(resolve('supabase/migrations'))).filter(name=>/^\d{12}_.+\.sql$/.test(name)&&name>='202610290003'&&name<='202610310018_player_transfer_cancellation_penalty.sql').sort():[];
+const optimization=process.argv.includes('--rehearse-optimization'),finance=process.argv.includes('--rehearse-finance');
+if(['--rehearse-optimization','--rehearse-finance','--rehearse-update'].filter(value=>process.argv.includes(value)).length>1)throw Error('Select one exact release boundary');
+const updateFiles=finance?['202611050001_funding_requests_notifications.sql','202611050002_withdrawal_details_and_request_contacts.sql','202611050003_withdrawal_notification_contacts.sql']:optimization?['202611010001_user_activity_and_forecast_points.sql','202611020001_event_registration_counts.sql']:process.argv.includes('--rehearse-update')?(await readdir(resolve('supabase/migrations'))).filter(name=>/^\d{12}_.+\.sql$/.test(name)&&name>='202610290003'&&name<='202610310018_player_transfer_cancellation_penalty.sql').sort():[];
 const updateSources=await Promise.all(updateFiles.map(async name=>({name,sql:await readFile(resolve('supabase/migrations',name),'utf8')})));
 const updateBody=updateSources.map(({sql})=>sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,'')).join('\n');
 const optimizationChecks=`set local session_replication_role=origin;set local search_path=public,extensions;set local check_function_bodies=on;set local row_security=on;
@@ -103,7 +103,29 @@ do $$begin
  if has_function_privilege('authenticated','public.analytics_report(uuid,timestamptz,timestamptz,text,integer,uuid)','execute') or has_function_privilege('anon','public.u5_event_registration_counts(uuid)','execute') then raise exception 'OPTIMIZATION_ACL';end if;
 end $$;select 'RESTORE_PHASE:update_migrations';
 `;
-const updateChecks=optimization?optimizationChecks:updateFiles.length?`set local session_replication_role=origin;
+const financeChecks=`set local session_replication_role=origin;set local search_path=public,extensions;set local check_function_bodies=on;set local row_security=on;
+create temporary table finance_before as select jsonb_build_object(
+ 'profiles',(select count(*) from profiles),'organizations',(select count(*) from teams),'members',(select count(*) from team_members),
+ 'registrations',(select count(*) from event_registrations),
+ 'main',(select md5(coalesce(string_agg(id||':'||balance||':'||reserved,',' order by id),'')) from coin_accounts),
+ 'forecasts',(select md5(coalesce(string_agg(user_id||':'||balance,',' order by user_id),'')) from site_wallets),
+ 'withdrawals',(select md5(coalesce(string_agg((to_jsonb(w)-'full_name_latin'-'transfer_country')::text,',' order by w.id),'')) from coin_withdrawals w)
+) protected;
+${finance?updateBody:''}
+do $$begin
+ if (select protected from finance_before)<>jsonb_build_object(
+ 'profiles',(select count(*) from profiles),'organizations',(select count(*) from teams),'members',(select count(*) from team_members),
+ 'registrations',(select count(*) from event_registrations),
+ 'main',(select md5(coalesce(string_agg(id||':'||balance||':'||reserved,',' order by id),'')) from coin_accounts),
+ 'forecasts',(select md5(coalesce(string_agg(user_id||':'||balance,',' order by user_id),'')) from site_wallets),
+ 'withdrawals',(select md5(coalesce(string_agg((to_jsonb(w)-'full_name_latin'-'transfer_country')::text,',' order by w.id),'')) from coin_withdrawals w)
+ ) then raise exception 'FINANCE_PROTECTED_DATA_CHANGED';end if;
+ if (select count(*) from coin_deposits)<>0 or(select count(*) from coin_request_deliveries)<>0 then raise exception 'FINANCE_UNEXPECTED_NEW_REQUESTS';end if;
+ if not (select relrowsecurity from pg_class where oid='public.coin_deposits'::regclass) or has_table_privilege('authenticated','coin_deposits','select')
+ or has_function_privilege('authenticated','coin_deposit_action(uuid,uuid,text,jsonb)','execute') then raise exception 'FINANCE_ACL';end if;
+end $$;select 'RESTORE_PHASE:update_migrations';
+`;
+const updateChecks=finance?financeChecks:optimization?optimizationChecks:updateFiles.length?`set local session_replication_role=origin;
 set local search_path=public,extensions;set local check_function_bodies=on;set local row_security=on;set local statement_timeout='150s';
 create temporary table release_wallet_before as select sum(balance)::numeric total from public.site_wallets;
 ${updateBody}

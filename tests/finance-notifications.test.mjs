@@ -42,11 +42,12 @@ test('withdrawal needs a Latin full name and country; top-up needs neither and i
  assert.equal(valid({action:'deposit_request',amount:100,requester_nickname:'Forged',requester_contact_url:'https://t.me/other'}),false);
 });
 
-test('deposit alert includes trusted profile identity and contact, while private payout data is excluded',()=>{
+test('both finance alerts include trusted profile identity and contact, while private payout data is excluded',()=>{
  const value={kind:'deposit',amount:500,requester_nickname:'Player\nNew line',requester_contact_url:'https://t.me/player',full_name_latin:'PRIVATE NAME',transfer_country:'PRIVATE COUNTRY',note:'PRIVATE BANK'};
  const content=financeNoticeContent(value);
  assert.match(content.body,/Ник на сайте: Player New line/);assert.match(content.body,/Контакт: https:\/\/t.me\/player/);assert.doesNotMatch(content.body,/PRIVATE/);
- assert.doesNotMatch(financeNoticeContent({...value,kind:'withdrawal'}).body,/Player|https:|PRIVATE/);
+ const withdrawal=financeNoticeContent({...value,kind:'withdrawal'});
+ assert.equal(withdrawal.title,'Заявка на вывод');assert.match(withdrawal.body,/Player New line/);assert.match(withdrawal.body,/https:\/\/t.me\/player/);assert.doesNotMatch(withdrawal.body,/PRIVATE/);
  assert.match(financeNoticeContent({...value,requester_contact_url:'https://t.me.evil.example/player'}).body,/Контакт: не указан/);
  assert.match(financeNoticeContent({...value,requester_contact_url:null}).body,/Контакт: не указан/);
 });
