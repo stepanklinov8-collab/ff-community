@@ -335,6 +335,9 @@ const ru = {
   "contacts.empty": "Контакты пока не добавлены.",
   "contacts.action": "Связаться →",
   "messages.empty": "Нет сообщений.",
+  "messages.archive": "Архив сообщений",
+  "messages.archiveNote": "Здесь сохранены прежние сообщения администрации. Новая переписка ведётся в разделе «Чат».",
+  "messages.openChat": "Перейти в чат",
   "messages.choose": "Выберите сообщение слева.",
   "messages.back": "← На главную",
   "clanWars.eyebrow": "Соперничество OMCITE",
@@ -400,6 +403,9 @@ export type MessageKey = keyof typeof ru;
 type Dictionary = Record<MessageKey, string>;
 
 const kk: Dictionary = {
+  "messages.archive": "Хабарламалар мұрағаты",
+  "messages.archiveNote": "Мұнда әкімшіліктің бұрынғы хабарламалары сақталған. Жаңа хат алмасу «Чат» бөлімінде жүргізіледі.",
+  "messages.openChat": "Чатқа өту",
   installShortcut: "Телефонға белгіше",
   myOrganizations: "Менің ұйымдарым",
   "myOrganizations.description": "Сен мүше болған немесе иесі болып табылатын командалар мен гильдиялар.",
@@ -429,6 +435,9 @@ const kk: Dictionary = {
 };
 
 const ky: Dictionary = {
+  "messages.archive": "Билдирүүлөр архиви",
+  "messages.archiveNote": "Бул жерде администрациянын мурдагы билдирүүлөрү сакталган. Жаңы кат алышуу «Чат» бөлүмүндө жүргүзүлөт.",
+  "messages.openChat": "Чатка өтүү",
   installShortcut: "Телефонго белги",
   myOrganizations: "Менин уюмдарым",
   "myOrganizations.description": "Сен мүчө болгон же ээси болгон командалар жана гильдиялар.",

@@ -1,2 +1,2 @@
 export { default as ChatPage } from "./ui/ChatPage";
-export { chatGet, chatPost } from "./server";
+export { chatGet, chatPost, chatOpenForAdmin } from "./server";

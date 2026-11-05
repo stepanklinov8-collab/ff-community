@@ -71,12 +71,21 @@ export default function ChatPage() {
   useEffect(() => {
     if (!account) return;
     let active = true;
-    void api<ChatIndex>().then(value => {
+    void api<ChatIndex>().then(async initial => {
       if (!active) return;
+      let value=initial;
+      const parameters=new URLSearchParams(window.location.search);
+      let requested=parameters.get("room");
+      if(parameters.get("support")==="1"&&!value.isAdmin){
+        const opened=await api<{roomId:string}>("",{action:"open_support"});
+        value=await api<ChatIndex>();
+        if(!active)return;
+        requested=opened.roomId;
+        window.history.replaceState(null,"","/chat?room="+opened.roomId);
+      }
       setIndex(value);
       setHistory(null); setBody(""); setReply(null); setPaging({}); drafts.current = {}; lastRequests.current = {};
       setNotice("none"); setRecipient(""); setSearch(""); setPeople([]); setEditing(null); setMute(null);
-      const requested = new URLSearchParams(window.location.search).get("room");
       setRoomId(requested && /^[0-9a-f-]{36}$/i.test(requested) ? requested : value.rooms.find(room => room.kind === "common")?.id ?? null);
     }).catch(failure => { if (active) showError(failure); });
     return () => { active = false; };

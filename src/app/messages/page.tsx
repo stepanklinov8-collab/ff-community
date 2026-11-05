@@ -50,7 +50,9 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-500">{t("messages")}</h1>
+      <h1 className="text-3xl font-bold mb-3 text-blue-500">{t("messages.archive")}</h1>
+      <p className="mb-4 text-slate-300">{t("messages.archiveNote")}</p>
+      <Link href="/chat" className="primary-button mb-6 inline-flex">{t("messages.openChat")}</Link>
 
       {messages.length === 0 ? (
         <p className="text-gray-400">{t("messages.empty")}</p>

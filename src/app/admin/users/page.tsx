@@ -30,13 +30,12 @@ export default function AdminUsersPage() {
   const [editGameId, setEditGameId] = useState("");
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [modalType, setModalType] = useState<"message" | "warning" | "ban" | "roles" | "delete" | null>(null);
+  const [modalType, setModalType] = useState<"warning" | "ban" | "roles" | "delete" | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [roleAction, setRoleAction] = useState<string | null>(null);
 
-  const [msgSubject, setMsgSubject] = useState("");
-  const [msgBody, setMsgBody] = useState("");
+  const [openingChat, setOpeningChat] = useState<string | null>(null);
 
   const [warnLevel, setWarnLevel] = useState(1);
   const [warnReason, setWarnReason] = useState("");
@@ -112,12 +111,10 @@ export default function AdminUsersPage() {
     }
   };
 
-  const openModal = (user: User, type: "message" | "warning" | "ban" | "roles" | "delete") => {
+  const openModal = (user: User, type: "warning" | "ban" | "roles" | "delete") => {
     if(type==="warning"){router.push(`/admin/warnings?targetType=player&targetId=${user.id}`);return;}
     setSelectedUser(user);
     setModalType(type);
-    setMsgSubject("");
-    setMsgBody("");
     setWarnLevel(1);
     setWarnReason("");
     setWarnExpires("week");
@@ -148,22 +145,25 @@ export default function AdminUsersPage() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!selectedUser || !msgSubject || !msgBody) {
-      setMessage("Заполните тему и текст сообщения");
-      return;
-    }
-    const res = await authFetch("/api/admin/message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toUserId: selectedUser.id, subject: msgSubject, body: msgBody }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setMessage("Сообщение отправлено");
-      setModalType(null);
-    } else {
-      setMessage("Ошибка: " + (data.error || "неизвестная ошибка"));
+  const openChat = async (userId: string) => {
+    if (openingChat) return;
+    setOpeningChat(userId);
+    setMessage("");
+    try {
+      const response = await authFetch("/api/admin/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toUserId: userId }),
+      });
+      const data = await response.json() as { success?: boolean; link?: string; error?: string };
+      if (!response.ok || !data.success || !data.link?.startsWith("/chat?room=")) {
+        throw new Error(data.error || "Не удалось открыть чат");
+      }
+      router.push(data.link);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось открыть чат. Попробуйте ещё раз.");
+    } finally {
+      setOpeningChat(null);
     }
   };
 
@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
   return (
     <div className="min-h-screen p-6">
       <h1 className="text-3xl font-bold mb-6 text-red-500">Пользователи</h1>
-      {message && <div className="mb-4 p-3 bg-gray-800 rounded">{message}</div>}
+      {message && <div role="status" className="mb-4 p-3 bg-gray-800 rounded">{message}</div>}
 
       {loading ? <p>Загрузка...</p> : (
         <div className="overflow-x-auto">
@@ -310,7 +310,7 @@ export default function AdminUsersPage() {
                     ) : (
                       <div className="flex gap-1 flex-wrap">
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => startEdit(user)} className="px-2 py-1 bg-blue-500 rounded text-xs">Ред.</button>}
-                        <button onClick={() => openModal(user, "message")} className="px-2 py-1 bg-green-500 rounded text-xs">Написать</button>
+                        <button disabled={!!openingChat} onClick={() => void openChat(user.id)} className="px-2 py-1 bg-green-500 rounded text-xs">{openingChat === user.id ? "Открываем…" : "Написать в чат"}</button>
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "warning")} className="px-2 py-1 bg-yellow-600 rounded text-xs">Пред</button>}
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "ban")} className="px-2 py-1 bg-red-600 rounded text-xs">Бан</button>}
                         {!user.isOwner && (canManageAdmins || !user.roles.some((role) => role === "admin" || role === "superadmin")) && <button onClick={() => openModal(user, "roles")} className="px-2 py-1 bg-purple-600 rounded text-xs">Роли и плашки</button>}
@@ -329,15 +329,6 @@ export default function AdminUsersPage() {
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-gray-800 p-6 rounded max-w-md w-full">
             <button onClick={() => setModalType(null)} className="float-right text-gray-400">✕</button>
-
-            {modalType === "message" && (
-              <>
-                <h2 className="text-xl font-bold mb-4">Сообщение для {selectedUser.nickname}</h2>
-                <input className="w-full p-2 text-black rounded mb-2" placeholder="Тема" value={msgSubject} onChange={(e) => setMsgSubject(e.target.value)} />
-                <textarea className="w-full p-2 text-black rounded mb-4" placeholder="Текст сообщения" rows={4} value={msgBody} onChange={(e) => setMsgBody(e.target.value)} />
-                <button onClick={sendMessage} className="w-full p-2 bg-blue-500 rounded">Отправить</button>
-              </>
-            )}
 
             {modalType === "warning" && (
               <>

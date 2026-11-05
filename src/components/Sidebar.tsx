@@ -15,7 +15,6 @@ import {
   Languages,
   LogIn,
   LogOut,
-  Mail,
   Menu,
   Search,
   ShieldCheck,
@@ -111,7 +110,6 @@ export default function Sidebar() {
     { href: "/bloggers", label: t("bloggers"), icon: UserRound },
     { href: "/betting", label: t("betting"), icon: Trophy },
     { href: "/knowledge", label: t("knowledge"), icon: BookOpen },
-    { href: "/messages", label: locale==="ru"?"Входящие сообщения":t("messages"), icon: Mail, auth: true },
     { href: "/notifications", label: t("notifications"), icon: Bell, auth: true },
     { href:"/appeals", label:competitionText(locale,"appeals"), icon:ShieldCheck, auth:true },
     { href:"/organizer", label:competitionText(locale,"organizer"), icon:Trophy, auth:true },
@@ -121,7 +119,7 @@ export default function Sidebar() {
     { href: "/install", label: t("installShortcut"), icon: Smartphone },
     { href: "/contacts", label: t("contacts"), icon: Contact },
   ];
-  const groupFor=(href:string)=>["/my-organizations","/messages","/notifications","/wallet","/profile"].includes(href)?"personal":["/bloggers","/knowledge","/chat"].includes(href)?"community":["/appeals","/organizer","/support","/install","/contacts"].includes(href)?"help":"play";
+  const groupFor=(href:string)=>["/my-organizations","/notifications","/wallet","/profile"].includes(href)?"personal":["/bloggers","/knowledge","/chat"].includes(href)?"community":["/appeals","/organizer","/support","/install","/contacts"].includes(href)?"help":"play";
   const groups=[{id:"play",title:locale==="kk"?"Ойнау":locale==="ky"?"Ойноо":"Играть"},{id:"personal",title:locale==="kk"?"Менің аренам":locale==="ky"?"Менин аренам":"Моя арена"},{id:"community",title:locale==="kk"?"Қауымдастық":locale==="ky"?"Коомчулук":"Сообщество"},{id:"help",title:locale==="kk"?"Басқару және көмек":locale==="ky"?"Башкаруу жана жардам":"Управление и помощь"}];
 
   return (

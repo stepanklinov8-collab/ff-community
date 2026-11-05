@@ -1,4 +1,5 @@
 import {verifyMainCoins} from './main-coins.mjs';
+import {verifyFundingRequests} from './funding-requests.mjs';
 import {verifyEconomySnapshot} from './economy-snapshot.mjs';
 import {verifyReserveQueue} from './reserve-queue.mjs';
 import {verifyEconomyValues} from './economy-values.mjs';
@@ -105,7 +106,8 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--player-reversal-workflow-only')){await verifyPlayerTransferReversalWorkflow(db,migrationId);}
+ if(process.argv.includes('--funding-only')){await verifyFundingRequests(db,migrationId);}
+ else if(process.argv.includes('--player-reversal-workflow-only')){await verifyPlayerTransferReversalWorkflow(db,migrationId);}
  else if(process.argv.includes('--player-reversal-only')){await verifyPlayerTransferExecution(db,migrationId);await verifyPlayerTransferReversal(db,migrationId);}
  else if(process.argv.includes('--player-returns-only')){await verifyPlayerReturnReconciliation(db,migrationId);}
  else if(process.argv.includes('--player-workflow-only')){await verifyPlayerTransferWorkflow(db,migrationId);}
@@ -252,6 +254,7 @@ try {
  await verifyReserveQueue(db,id,config);
  await verifyChat(db,id);
  await verifyMainCoins(db,id,config);
+ await verifyFundingRequests(db,id);
  await verifyOrganizationOwnership(db,id);
  await verifyOrganizationHierarchy(db,id);
  await verifyContractProposals(db,id);

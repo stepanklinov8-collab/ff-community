@@ -1,6 +1,17 @@
 import {test,expect,type Page} from '@playwright/test';
+import {createServer,type Server} from 'node:http';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const alice=id(996002),bob=id(996003),account=id(997001);
+let server:Server;
+test.beforeAll(async()=>{
+ server=createServer((req,res)=>{
+  const path=new URL(req.url!,'http://127.0.0.1:54321').pathname;
+  res.writeHead(200,{'Content-Type':'application/json'});
+  res.end(JSON.stringify(path==='/auth/v1/user'?{id:alice,aud:'authenticated',role:'authenticated',email:'test@example.invalid',app_metadata:{},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}:path==='/rest/v1/user_roles'?[{role:'admin'}]:[]));
+ });
+ await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(54321,'127.0.0.1',resolve);});
+});
+test.afterAll(async()=>{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));});
 async function login(page:Page){
  const user={id:alice,aud:'authenticated',role:'authenticated',email:'test@example.invalid',app_metadata:{},user_metadata:{},created_at:'2026-01-01T00:00:00Z'};
  const token=[{alg:'HS256',typ:'JWT'},{sub:alice,exp:4102444800},'test-only'].map(v=>Buffer.from(typeof v==='string'?v:JSON.stringify(v)).toString('base64url')).join('.');
@@ -10,6 +21,43 @@ async function login(page:Page){
  await page.route('**/api/**',route=>route.fulfill({json:{modules:[],notifications:[],unreadCount:0,canOpenAdmin:true,canManage:true,isSuperadmin:true}}));
 }
 const initial=()=>({userId:alice,canManage:false,accounts:[{id:account,user_id:alice,team_id:null,name:'Личный баланс',balance:1000,reserved:0,canSpend:true}],demoBalance:999999,ledger:[],withdrawals:[] as Array<{id:string;account_id:string;user_id:string;amount:number;status:string;note:string;created_at:string}>});
+
+test('manual top-up creates a pending request without increasing either balance and can be cancelled',async({page})=>{
+ await login(page);const state={...initial(),deposits:[] as Array<{id:string;user_id:string;amount:number;status:string;accountName:string;created_at:string}>};
+ const writes:Array<Record<string,unknown>>=[];
+ await page.route('**/api/wallet',route=>{
+  if(route.request().method()==='POST'){
+   const body=route.request().postDataJSON();writes.push(body.operation);
+   if(body.operation.action==='deposit_request')state.deposits.push({id:body.requestId,user_id:alice,amount:body.operation.amount,status:'pending',accountName:'Личный баланс',created_at:'2026-11-05T10:00:00Z'});
+   else state.deposits[0].status='cancelled';
+   return route.fulfill({json:{success:true}});
+  }return route.fulfill({json:state});
+ });
+ await page.goto('/wallet');await page.getByLabel('Сумма пополнения, 🪙',{exact:true}).fill('250');
+ await page.getByRole('button',{name:'Запросить пополнение',exact:true}).click();expect(writes).toHaveLength(0);
+ await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByText('Ожидает оплаты и проверки',{exact:false})).toBeVisible();
+ await expect(page.getByText('Доступно: 1 000 🪙',{exact:true})).toBeVisible();
+ expect(writes[0]).toEqual({action:'deposit_request',amount:250});
+ await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveAttribute('href','/chat?support=1');
+ await page.getByRole('button',{name:'Отменить пополнение',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByText('Отменено',{exact:false})).toBeVisible();expect(writes[1].action).toBe('deposit_cancel');
+});
+
+test('finance admin confirms payment for the saved amount and receives a clear disconnected VK status',async({page})=>{
+ await login(page);const state={...initial(),deposits:[{id:id(998050),user_id:bob,amount:250,status:'pending',accountName:'Личный баланс',created_at:'2026-11-05T10:00:00Z'}],financialNotifications:{vkConfigured:false,pushConfigured:true},profiles:[{id:bob,nickname:'Игрок'}],operations:[]};
+ const writes:Array<Record<string,unknown>>=[];
+ await page.route('**/api/admin/wallet',route=>route.fulfill({json:state}));
+ await page.route('**/api/wallet',route=>{writes.push(route.request().postDataJSON().operation);state.deposits=[];return route.fulfill({json:{success:true}});});
+ await page.goto('/admin/wallet');
+ await expect(page.getByText(/ВК — не подключён/)).toBeVisible();
+ await expect(page.getByRole('button',{name:'Оплата получена — начислить',exact:true})).toBeDisabled();
+ await page.getByLabel('Подтверждение оплаты или причина отказа').fill('Получил перевод');
+ await page.getByRole('button',{name:'Оплата получена — начислить',exact:true}).click();
+ expect(writes).toHaveLength(0);await expect(page.getByRole('dialog')).toContainText('250');
+ await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);
+ expect(writes[0]).toEqual({action:'deposit_credit',depositId:id(998050),reason:'Получил перевод'});
+});
 test('main wallet transfers use explicit confirmation, update balance and expose no demo source',async({page})=>{
  await login(page);const state=initial();const writes:Array<{requestId:string;operation:Record<string,unknown>}>=[];
  await page.route('**/api/wallet*',async route=>{
