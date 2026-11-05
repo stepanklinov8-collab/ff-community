@@ -33,11 +33,20 @@ test('manual top-up creates a pending request without increasing either balance 
    return route.fulfill({json:{success:true}});
   }return route.fulfill({json:state});
  });
- await page.goto('/wallet');await page.getByLabel('Сумма пополнения, 🪙',{exact:true}).fill('250');
+ await page.goto('/wallet');
+ await expect(page.getByRole('region',{name:'Пополнение монет',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'Запрос на вывод',exact:true})).toHaveCount(0);
+ await page.getByRole('region',{name:'Баланс: Личный баланс',exact:true}).getByRole('button',{name:'Пополнить',exact:true}).click();
+ await page.getByLabel('Сумма пополнения, 🪙',{exact:true}).fill('250');
  await page.getByRole('button',{name:'Запросить пополнение',exact:true}).click();expect(writes).toHaveLength(0);
  await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('Ожидает оплаты и проверки',{exact:false})).toBeVisible();
  await expect(page.getByText('Доступно: 1 000 🪙',{exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toHaveText('Заявка на пополнение успешно оформлена');
+ await expect(page.getByLabel('Сумма пополнения, 🪙',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Пополнить',exact:true}).click();
+ await expect(page.getByLabel('Сумма пополнения, 🪙',{exact:true})).toHaveValue('');
+ await page.getByRole('button',{name:'Назад к балансу',exact:true}).click();
  expect(writes[0]).toEqual({action:'deposit_request',amount:250});
  await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Отменить пополнение',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
@@ -99,12 +108,18 @@ test('withdrawal reserves primary money, preserves free-form details and cancell
   }return route.fulfill({json:state});
  });
  await page.goto('/wallet');
- await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('250');
+ await page.getByRole('button',{name:'Вывести',exact:true}).click();
+ await page.getByRole('region',{name:'Запрос на вывод',exact:true}).getByLabel('Сумма, 🪙',{exact:true}).fill('250');
  await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Тестовый банк, реквизиты для администратора');
  await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await page.getByRole('button',{name:'Подать заявку'}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('В резерве: 250 🪙',{exact:true})).toBeVisible();
  await expect(page.getByText('Доступно: 750 🪙',{exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toHaveText('Заявка на вывод успешно оформлена');
+ await expect(page.getByRole('region',{name:'Запрос на вывод',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Вывести',exact:true}).click();
+ for(const label of ['Сумма, 🪙','ФИО латиницей','Страна перевода','Реквизиты для перевода'])await expect(page.getByRole('region',{name:'Запрос на вывод',exact:true}).getByLabel(label,{exact:true})).toHaveValue('');
+ await page.getByRole('button',{name:'Назад к балансу',exact:true}).click();
  expect(writes[0]).toMatchObject({action:'withdraw_request',amount:250,note:'Тестовый банк, реквизиты для администратора',fullNameLatin:'IVAN IVANOV',transferCountry:'Россия'});
  await page.getByRole('button',{name:'Отменить заявку'}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
  await expect(page.getByText('В резерве: 0 🪙',{exact:true})).toBeVisible();
@@ -129,7 +144,8 @@ test('contract recovery debt blocks personal withdrawal and explains reserve rel
  await expect(debt).toContainText('850');
  await expect(debt).toContainText('Зарезервированные монеты не списываются');
  await expect(debt.getByRole('link')).toHaveAttribute('href','/contracts');
- await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('10');
+ await page.getByRole('button',{name:'Вывести',exact:true}).click();
+ await page.getByRole('region',{name:'Запрос на вывод',exact:true}).getByLabel('Сумма, 🪙',{exact:true}).fill('10');
  await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank');
  await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await expect(page.getByRole('button',{name:'Подать заявку'})).toBeDisabled();
@@ -181,8 +197,8 @@ test('organization withdrawal uses its account and remains visible to the curren
   }
   return route.fulfill({json:state});
  });
- await page.goto('/wallet');await page.getByLabel('Откуда списать монеты').selectOption(organization);
- await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('500');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Реквизиты организации');
+ await page.goto('/wallet');await page.getByRole('region',{name:'Баланс: Гильдия',exact:true}).getByRole('button',{name:'Вывести',exact:true}).click();
+ await page.getByRole('region',{name:'Запрос на вывод',exact:true}).getByLabel('Сумма, 🪙',{exact:true}).fill('500');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Реквизиты организации');
  await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await page.getByRole('button',{name:'Подать заявку'}).click();await expect(page.getByRole('dialog')).toContainText('с баланса «Гильдия»');
  await page.getByRole('button',{name:'Подтвердить',exact:true}).click();await expect(page.getByText('Счёт: Гильдия · от лица организации',{exact:true})).toBeVisible();
@@ -195,11 +211,62 @@ test('organization withdrawal uses its account and remains visible to the curren
 
 test('withdrawal requires Latin name and country while top-up has no contact-administration button',async({page})=>{
  await login(page);await page.route('**/api/wallet',route=>route.fulfill({json:initial()}));await page.goto('/wallet');
- await page.getByLabel('Сумма, 🪙',{exact:true}).last().fill('100');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank details');
+ await page.getByRole('button',{name:'Вывести',exact:true}).click();
+ await page.getByRole('region',{name:'Запрос на вывод',exact:true}).getByLabel('Сумма, 🪙',{exact:true}).fill('100');await page.getByLabel('Реквизиты для перевода',{exact:true}).fill('Test bank details');
  const button=page.getByRole('button',{name:'Подать заявку',exact:true});await expect(button).toBeDisabled();
  await page.getByLabel('ФИО латиницей',{exact:true}).fill('Иван Иванов');await page.getByLabel('Страна перевода',{exact:true}).fill('Россия');
  await expect(page.getByText('Используйте латинские буквы, пробелы, дефис или апостроф',{exact:true})).toBeVisible();await expect(button).toBeDisabled();
  await page.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await expect(button).toBeEnabled();
  await page.getByLabel('Страна перевода',{exact:true}).fill('');await expect(button).toBeDisabled();
  await expect(page.getByRole('link',{name:'Связаться с администрацией',exact:true})).toHaveCount(0);
+});
+
+for(const kind of ['deposit','withdrawal'] as const)test(`${kind} retains fields and request identity on failure, then clears after success even when history refresh fails`,async({page})=>{
+ await login(page);let completed=false;const writes:Array<{requestId:string;operation:Record<string,unknown>}>=[];
+ await page.route('**/api/wallet',route=>{
+  if(route.request().method()==='POST'){
+   writes.push(route.request().postDataJSON());
+   if(writes.length===1)return route.fulfill({status:503,json:{error:'Временный сбой, повторите запрос'}});
+   completed=true;return route.fulfill({json:{success:true}});
+  }
+  return completed?route.fulfill({status:503,json:{error:'Не удалось обновить историю'}}):route.fulfill({json:initial()});
+ });
+ await page.setViewportSize({width:390,height:844});await page.goto('/wallet');
+ await page.getByRole('button',{name:kind==='deposit'?'Пополнить':'Вывести',exact:true}).click();
+ const form=page.getByRole('region',{name:kind==='deposit'?'Пополнение монет':'Запрос на вывод',exact:true});
+ const amount=form.getByLabel(kind==='deposit'?'Сумма пополнения, 🪙':'Сумма, 🪙',{exact:true});await amount.fill('100');
+ if(kind==='withdrawal'){
+  await form.getByLabel('ФИО латиницей',{exact:true}).fill('IVAN IVANOV');await form.getByLabel('Страна перевода',{exact:true}).fill('Россия');await form.getByLabel('Реквизиты для перевода',{exact:true}).fill('Тестовые реквизиты');
+ }
+ const submit=()=>form.getByRole('button',{name:kind==='deposit'?'Запросить пополнение':'Подать заявку',exact:true}).click();
+ await submit();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('Временный сбой');await expect(page.getByRole('status')).toHaveCount(0);
+ await page.getByRole('button',{name:'Назад',exact:true}).click();await expect(amount).toHaveValue('100');
+ if(kind==='withdrawal')await expect(form.getByPlaceholder('Укажите удобные реквизиты и необходимые пояснения')).toHaveValue('Тестовые реквизиты');
+ await submit();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByRole('status')).toHaveText(kind==='deposit'?'Заявка на пополнение успешно оформлена':'Заявка на вывод успешно оформлена');
+ await expect(form).toHaveCount(0);await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.getByRole('alert').filter({hasText:'Не удалось обновить историю'})).toBeVisible();
+ expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
+ await expect(page.getByRole('region',{name:'Баланс: Личный баланс',exact:true})).toBeInViewport();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('account buttons select the exact organization, hide read-only controls and reset a form when changing account',async({page})=>{
+ await login(page);const organization=id(997030),readOnly=id(997031),writes:Array<Record<string,unknown>>=[];
+ const state={...initial(),accounts:[...initial().accounts,{id:id(997032),user_id:null,team_id:organization,name:'Север',balance:500,reserved:0,canSpend:true},{id:id(997033),user_id:null,team_id:readOnly,name:'Без доступа',balance:100,reserved:0,canSpend:false}]};
+ await page.route('**/api/wallet',route=>{if(route.request().method()==='POST'){writes.push(route.request().postDataJSON().operation);return route.fulfill({json:{success:true}});}return route.fulfill({json:state});});
+ await page.setViewportSize({width:390,height:844});await page.goto('/wallet');
+ await expect(page.getByRole('region',{name:'Баланс: Без доступа',exact:true}).getByRole('button')).toHaveCount(0);
+ await page.screenshot({path:'tools/database-tests/artifacts/contracts/wallet-collapsed-actions.png',fullPage:true});
+ await page.getByRole('region',{name:'Баланс: Личный баланс',exact:true}).getByRole('button',{name:'Пополнить',exact:true}).click();
+ await page.getByLabel('Сумма пополнения, 🪙',{exact:true}).fill('200');
+ await page.getByRole('region',{name:'Баланс: Север',exact:true}).getByRole('button',{name:'Пополнить',exact:true}).click();
+ await expect(page.getByLabel('Сумма пополнения, 🪙',{exact:true})).toHaveValue('');
+ await expect(page.getByRole('region',{name:'Пополнение монет',exact:true})).toContainText('Счёт пополнения: Север');
+ await page.getByLabel('Сумма пополнения, 🪙',{exact:true}).fill('100');
+ await page.getByRole('button',{name:'Запросить пополнение',exact:true}).click();await page.getByRole('button',{name:'Подтвердить',exact:true}).click();
+ await expect(page.getByRole('status')).toHaveText('Заявка на пополнение успешно оформлена');
+ expect(writes).toEqual([{action:'deposit_request',amount:100,teamId:organization}]);
+ await page.screenshot({path:'tools/database-tests/artifacts/contracts/wallet-request-success.png',fullPage:true});
 });
