@@ -7,7 +7,7 @@ import Link from "next/link";
 import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
 import { useLanguage } from "@/components/LanguageProvider";
-import Image from "next/image";
+import Image from "@/platform/image";
 import type { User } from "@supabase/supabase-js";
 import { authFetch } from "@/utils/api/auth-fetch";
 import TeamMapStatistics from "@/components/TeamMapStatistics";

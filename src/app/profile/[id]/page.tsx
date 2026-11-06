@@ -7,7 +7,7 @@ import Link from "next/link";
 import {getPublicStatistics, type PublicStatistics} from "@/lib/competition/public-statistics";
 import CompetitionStatistics from "@/components/CompetitionStatistics";
 import PublicWarningHistory from "@/components/PublicWarningHistory";
-import Image from "next/image";
+import Image from "@/platform/image";
 import { authFetch } from "@/utils/api/auth-fetch";
 import { playerRoles } from "@/lib/profile/roles";
 import ProfileContactButton from "@/components/ProfileContactButton";

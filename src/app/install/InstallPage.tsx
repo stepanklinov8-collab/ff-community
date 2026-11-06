@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { CheckCircle2, Copy, Download, ExternalLink, Monitor, Share2, Smartphone } from "lucide-react";

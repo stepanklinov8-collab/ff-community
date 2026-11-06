@@ -12,7 +12,7 @@ import {getBrowserUser} from "@/utils/supabase/browser-identity";
 import { useParams, useSearchParams } from "next/navigation";
 import {useLanguage} from "@/components/LanguageProvider";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/platform/image";
 import type { User } from "@supabase/supabase-js";
 import { mapTitle } from "@/lib/competition/map-catalog";
 import { sessionHasEnded } from "@/lib/competition/training-schedule";

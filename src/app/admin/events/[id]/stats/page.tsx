@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { authFetch } from "@/utils/api/auth-fetch";

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { authErrorMessage } from "@/utils/auth/email-flow";
+import {websiteRequestOrigin} from '@/platform/backend-transport';
 
 const confirmationSchema = z.object({
   tokenHash: z.string().min(1).max(512),
@@ -10,7 +11,7 @@ const confirmationSchema = z.object({
 // Only an explicit button press consumes the token. Email scanners can safely GET the page.
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) {
+  if (!origin || origin !== websiteRequestOrigin(request)) {
     return Response.json({ error: "Откройте ссылку подтверждения на сайте." }, { status: 403 });
   }
   try {

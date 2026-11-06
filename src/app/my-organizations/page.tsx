@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import { ChevronRight, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

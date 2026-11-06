@@ -2,7 +2,7 @@
 import { formatCoins } from "@/lib/economy/currency";
 import {useEffect, useState} from "react";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/platform/image";
 import {useLanguage} from "./LanguageProvider";
 import {statisticsText} from "@/i18n/competition-statistics";
 import type {CompetitionMode} from "@/lib/competition/public-statistics";
