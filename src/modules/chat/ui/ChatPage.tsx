@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -8,6 +8,7 @@ import { authFetch, createClient } from "@/platform/browser-services";
 import type { ChatHistory, ChatIndex, ChatMessage, ChatMutation, ChatRoom } from "../model";
 import { copy, type CopyKey } from "../copy";
 import styles from "./chat.module.css";
+import {backendTransport} from '@/platform/backend-transport';
 
 async function api<T>(query = "", input?: ChatMutation): Promise<T> {
   const response = await authFetch("/api/chat" + query, input ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) } : undefined);
@@ -122,25 +123,26 @@ export default function ChatPage() {
         void loadIndex().catch(showError);
       }, 300);
     };
-    const roomChannel = db.channel("chat:room:" + roomId, { config: { private: true } })
+    const proxied=backendTransport()==='proxy';
+    const roomChannel = proxied?null:db.channel("chat:room:" + roomId, { config: { private: true } })
       .on("broadcast", { event: "changed" }, update)
       .subscribe(status => {
         online = status === "SUBSCRIBED";
         if (active) setConnected(online);
         if (online) update();
       });
-    const inboxChannel = db.channel(isAdmin ? "chat:admins" : "chat:user:" + account, { config: { private: true } })
+    const inboxChannel = proxied?null:db.channel(isAdmin ? "chat:admins" : "chat:user:" + account, { config: { private: true } })
       .on("broadcast", { event: "changed" }, update).subscribe();
     // Recover dropped hints and changed permissions even with a connected socket.
     let ticks = 0;
-    const fallback = setInterval(() => { if (!online || ++ticks % 2 === 0) update(); }, 30000);
+    const fallback = setInterval(() => { if (!online || ++ticks % 2 === 0) update(); }, proxied?10000:30000);
     window.addEventListener("online", update);
     window.addEventListener("focus", update);
     document.addEventListener("visibilitychange", update);
     return () => {
       active = false; clearTimeout(timer); clearInterval(fallback);
       window.removeEventListener("online", update); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update);
-      void db.removeChannel(roomChannel); void db.removeChannel(inboxChannel);
+      if(roomChannel)void db.removeChannel(roomChannel); if(inboxChannel)void db.removeChannel(inboxChannel);
     };
     // The subscription depends on identity and role, not on unread counters.
     // eslint-disable-next-line react-hooks/exhaustive-deps

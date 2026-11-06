@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCoins } from "@/lib/economy/currency";
-import Image from "next/image";
+import Image from "@/platform/image";
 import {archiveCards} from "@/lib/competition/archive";
 import {competitionText} from "@/i18n/competition";
 import Link from "next/link";

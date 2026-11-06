@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCoins } from "@/lib/economy/currency";
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import {getPublicStatistics, type PublicStatistics} from "@/lib/competition/public-statistics";
 import CompetitionStatistics from "@/components/CompetitionStatistics";

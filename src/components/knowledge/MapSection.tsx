@@ -1,5 +1,5 @@
 "use client";
-import Image from "next/image";
+import Image from "@/platform/image";
 import {useState} from "react";
 import {mapCatalog} from "@/lib/competition/map-catalog";
 import {knowledgeMapPoints,mapLabelOffset} from "@/lib/knowledge/map-points";

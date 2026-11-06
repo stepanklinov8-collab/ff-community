@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCoins } from "@/lib/economy/currency";
-import Image from "next/image";
+import Image from "@/platform/image";
 import Link from "next/link";
 import { Search, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
