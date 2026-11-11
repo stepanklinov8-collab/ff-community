@@ -10,6 +10,7 @@ export default function ActivityTracker() {
   useEffect(() => {
     let alive = true, userId = "", view = crypto.randomUUID(), inFlight = false;
     let interaction = Date.now(), lastReport = 0, activityDay = "";
+    let firstReportTimer: number | undefined;
     const path = analyticsPath(pathname);
     const interact = () => { interaction = Date.now(); };
     const touch = async (leaving = false) => {
@@ -32,15 +33,27 @@ export default function ActivityTracker() {
       if (document.visibilityState === "hidden") { if(Date.now()-lastReport>10_000) void touch(true); }
       else { interact(); void touch(); }
     };
-    void db.auth.getSession().then(({data}) => {if(alive){userId=data.session?.user.id??"";void touch();}});
+    const scheduleFirstReport = () => {
+      window.clearTimeout(firstReportTimer);
+      firstReportTimer = window.setTimeout(() => void touch(), 2500);
+    };
+    if (document.readyState === "complete") scheduleFirstReport();
+    else window.addEventListener("load", scheduleFirstReport, { once: true });
     const {data:subscription}=db.auth.onAuthStateChange((_event,session)=>{
       const next=session?.user.id??"";
-      if(alive&&next!==userId){userId=next;identity.current=null;view=crypto.randomUUID();void touch();}
+      if(alive&&next!==userId){
+        userId=next;
+        // INITIAL_SESSION fires on route changes as well. Keep the current
+        // visit when the same account navigates to another page.
+        if(identity.current?.userId!==next)identity.current=null;
+        view=crypto.randomUUID();
+        if(document.readyState==="complete")scheduleFirstReport();
+      }
     });
     const timer=window.setInterval(()=>void touch(),25_000);
     for(const event of ["pointerdown","keydown","scroll"] as const)window.addEventListener(event,interact,{passive:true});
     document.addEventListener("visibilitychange",visibility);
-    return()=>{alive=false;window.clearInterval(timer);subscription.subscription.unsubscribe();document.removeEventListener("visibilitychange",visibility);for(const event of ["pointerdown","keydown","scroll"] as const)window.removeEventListener(event,interact);};
+    return()=>{alive=false;window.clearTimeout(firstReportTimer);window.clearInterval(timer);window.removeEventListener("load",scheduleFirstReport);subscription.subscription.unsubscribe();document.removeEventListener("visibilitychange",visibility);for(const event of ["pointerdown","keydown","scroll"] as const)window.removeEventListener(event,interact);};
   },[pathname,db]);
   return null;
 }

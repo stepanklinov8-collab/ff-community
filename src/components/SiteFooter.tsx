@@ -12,10 +12,10 @@ export default function SiteFooter() {
         <p>{t("footer.tagline")}</p>
       </div>
       <nav aria-label={t("common.legal")}>
-        <Link href="/rules">{t("footer.rules")}</Link>
-        <Link href="/privacy">{t("footer.privacy")}</Link>
-        <Link href="/terms">{t("footer.terms")}</Link>
-        <Link href="/contacts">{t("contacts")}</Link>
+        <Link prefetch={false} href="/rules">{t("footer.rules")}</Link>
+        <Link prefetch={false} href="/privacy">{t("footer.privacy")}</Link>
+        <Link prefetch={false} href="/terms">{t("footer.terms")}</Link>
+        <Link prefetch={false} href="/contacts">{t("contacts")}</Link>
       </nav>
     </footer>
   );

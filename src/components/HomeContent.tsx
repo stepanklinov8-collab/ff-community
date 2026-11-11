@@ -33,7 +33,7 @@ const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 // After hydration retain the visitor's local time, as on the original homepage.
 const initialTimeZone = () => "Europe/Moscow";
 
-export default function HomeContent({ initialData }: { initialData: HomeSummary | null }) {
+export default function HomeContent({ initialData, pending = false }: { initialData: HomeSummary | null; pending?: boolean }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { t, formatDate } = useLanguage();
@@ -85,7 +85,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
 
   return (
     <div className="home-page">
-      {!initialData && <p role="alert">Не удалось загрузить расписание и статистику. <button type="button" className="text-link" onClick={() => router.refresh()}>Повторить</button></p>}
+      {!initialData && !pending && <p role="alert">Не удалось загрузить расписание и статистику. <button type="button" className="text-link" onClick={() => router.refresh()}>Повторить</button></p>}
       <section className="home-hero cyber-card">
         <Image
           src="/brand/omcite-hero.jpg"
@@ -101,10 +101,10 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
           <h1>{t("home.heroTitle")}<br /><span>{t("home.heroAccent")}</span></h1>
           <p>{t("home.heroText")}</p>
           <div className="hero-actions">
-            <Link href="/tournaments" className="primary-button">
+            <Link prefetch={false} href="/tournaments" className="primary-button">
               {t("home.findTournament")} <ArrowRight size={18} />
             </Link>
-            <Link href="/teams" className="secondary-button">
+            <Link prefetch={false} href="/teams" className="secondary-button">
               {t("teams")}
             </Link>
           </div>
@@ -129,7 +129,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
         {showResults && (
           <div className="search-results">
             {searchResults.length ? searchResults.map((result) => (
-              <Link key={result.id} href={`/teams/${result.id}`}>
+              <Link prefetch={false} key={result.id} href={`/teams/${result.id}`}>
                 <UsersRound size={18} />
                 <span>{result.name}<small>{result.type === "guild" ? t("common.guild") : t("common.team")}</small></span>
                 <ChevronRight size={17} />
@@ -146,14 +146,14 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
               <span className="section-kicker">{t("home.calendar")}</span>
               <h2 className="section-title">{t("home.upcomingEvents")}</h2>
             </div>
-            <Link href="/tournaments" className="text-link">{t("home.allEvents")} <ArrowRight size={16} /></Link>
+            <Link prefetch={false} href="/tournaments" className="text-link">{t("home.allEvents")} <ArrowRight size={16} /></Link>
           </div>
 
           <div className="event-list">
             {upcomingEvents.length === 0 ? (
-              <div className="empty-state"><CalendarDays /><p>{t("home.scheduleEmpty")}</p></div>
+              <div className="empty-state"><CalendarDays /><p>{pending ? "Загрузка расписания…" : t("home.scheduleEmpty")}</p></div>
             ) : upcomingEvents.map((event) => (
-              <Link key={event.sessionId} href={`/tournaments/${event.eventId}?sessionId=${event.sessionId}`} className="event-row">
+              <Link prefetch={false} key={event.sessionId} href={`/tournaments/${event.eventId}?sessionId=${event.sessionId}`} className="event-row">
                 <div className="event-date">
                   <strong>{formatDate(event.startTime, { day: "2-digit", timeZone })}</strong>
                   <span>{formatDate(event.startTime, { month: "short", timeZone })}</span>
@@ -178,18 +178,18 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
             <div><span>02</span><ShieldCheck /><p>{t("home.passVerification")}</p></div>
             <div><span>03</span><Trophy /><p>{t("home.joinTournament")}</p></div>
           </div>
-          <Link href="/teams/create" className="primary-button">{t("home.createTeam")} <ArrowRight size={18} /></Link>
+          <Link prefetch={false} href="/teams/create" className="primary-button">{t("home.createTeam")} <ArrowRight size={18} /></Link>
         </aside>
       </div>
 
       <section className="features-strip">
-        <Link href="/rating" className="feature-card cyber-card">
+        <Link prefetch={false} href="/rating" className="feature-card cyber-card">
           <Sparkles /><span><strong>{t("rating")}</strong><small>{t("home.playerRatingText")}</small></span><ArrowRight />
         </Link>
-        <Link href="/teams-stats" className="feature-card cyber-card">
+        <Link prefetch={false} href="/teams-stats" className="feature-card cyber-card">
           <Gamepad2 /><span><strong>{t("teamStats")}</strong><small>{t("home.teamRatingText")}</small></span><ArrowRight />
         </Link>
-        <Link href="/tournaments/propose" className="feature-card cyber-card">
+        <Link prefetch={false} href="/tournaments/propose" className="feature-card cyber-card">
           <Swords /><span><strong>{t("home.proposeTournament")}</strong><small>{t("home.proposeTournamentText")}</small></span><ArrowRight />
         </Link>
       </section>
@@ -199,7 +199,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
           <div><span className="section-kicker">{t("home.community")}</span><h2 className="section-title">{t("home.latestEvents")}</h2></div>
         </div>
         <div className="activity-list">
-          {activities.length === 0 ? <p className="muted-copy">{t("home.activityEmpty")}</p> : activities.map((activity) => {
+          {activities.length === 0 ? !pending && <p className="muted-copy">{t("home.activityEmpty")}</p> : activities.map((activity) => {
             const href = activity.event_id
               ? `/tournaments/${activity.event_id}`
               : activity.team_id
@@ -213,7 +213,7 @@ export default function HomeContent({ initialData }: { initialData: HomeSummary 
               </>
             );
             return href
-              ? <Link key={activity.id} href={href} className="activity-row">{content}</Link>
+              ? <Link prefetch={false} key={activity.id} href={href} className="activity-row">{content}</Link>
               : <div key={activity.id} className="activity-row">{content}</div>;
           })}
         </div>

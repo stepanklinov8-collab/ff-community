@@ -65,9 +65,8 @@ export default function Sidebar() {
         if (!window.localStorage.getItem("omcite-locale") && locales.includes(profileLocale)) {
           setLocale(profileLocale, false);
         }
-        const [response,{data:profile}]=await Promise.all([authFetch("/api/admin/capabilities"),supabase.from("profiles").select("nickname").eq("id",data.user.id).maybeSingle()]);
-        const capabilities=response.ok?await response.json() as {canOpenAdmin?:boolean}:null;
-        if(active&&version===identityVersion){setIsAdmin(Boolean(capabilities?.canOpenAdmin));setProfileNickname(profile?.nickname??null);}
+        const {data:profile}=await supabase.from("profiles").select("nickname").eq("id",data.user.id).maybeSingle();
+        if(active&&version===identityVersion)setProfileNickname(profile?.nickname??null);
       }
       }finally{loadingUser=false;if(active&&queued){queued=false;void loadUser().catch(()=>undefined);}}
     }
@@ -91,6 +90,19 @@ export default function Sidebar() {
       window.removeEventListener("omcite-profile-updated", profileUpdated);
     };
   }, [setLocale, supabase]);
+
+  const userId = user?.id;
+  useEffect(() => {
+    if (!open || !userId) return;
+    let active = true;
+    void authFetch("/api/admin/capabilities").then(async response => {
+      const capabilities = response.ok ? await response.json() as {canOpenAdmin?: boolean} : null;
+      if (active) setIsAdmin(Boolean(capabilities?.canOpenAdmin));
+    }).catch(() => {
+      if (active) setIsAdmin(false);
+    });
+    return () => { active = false; };
+  }, [open, userId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -134,7 +146,7 @@ export default function Sidebar() {
           <Menu size={22} />
         </button>
 
-        <Link href="/" className="brand-lockup" aria-label={`OMCITE Arena — ${t("home")}`}>
+        <Link prefetch={false} href="/" className="brand-lockup" aria-label={`OMCITE Arena — ${t("home")}`}>
           <span className="brand-mark">
             <Image src="/brand/omcite-emblem.jpg" alt="" width={42} height={42} priority />
           </span>
@@ -145,13 +157,13 @@ export default function Sidebar() {
         </Link>
 
         <div className="header-actions">
-          <Link href="/?search=1" className="icon-button" aria-label={t("search")}>
+          <Link prefetch={false} href="/?search=1" className="icon-button" aria-label={t("search")}>
             <Search size={20} />
           </Link>
-          <Link href={user ? "/notifications" : "/auth"} className="icon-button" aria-label={t("notifications")}>
+          <Link prefetch={false} href={user ? "/notifications" : "/auth"} className="icon-button" aria-label={t("notifications")}>
             <Bell size={20} />
           </Link>
-          <Link href={user ? "/profile" : "/auth"} className="header-account">
+          <Link prefetch={false} href={user ? "/profile" : "/auth"} className="header-account">
             <UserRound size={18} />
             <span>{user ? (profileNickname ?? user.user_metadata?.nickname ?? t("profile")) : t("signIn")}</span>
           </Link>
@@ -163,7 +175,7 @@ export default function Sidebar() {
           <button className="drawer-backdrop" aria-label={t("common.closeMenu")} onClick={() => setOpen(false)} />
           <aside className="site-drawer" aria-label={t("common.mainNavigation")}>
             <div className="drawer-head">
-              <Link href="/" className="brand-lockup">
+              <Link prefetch={false} href="/" className="brand-lockup">
                 <span className="brand-mark brand-mark-large">
                   <Image src="/brand/omcite-emblem.jpg" alt="OMCITE" width={52} height={52} />
                 </span>
@@ -182,13 +194,13 @@ export default function Sidebar() {
                 const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
                 return (
                   <div key={item.href} className={item.href === "/knowledge" && active ? "drawer-nav-group is-open" : "drawer-nav-group"}>
-                    <Link href={item.href} onClick={() => setOpen(false)} className={active ? "nav-item active" : "nav-item"}>
+                    <Link prefetch={false} href={item.href} onClick={() => setOpen(false)} className={active ? "nav-item active" : "nav-item"}>
                       <Icon size={19} />
                       <span>{item.label}</span>
                       <ChevronRight size={16} className="nav-chevron" />
                     </Link>
                     {item.href === "/knowledge" && active && <nav className="drawer-subnav" aria-label="Разделы базы знаний">
-                      {knowledgeSections.map((section) => <Link key={section.id} href={`/knowledge?section=${section.id}`} aria-current={currentKnowledgeSection === section.id ? "page" : undefined} className={currentKnowledgeSection === section.id ? "active" : ""} onClick={() => { setCurrentKnowledgeSection(section.id); setOpen(false); }}><span aria-hidden="true" />{section.title}</Link>)}
+                      {knowledgeSections.map((section) => <Link prefetch={false} key={section.id} href={`/knowledge?section=${section.id}`} aria-current={currentKnowledgeSection === section.id ? "page" : undefined} className={currentKnowledgeSection === section.id ? "active" : ""} onClick={() => { setCurrentKnowledgeSection(section.id); setOpen(false); }}><span aria-hidden="true" />{section.title}</Link>)}
                     </nav>}
                   </div>
                 );
@@ -196,7 +208,7 @@ export default function Sidebar() {
 
               <ModuleNavigation items={moduleItems.filter(item=>(item.id==="chat"?"community":"personal")===group.id)} userId={user?.id} onNavigate={() => setOpen(false)} />
               {group.id==="help"&&isAdmin && (
-                <Link href="/admin" onClick={() => setOpen(false)} className={pathname.startsWith("/admin") ? "nav-item admin active" : "nav-item admin"}>
+                <Link prefetch={false} href="/admin" onClick={() => setOpen(false)} className={pathname.startsWith("/admin") ? "nav-item admin active" : "nav-item admin"}>
                   <ShieldCheck size={19} />
                   <span>{t("admin")}</span>
                   <ChevronRight size={16} className="nav-chevron" />
@@ -234,7 +246,7 @@ export default function Sidebar() {
                   <LogOut size={18} /> {t("signOut")}
                 </button>
               ) : (
-                <Link href="/auth" onClick={() => setOpen(false)} className="auth-action">
+                <Link prefetch={false} href="/auth" onClick={() => setOpen(false)} className="auth-action">
                   <LogIn size={18} /> {t("signIn")}
                 </Link>
               )}

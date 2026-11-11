@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCoins } from "@/lib/economy/currency";
-import Image from "@/platform/image";
+import ListThumbnail from "@/components/ListThumbnail";
 import Link from "next/link";
 import { Search, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ interface TeamRow {
 
 interface Team extends TeamRow {
   membersCount: number;
-  cost: number;
+  cost: number | null;
 }
 
 interface TeamQueryRow extends TeamRow {
@@ -35,7 +35,8 @@ const PAGE_SIZE = 12;
 export default function TeamsPage() {
   const supabase = useMemo(() => createClient(), []);
   const { t, locale, formatNumber } = useLanguage();
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [rows, setRows] = useState<TeamQueryRow[]>([]);
+  const [costs, setCosts] = useState<Map<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -45,31 +46,35 @@ export default function TeamsPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const fetchTeams = async () => {
-      const [{ data, error: teamsError }, leaderboardResponse] = await Promise.all([
-        supabase
-          .from("teams")
-          .select("id, name, description, type, created_at, avatar_url, main_rating, team_members(count)")
-          .eq("verified", true)
-          .is("dissolved_at", null)
-          .order("created_at", { ascending: false }),
-        fetch("/api/competition/leaderboard?mode=main&type=team&sort=rating&offset=0&limit=100", { cache: "no-store" }).catch(() => null),
-      ]);
-
-      if (teamsError) {
-        setError(t("teams.loadError"));
-        setLoading(false);
-        return;
-      }
-
-      const rows = (data ?? []) as TeamQueryRow[];
-      const leaderboard = leaderboardResponse?.ok ? await leaderboardResponse.json() as {items?: Array<{id: string; cost?: number; kills: number; games: number}>} : {items: []};
-      const costById = new Map((leaderboard.items ?? []).map((item) => [item.id, Number(item.cost ?? 0)]));
-      setTeams(rows.map((team) => ({ ...team, membersCount: Number(team.team_members?.[0]?.count ?? 0), cost: costById.get(team.id) ?? 0 })));
-      setLoading(false);
-    };
-    void fetchTeams();
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    const loadTeams = Promise.resolve(supabase.from("teams")
+      .select("id, name, description, type, created_at, avatar_url, main_rating, team_members(count)")
+      .eq("verified", true).is("dissolved_at", null).order("created_at", { ascending: false })
+      .abortSignal(controller.signal)).then(({ data, error: teamsError }) => {
+      if (teamsError) throw teamsError;
+      if (active) setRows((data ?? []) as TeamQueryRow[]);
+    }).catch(() => {
+      if (active) setError(t("teams.loadError"));
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    const loadCosts = fetch("/api/competition/leaderboard?mode=main&type=team&sort=rating&offset=0&limit=100", { cache: "no-store", signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) return;
+        const { items } = await response.json() as {items?: Array<{id: string; cost?: number}>};
+        if (active) setCosts(new Map((items ?? []).map(item => [item.id, Number(item.cost ?? 0)])));
+      }).catch(() => undefined);
+    void Promise.allSettled([loadTeams, loadCosts]).then(() => window.clearTimeout(timeout));
+    return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
   }, [supabase, t]);
+
+  const teams = useMemo<Team[]>(() => rows.map(team => ({
+    ...team,
+    membersCount: Number(team.team_members?.[0]?.count ?? 0),
+    cost: costs?.get(team.id) ?? (costs ? 0 : null),
+  })), [rows, costs]);
 
   const filteredTeams = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
@@ -79,7 +84,7 @@ export default function TeamsPage() {
       .sort((left, right) => {
         if (sortMode === "name") return left.name.localeCompare(right.name, "ru");
         if (sortMode === "members") return right.membersCount - left.membersCount;
-        if (sortMode === "cost") return right.cost - left.cost;
+        if (sortMode === "cost") return (right.cost ?? 0) - (left.cost ?? 0);
         return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
       });
   }, [query, sortMode, teams, typeFilter]);
@@ -150,9 +155,9 @@ export default function TeamsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibleTeams.map((team) => (
-            <Link key={team.id} href={"/teams/" + team.id} className="panel group overflow-hidden transition hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_18px_60px_rgba(0,174,255,.09)]">
+            <Link key={team.id} href={"/teams/" + team.id} prefetch={false} className="panel group overflow-hidden transition hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_18px_60px_rgba(0,174,255,.09)]">
               <div className="relative h-40 overflow-hidden bg-[radial-gradient(circle_at_center,rgba(27,152,206,.2),transparent_58%),#07111a]">
-                {team.avatar_url ? <Image src={team.avatar_url} alt={team.name} fill sizes="(max-width: 640px) 100vw, 33vw" unoptimized className="object-cover transition duration-500 group-hover:scale-105" /> : <div className="grid h-full place-items-center text-6xl font-black text-cyan-400/25">{team.name.slice(0, 2).toUpperCase()}</div>}
+                {team.avatar_url ? <ListThumbnail src={team.avatar_url} alt={team.name} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover transition duration-500 group-hover:scale-105" /> : <div className="grid h-full place-items-center text-6xl font-black text-cyan-400/25">{team.name.slice(0, 2).toUpperCase()}</div>}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#071019] via-transparent to-transparent" />
                 <span className="badge badge-blue absolute left-4 top-4">{team.type === "guild" ? t("common.guild") : t("common.team")}</span>
               </div>
@@ -162,7 +167,7 @@ export default function TeamsPage() {
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
                   <div><strong className="block text-white">{team.membersCount}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.roster")}</span></div>
                   <div><strong className="block text-cyan-300">{team.main_rating == null ? "—" : formatNumber(Number(team.main_rating), { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.rating")}</span></div>
-                  <div><strong className="block text-amber-300">{formatCoins(team.cost, locale)}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
+                  <div><strong className="block text-amber-300">{team.cost === null ? "—" : formatCoins(team.cost, locale)}</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">{t("teams.value")}</span></div>
                 </div>
               </div>
             </Link>
