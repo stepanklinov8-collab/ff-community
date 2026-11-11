@@ -1,12 +1,15 @@
 import {test,expect,type Page} from '@playwright/test';
 import {createServer,type Server} from 'node:http';
+import {readFile} from 'node:fs/promises';
 
 const userId='00000000-0000-4000-8000-000000998901',teamId='00000000-0000-4000-8000-000000998902';
 const user={id:userId,aud:'authenticated',role:'authenticated',email:'test@example.invalid',app_metadata:{},user_metadata:{},created_at:'2026-01-01T00:00:00Z'};
+let teamPhoto:Buffer;
 const token=(expires:number)=>[{alg:'HS256',typ:'JWT'},{sub:userId,exp:expires},'test-only'].map(v=>Buffer.from(typeof v==='string'?v:JSON.stringify(v)).toString('base64url')).join('.');
 const session=(expires=4102444800)=>({access_token:token(expires),refresh_token:'test-refresh',expires_in:3600,expires_at:expires,token_type:'bearer',user});
 let server:Server;const calls:Array<{path:string;method:string;body:Record<string,unknown>;headers:Record<string,unknown>}>=[];
 test.beforeAll(async()=>{
+ teamPhoto=await readFile('public/brand/omcite-emblem.jpg');
  server=createServer(async(req,res)=>{
   const url=new URL(req.url!,'http://127.0.0.1:54321');let raw='';for await(const part of req)raw+=part;
   const body=raw?JSON.parse(raw):{};calls.push({path:url.pathname+url.search,method:req.method!,body,headers:req.headers});
@@ -15,8 +18,9 @@ test.beforeAll(async()=>{
   if(url.pathname==='/auth/v1/user')return res.end(JSON.stringify(user));
   if(url.pathname==='/auth/v1/signup')return res.end(JSON.stringify({...user,identities:[{id:'test'}],user_metadata:body.data}));
   if(url.pathname.startsWith('/auth/v1/'))return res.end('{}');
+  if(url.pathname.endsWith('/avatars/team.jpg')){res.setHeader('Content-Type','image/jpeg');return res.end(teamPhoto);}
   if(url.pathname.startsWith('/storage/v1/')){res.setHeader('Content-Type','image/png');return res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64'));}
-  if(url.pathname==='/rest/v1/teams')return res.end(JSON.stringify([{id:teamId,name:'Gateway Team',type:'team',description:'',created_at:user.created_at,avatar_url:'http://127.0.0.1:54321/storage/v1/object/public/avatars/team.png',main_rating:1,team_members:[{count:4}]}]));
+  if(url.pathname==='/rest/v1/teams')return res.end(JSON.stringify([{id:teamId,name:'Gateway Team',type:'team',description:'',created_at:user.created_at,avatar_url:'http://127.0.0.1:54321/storage/v1/object/public/avatars/team.jpg',main_rating:1,team_members:[{count:4}]}]));
   if(url.pathname==='/rest/v1/profiles')return res.end(JSON.stringify([{id:userId,nickname:'Gateway Player'}]));
   res.end('[]');
  });
@@ -70,11 +74,40 @@ test('login, persisted session, user read and sign-out keep canonical cookies th
  const remaining=await page.context().cookies();expect(remaining.filter(c=>c.name==='sb-127-auth-token')).toHaveLength(0);
 });
 
-test('expired session refresh, REST/RLS and original public image bytes work with no browser connection to Supabase',async({page})=>{
- const direct=await fixture(page);await cookie(page,Math.floor(Date.now()/1000)-120);await page.goto('/teams');
- await expect(page.getByText('Gateway Team',{exact:true})).toBeVisible();await expect.poll(()=>calls.some(c=>c.path==='/auth/v1/token?grant_type=refresh_token')).toBe(true);
- const image=page.getByRole('img',{name:'Gateway Team',exact:true});await expect(image).toHaveAttribute('src',/^\/api\/backend\/storage\/v1\/object\/public\/avatars\//);
- await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBe(1);
+test('expired session refresh, REST/RLS and responsive thumbnails work with no browser connection to Supabase',async({page})=>{
+ const direct=await fixture(page);
+ let releasePrices!:()=>void;
+ const pricesReady=new Promise<void>(resolve=>{releasePrices=resolve;});
+ await page.route('**/api/competition/leaderboard?*',async route=>{
+  await pricesReady;
+  await route.fulfill({json:{items:[{id:teamId,cost:25}]}});
+ });
+ const backgroundProfiles:string[]=[];
+ const capabilities:string[]=[];
+ page.on('request',request=>{
+  const path=new URL(request.url()).pathname;
+  if(path==='/teams/'+teamId)backgroundProfiles.push(path);
+  if(path==='/api/admin/capabilities')capabilities.push(path);
+ });
+ try {
+  await cookie(page,Math.floor(Date.now()/1000)-120);await page.goto('/teams');
+  await expect(page.getByText('Gateway Team',{exact:true})).toBeVisible();
+  await expect.poll(()=>calls.some(c=>c.path==='/auth/v1/token?grant_type=refresh_token')).toBe(true);
+ } finally {
+  releasePrices();
+ }
+ const image=page.getByRole('img',{name:'Gateway Team',exact:true});await expect(image).toHaveAttribute('srcset',/\/_next\/image\?/);
+ await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+ const thumbnailUrl=await image.evaluate(element=>(element as HTMLImageElement).currentSrc);
+ expect(new URL(thumbnailUrl).pathname).toBe('/_next/image');
+ const thumbnail=await page.request.get(thumbnailUrl);
+ expect(thumbnail.ok()).toBe(true);
+ const thumbnailBytes=(await thumbnail.body()).length;
+ expect(thumbnailBytes).toBeLessThan(teamPhoto.length/2);
+ console.log(`Catalog thumbnail: ${thumbnailBytes} bytes of ${teamPhoto.length} original bytes`);
+ expect(backgroundProfiles).toEqual([]);expect(capabilities).toEqual([]);
+ await page.getByRole('button',{name:'Открыть меню',exact:true}).click();
+ await expect.poll(()=>capabilities.length).toBe(1);
  const rest=calls.find(c=>c.path.startsWith('/rest/v1/teams'));expect(rest?.headers.apikey).toBe('local-test-not-a-production-key');expect(rest?.headers.cookie).toBeUndefined();expect(direct).toEqual([]);
 });
 

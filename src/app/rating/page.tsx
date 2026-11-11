@@ -1,2 +1,2 @@
-import CompetitionLeaderboard from "@/components/CompetitionLeaderboard";
-export default function Page() { return <CompetitionLeaderboard/>; }
+import PublicLeaderboard from "@/components/PublicLeaderboard";
+export default function Page() { return <PublicLeaderboard type="player" />; }

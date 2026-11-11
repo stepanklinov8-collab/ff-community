@@ -54,7 +54,7 @@ test.beforeAll(async () => {
       const matching = history.filter(row => url.searchParams.get("mode")!.includes(row.mode));
       return rows(matching.slice(Number(url.searchParams.get("offset")??0)));
     }
-    if (key === "u2_leaderboard") return send({items:[{id:player,name:"Player",rating:42+revision,cost:50+revision,position:1}],hasMore:false,query:body.p_query});
+    if (key === "u2_leaderboard") return send({items:[{id:player,name:"Player",rating:42+revision,cost:50+revision,position:1,games:12,kills:60,wins:2,series:0}],hasMore:false,query:body.p_query});
     if (key === "team_members") return rows([{user_id:player,teams:{id:teamId,name:"Arena",type:"team"}}]);
     if (key === "teams") {
       if (req.method === "HEAD") { res.setHeader("Content-Range","0-0/17"); return send(null); }
@@ -64,6 +64,8 @@ test.beforeAll(async () => {
       res.setHeader("Content-Range","0-0/8");
       return rows([{id:sessionId,event_id:eventId,start_time:"2099-10-20T16:00:00Z",events:{title:"Ближайшая тренировка",type:"training"}}]);
     }
+    if (key === "events") return rows([{id:eventId,title:"Расписание на сервере",type:"training",cost:0,max_teams:12}]);
+    if (key === "event_registrations") return rows([{session_id:sessionId},{session_id:sessionId}]);
     if (key === "activity_log") return rows([{id:"activity",description:"Новость сообщества",created_at:"2026-10-19T00:00:00Z",event_id:null,team_id:null}]);
     return rows([]);
   });
@@ -148,6 +150,36 @@ test("home serves counters and schedule in HTML, reuses its summary, and debounc
   await expect(page.locator(".search-results")).toContainText("Arena");
   expect(browserTables.filter(url=>url.includes("/teams?"))).toHaveLength(1);
   expect(clientErrors).toEqual([]);
+});
+
+test("initial leaderboard and tournament cards are rendered by the server without a browser API round trip", async ({ page, request }) => {
+  const paths = ["/rating", "/tournaments"] as const;
+  for (const path of paths) {
+    const html = await (await request.get(path)).text();
+    expect(html).toContain(path === "/rating" ? ">Player</a>" : ">Расписание на сервере</h2>");
+  }
+
+  const deferredRequests: string[] = [];
+  await page.route(/\/api\/(competition\/leaderboard|events\/public)(?:\?|$)/, route => {
+    deferredRequests.push(route.request().url());
+    return route.abort();
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const network = await page.context().newCDPSession(page);
+  await network.send("Network.enable");
+  await network.send("Network.emulateNetworkConditions", {
+    offline: false, latency: 150, downloadThroughput: 200_000, uploadThroughput: 90_000,
+  });
+  let started = Date.now();
+  await page.goto("/rating");
+  await expect(page.getByRole("link", {name: "Player", exact: true})).toBeVisible();
+  const ratingMs = Date.now() - started;
+  started = Date.now();
+  await page.goto("/tournaments");
+  await expect(page.getByRole("heading", {name: "Расписание на сервере"})).toBeVisible();
+  console.log(`Simulated mobile content: rating ${ratingMs} ms, schedule ${Date.now() - started} ms`);
+  await expect(page.getByText(/Зарегистрировано \/ всего мест: 2\/12/)).toBeVisible();
+  expect(deferredRequests).toEqual([]);
 });
 
 test("knowledge loads catalog text only for the selected section and preserves image URLs", async ({page}) => {
