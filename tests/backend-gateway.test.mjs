@@ -65,3 +65,20 @@ test('browser transport switches without changing SDK endpoint or retrying mutat
   process.env.NEXT_PUBLIC_SUPABASE_TRANSPORT='proxy';delete globalThis.window;await transport(endpoint+'/auth/v1/user');assert.equal(calls[2].url,endpoint+'/auth/v1/user');
  }finally{if(originalMode===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_TRANSPORT;else process.env.NEXT_PUBLIC_SUPABASE_TRANSPORT=originalMode;if(originalWindow===undefined)delete globalThis.window;else globalThis.window=originalWindow;}
 });
+
+test('versioned public pictures keep original bytes in browser/CDN cache and revalidate without credentials; errors remain private',async()=>{
+ const path='/storage/v1/object/public/avatars/players/example/00000000-0000-4000-8000-000000000001.png';
+ const bytes=new Uint8Array([137,80,78,71,13,10,26,10,1,2,3]);
+ const response=await proxyBackendRequest(request(path,{headers:{authorization:'Bearer never-forward',cookie:'private', 'if-none-match':'"photo-v1"'}}),config,async(url,options)=>{
+  assert.equal(options.headers.get('authorization'),null);assert.equal(options.headers.get('cookie'),null);assert.equal(options.headers.get('apikey'),config.publicKey);assert.equal(options.headers.get('if-none-match'),'"photo-v1"');
+  return new Response(bytes,{headers:{'content-type':'image/png',etag:'"photo-v1"','last-modified':'Tue, 10 Nov 2026 12:00:00 GMT'}});
+ });
+ assert.deepEqual(new Uint8Array(await response.arrayBuffer()),bytes);
+ assert.equal(response.headers.get('cache-control'),'public, max-age=31536000, immutable');assert.equal(response.headers.get('vercel-cdn-cache-control'),'public, max-age=31536000, immutable');assert.equal(response.headers.get('etag'),'"photo-v1"');
+ const unchanged=await proxyBackendRequest(request(path,{headers:{'if-none-match':'"photo-v1"'}}),config,async()=>new Response(null,{status:304,headers:{etag:'"photo-v1"'}}));
+ assert.equal(unchanged.status,304);assert.equal(await unchanged.text(),'');assert.match(unchanged.headers.get('cache-control'),/immutable/);
+ const legacy=await proxyBackendRequest(request('/storage/v1/object/public/avatars/legacy.png'),config,async()=>new Response(bytes,{headers:{'content-type':'image/png'}}));assert.equal(legacy.headers.get('cache-control'),'public, max-age=3600');
+ for(const status of [404,500]){const error=await proxyBackendRequest(request(path),config,async()=>Response.json({error:'Unavailable'},{status}));assert.match(error.headers.get('cache-control'),/no-store/);assert.equal(error.headers.get('vercel-cdn-cache-control'),'no-store');}
+ const html=await proxyBackendRequest(request(path),config,async()=>new Response('<script>unsafe</script>',{headers:{'content-type':'text/html'}}));assert.equal(html.status,415);assert.match(html.headers.get('cache-control'),/no-store/);
+ const auth=await proxyBackendRequest(request('/auth/v1/user'),config,async()=>Response.json({id:'private'},{headers:{'cache-control':'public,max-age=31536000'}}));assert.match(auth.headers.get('cache-control'),/private, no-store/);
+});

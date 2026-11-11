@@ -32,7 +32,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     uploadedPath = `teams/${id}/${randomUUID()}.${avatar.extension}`;
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(uploadedPath, avatar.bytes, { contentType: avatar.mimeType, upsert: false });
+      .upload(uploadedPath, avatar.bytes, { contentType: avatar.mimeType, upsert: false, cacheControl: "31536000" });
     if (uploadError) throw uploadError;
 
     const avatarUrl = supabase.storage.from("avatars").getPublicUrl(uploadedPath).data.publicUrl;

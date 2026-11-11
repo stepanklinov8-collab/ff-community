@@ -24,6 +24,17 @@ test.beforeAll(async()=>{
 });
 test.afterAll(async()=>{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));});
 test.beforeEach(()=>{calls.length=0;});
+test('public picture bytes are reused from browser cache and a replacement filename loads a fresh image',async({page})=>{
+ // No page.route: Playwright routing disables the HTTP cache being verified.
+ await page.goto('/privacy');
+ const original='/api/backend/storage/v1/object/public/avatars/teams/test/00000000-0000-4000-8000-000000000011.png';
+ const replacement=original.replace('000000000011.png','000000000012.png');
+ const load=async(src:string)=>page.evaluate(async url=>{const image=new Image();image.src=url;await image.decode();document.body.append(image);return image.naturalWidth;},src);
+ expect(await load(original)).toBe(1);expect(await load(original)).toBe(1);
+ expect(calls.filter(call=>call.path.endsWith('000000000011.png'))).toHaveLength(1);
+ await page.reload();expect(await load(original)).toBe(1);expect(calls.filter(call=>call.path.endsWith('000000000011.png'))).toHaveLength(1);
+ expect(await load(replacement)).toBe(1);expect(calls.filter(call=>call.path.endsWith('000000000012.png'))).toHaveLength(1);
+});
 async function fixture(page:Page){
  const direct:string[]=[];page.on('request',request=>{if(new URL(request.url()).port==='54321'||new URL(request.url()).hostname.endsWith('.supabase.co'))direct.push(request.url());});
  await page.route('http://127.0.0.1:54321/**',route=>route.abort());

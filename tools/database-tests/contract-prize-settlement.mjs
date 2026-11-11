@@ -14,7 +14,7 @@ export async function verifyContractPrizeSettlement(db,id){
   const terms=defaultTerms(new Date(now-10*day));if(i===1)terms.participation={mode:'proportional'};if(i===2)terms.trainingShareBps=7000;
   await db.query("insert into organization_contracts(id,organization_id,player_id,kind,created_by) values($1,$2,$3,'main',$4)",[contracts[i],team,players[i],owner]);
   await db.query("insert into organization_contract_versions(contract_id,revision,terms,created_by,status) values($1,1,$2::jsonb,$3,'offered')",[contracts[i],JSON.stringify(terms),owner]);
-  const signed=now-(i===2?2:10)*day;
+  const signed=now-(i===2?1:10)*day;
   await db.query('insert into contract_agreements(contract_id,revision,organization_signer,player_signer,ownership_revision,signed_at,effective_at) values($1,1,$2,$3,1,$4,$4)',[contracts[i],owner,players[i],iso(signed)]);
  }
  const wallet=async(actor,action,input)=>(await db.query('select u6_coin_action($1,$2,$3,$4::jsonb) value',[actor,randomUUID(),action,JSON.stringify(input)])).rows[0].value;
@@ -42,7 +42,9 @@ export async function verifyContractPrizeSettlement(db,id){
   };
   return{session,doc,publish};
  };
- const first=await makeSession(17030,now-5*day);
+ // Keep the payable fixture after the Nov 9 launch; dedicated launch tests
+ // separately prove that genuinely older results cannot pay.
+ const first=await makeSession(17030,now-1.5*day);
  const org=async()=>(await db.query('select balance::int,reserved::int from coin_accounts where team_id=$1',[team])).rows[0];
  const balance=async(i)=>Number((await db.query('select coalesce((select balance from coin_accounts where user_id=$1),0) value',[players[i]])).rows[0].value);
  const entries=async()=>(await db.query('select count(*)::int n from coin_entries')).rows[0].n;
@@ -70,7 +72,7 @@ export async function verifyContractPrizeSettlement(db,id){
  assert.equal(await balance(0),0);assert.equal((await org()).balance,250,'released reserve repays the remaining return claim');
  await first.publish(first.doc({absent:true,place:3}));assert.deepEqual(await org(),{balance:100,reserved:0},'podium correction changes the actual source award');
  await db.query("update event_sessions set status='cancelled' where id=$1",[first.session]);assert.deepEqual(await org(),{balance:0,reserved:0});
- const excessive=await makeSession(17050,now-day),priorEntries=await entries();
+ const excessive=await makeSession(17050,now-0.5*day),priorEntries=await entries();
  await assert.rejects(()=>excessive.publish(excessive.doc({all:true})),/CONTRACT_TOTAL_SHARE/);
  assert.equal(await entries(),priorEntries);assert.equal((await db.query('select count(*)::int n from competition_publications where session_id=$1',[excessive.session])).rows[0].n,0,'oversubscription rolls back publication and every money movement');
  const ledger=(await db.query("select sum(e.amount)::bigint total from coin_entries e join coin_operations o on o.id=e.operation_id where o.action in('contract_payment','contract_return','prize_payout','prize_reversal') and (e.account_id in(select id from coin_accounts where user_id=any($1::uuid[]) or team_id=$2))",[[owner,...players],team])).rows[0];
