@@ -19,7 +19,7 @@ export async function POST(request:Request){
  if(request.headers.get("content-type")?.includes("multipart/form-data")){
   const form=await request.formData();raw=JSON.parse(String(form.get("payload")));const image=form.get("image");
   if(image instanceof File&&image.size){const data=await readImageUpload(image,{maxBytes:10*1024*1024,label:"Обложка"});uploaded=`${auth.user.id}/${randomUUID()}.${data.extension}`;
-   const {error}=await db.storage.from("event-images").upload(uploaded,data.bytes,{contentType:data.mimeType});if(error)throw error;raw.config.imageUrl=db.storage.from("event-images").getPublicUrl(uploaded).data.publicUrl;}
+   const {error}=await db.storage.from("event-images").upload(uploaded,data.bytes,{contentType:data.mimeType,upsert:false,cacheControl:"31536000"});if(error)throw error;raw.config.imageUrl=db.storage.from("event-images").getPublicUrl(uploaded).data.publicUrl;}
  }else raw=await request.json();
  const input=z.object({id:z.string().uuid().nullable(),revision:z.number().int().nonnegative(),config:z.unknown(),approve:z.boolean().default(false),preview:z.boolean().default(false)}).parse(raw);
  const result=await saveEventConfiguration(db,auth,input.id,input.revision,input.config,input.approve,input.preview);

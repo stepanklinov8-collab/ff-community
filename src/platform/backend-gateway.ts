@@ -28,6 +28,13 @@ export async function proxyBackendRequest(request: Request, config: {endpoint:st
   if (site === 'cross-site' || origin && origin !== websiteOrigin || !['GET','HEAD'].includes(request.method) && !origin) return failure(403,'Use the website to make this request');
   const headers = new Headers();
   for (const name of forwardedHeaders) { const value=request.headers.get(name); if (value) headers.set(name,value); }
+  const media=path.startsWith('/storage/v1/');
+  if (media) {
+    // Public pictures are identical for everyone; never vary a shared cache by
+    // user credentials. Cookies have never been forwarded by this gateway.
+    headers.delete('authorization');
+    for (const name of ['if-none-match','if-modified-since']) { const value=request.headers.get(name); if(value)headers.set(name,value); }
+  }
   headers.set('apikey',config.publicKey);
   let body: Uint8Array | undefined;
   try { body = await readBody(request,path.startsWith('/auth/') ? 64*1024 : 1024*1024); }
@@ -43,11 +50,19 @@ export async function proxyBackendRequest(request: Request, config: {endpoint:st
       if (destination.origin !== websiteOrigin || !destination.pathname.startsWith('/auth')) return failure(502,'Unexpected backend redirect');
       responseHeaders.set('location',destination.href);
     }
-    const media=path.startsWith('/storage/v1/');
     if (media && result.ok) {
       if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(result.headers.get('content-type')??'')) { await result.body?.cancel(); return failure(415,'Unsupported image'); }
       responseHeaders.set('Content-Security-Policy',"default-src 'none'; sandbox");
-      responseHeaders.set('Cache-Control','public, max-age=3600'); responseHeaders.delete('CDN-Cache-Control'); responseHeaders.delete('Vercel-CDN-Cache-Control');
+    }
+    if (media && (result.ok || result.status===304)) {
+      // Uploads use a fresh UUID filename on every replacement (upsert=false).
+      // Only these versioned objects can be held long-term without showing an
+      // old avatar after a user changes it. Legacy names revalidate in an hour.
+      const versioned=/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpe?g|png|webp|gif|avif)$/i.test(path);
+      responseHeaders.set('Cache-Control',versioned?'public, max-age=31536000, immutable':'public, max-age=3600');
+      responseHeaders.set('CDN-Cache-Control',versioned?'public, max-age=31536000, immutable':'public, max-age=3600');
+      responseHeaders.set('Vercel-CDN-Cache-Control',versioned?'public, max-age=31536000, immutable':'public, max-age=3600');
+      for (const name of ['etag','last-modified']) { const value=result.headers.get(name); if(value)responseHeaders.set(name,value); }
     }
     return new Response(request.method==='HEAD'||[204,304].includes(result.status)?null:result.body,{status:result.status,headers:responseHeaders});
   } catch { return failure(502,'Backend temporarily unavailable'); }

@@ -56,6 +56,9 @@ export async function verifySessionAwards(db,id,base){
  await db.exec('begin');
  await db.query("update competition_award_entries set outcome=0 where target_type='player' and target_id=$1",[id(91100)]);
  const withoutBonus=Number(await scalar('select recalculate_player_rating($1)',[id(91100)]));
+ // Prices are materialized at commit; flush deferred work inside this
+ // rollback-only comparison to observe the same values a reader sees.
+ await db.exec('set constraints all immediate');
  const costWithout=Number(await scalar("select u2_cost_for_target('player',$1)",[id(91100)]));
  assert.ok(Math.abs(ratedBefore-withoutBonus-5)<.00001,'Rating gets the capped award, without compounding');
  assert.ok(costBefore>costWithout,'Existing value formula reflects the higher rating');

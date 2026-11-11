@@ -16,7 +16,8 @@ export async function verifyRentalPayments(db,id){
  const balance=async(target,team=true)=>(await db.query(`select coalesce((select balance from coin_accounts where ${team?'team_id':'user_id'}=$1),0)::int balance,coalesce((select reserved from coin_accounts where ${team?'team_id':'user_id'}=$1),0)::int reserved`,[target])).rows[0];
  await wallet('adjust',{kind:'player',ownerId:owner,amount:5000,reason:'Organizer funds separate from rental payer'});
  const fixture=async(n,{rule,rate=100,share=0,personalShare=0,funding=1000,personal=20,otherShare=0})=>{
-  const host=id(n),event=id(n+1),session=id(n+2),group=id(n+3),game=id(n+4),reg=id(n+5),contract=id(n+6),start=now-(n===21100?6:n===21200?4:2)*day;
+  // Payable fixtures remain chronological, inside the launched prize week.
+  const host=id(n),event=id(n+1),session=id(n+2),group=id(n+3),game=id(n+4),reg=id(n+5),contract=id(n+6),start=now-(n===21100?1.5:n===21200?1:0.5)*day;
   await db.query("insert into teams(id,name,type,leader_id,verified) values($1,$2,'team',$3,true)",[host,'Rental host '+n,owner]);
   await db.query('insert into events(id,title,type,organizer_user_id,is_published,moderation_status,min_players,prize_plan,personal_prizes) values($1,$2,\'training\',$3,true,\'approved\',1,\'[250,150,100]\',$4::jsonb)',[event,'Rental event '+n,owner,JSON.stringify({mvp:personal,maxKills:0})]);
   await db.query("insert into event_sessions(id,event_id,start_time,end_time) values($1,$2,now()+interval '1 day',now()+interval '1 day 1 hour')",[session,event]);

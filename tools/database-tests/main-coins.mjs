@@ -101,11 +101,11 @@ export async function verifyMainCoins(db,id,base){
  console.log('PASS: creator grant moves once to primary wallet; demo starting funds do not migrate');
 
  await action(owner,'reset',{kind:'player',ownerId:owner,reason:'Scheduler fixture'});await credit(owner,1000);
- const recurring=structuredClone(config);recurring.title='Funded recurring';recurring.trainingSchedule={enabled:true,startsOn:'2026-11-02'};
+ const recurring=structuredClone(config);recurring.title='Funded recurring';recurring.trainingSchedule={enabled:true,startsOn:'2026-11-09'};
  recurring.sessions[0].id=id(996060);recurring.sessions[0].startTime='2026-10-04T16:00:00Z';recurring.sessions[0].endTime='2026-10-04T17:00:00Z';
  recurring.sessions[0].groups[0].id=id(996061);recurring.sessions[0].groups[0].games[0].id=id(996062);
  const recurringId=(await db.query('select u2_event_configuration($1,null,0,$2::jsonb) value',[owner,JSON.stringify(recurring)])).rows[0].value.eventId;
- const run=async()=>(await db.query("select u3_extend_training_schedules('2026-11-02T08:00:00Z') value")).rows[0].value;
+ const run=async()=>(await db.query("select u3_extend_training_schedules('2026-11-09T08:00:00Z') value")).rows[0].value;
  const first=await run();
  assert.ok(first.fundingErrors.some(e=>e.eventId===recurringId));
  assert.equal((await db.query('select count(*)::int n from event_prize_funds f join event_sessions s on s.id=f.session_id where s.event_id=$1',[recurringId])).rows[0].n,2);

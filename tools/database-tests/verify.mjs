@@ -54,6 +54,8 @@ import {verifyPersonalAwards} from './personal-awards.mjs';
 import {verifyPrizeClosure} from './prize-closure.mjs';
 import {verifyRentalPayments} from './rental-payments.mjs';
 import {installChatRealtimeFixture} from './chat-realtime-fixture.mjs';
+import {verifyPrizePaymentLaunch,prepareHistoricalPrizeLaunch} from './prize-payment-launch.mjs';
+import {verifyStoredEconomyValues} from './stored-economy-values.mjs';
 const db=new PGlite();
 let verificationCompleted=false;
 process.on('exit',()=>{if(!verificationCompleted){console.error('FAILED: SQL verification ended before all selected scenarios completed');process.exitCode=1;}});
@@ -97,7 +99,10 @@ try {
    await db.query(`insert into public.teams(id,name,type,leader_id) values($1,'Backfill organization','team',$2)`,[legacyTeam,legacyLeader]);
    await db.query(`insert into public.team_members(team_id,user_id,role_in_team) values($1,$2,'leader')`,[legacyTeam,legacyLeader]);
   }
-  const sql=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
+  // Function-body patch guards must behave identically on Windows checkouts
+  // (CRLF) and Linux CI (LF).
+  const sql=(await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8')).replaceAll('\r\n','\n');
+  if(name==='202611110001_prize_payment_launch.sql')await prepareHistoricalPrizeLaunch(db,migrationId);
   try{await db.exec(sql);console.log('Migration OK:',name);}
   catch(error){console.error('Migration failed:',name,error.message,error.where,'position',error.position,'near',sql.slice(Math.max(0,Number(error.position)-150),Number(error.position)+100));throw error;}
   if(name==='202610290005_organization_ownership.sql'){
@@ -106,7 +111,9 @@ try {
    assert.equal((await db.query(`select count(*)::integer n from public.team_members where team_id=$1`,[migrationId(9952)])).rows[0].n,1);
   }
  }
- if(process.argv.includes('--funding-only')){await verifyFundingRequests(db,migrationId);}
+ if(process.argv.includes('--stored-values-only')){await verifyStoredEconomyValues(db,migrationId);}
+ else if(process.argv.includes('--prize-launch-only')){await verifyPrizePaymentLaunch(db,migrationId);}
+ else if(process.argv.includes('--funding-only')){await verifyFundingRequests(db,migrationId);}
  else if(process.argv.includes('--player-reversal-workflow-only')){await verifyPlayerTransferReversalWorkflow(db,migrationId);}
  else if(process.argv.includes('--player-reversal-only')){await verifyPlayerTransferExecution(db,migrationId);await verifyPlayerTransferReversal(db,migrationId);}
  else if(process.argv.includes('--player-returns-only')){await verifyPlayerReturnReconciliation(db,migrationId);}
@@ -289,6 +296,8 @@ try {
  await verifyPersonalAwards(db,id);
  await verifyPrizeClosure(db,id);
  await verifyRentalPayments(db,id);
+ await verifyPrizePaymentLaunch(db,id);
+ await verifyStoredEconomyValues(db,id);
 }
 } catch(error){console.error('FAILED:',error.stack??error.message,error.where??'',error.detail??'');process.exitCode=1;
 } finally {await db.close();}
