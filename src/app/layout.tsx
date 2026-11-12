@@ -5,9 +5,13 @@ import LanguageProvider from "@/components/LanguageProvider";
 import SiteFooter from "@/components/SiteFooter";
 import { WebsiteInstallProvider } from "@/components/WebsiteInstall";
 import ActivityTracker from "@/components/ActivityTracker";
+import { publicSiteOrigin } from "@/lib/site-address";
+
+const isProduction = process.env.NEXT_PUBLIC_DEPLOYMENT_ENV === "production";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(isProduction ? publicSiteOrigin : process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  alternates: { canonical: "./" },
   title: {
     default: "OMCITE Arena — турниры и сообщество Free Fire",
     template: "%s · OMCITE Arena",
