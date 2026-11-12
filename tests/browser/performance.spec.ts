@@ -152,6 +152,21 @@ test("home serves counters and schedule in HTML, reuses its summary, and debounc
   expect(clientErrors).toEqual([]);
 });
 
+test.describe("home before JavaScript runs", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("shows loading status and direct links in the first visible HTML", async ({ page }) => {
+    const response = await page.goto("/");
+    expect(response?.ok()).toBeTruthy();
+    const main = page.getByRole("main");
+    await expect(main.getByText("Страница загружается…")).toBeVisible();
+    const links = main.getByRole("navigation", { name: "Разделы сайта" });
+    await expect(links.getByRole("link", { name: "Турниры и тренировки" })).toHaveAttribute("href", "/tournaments");
+    await expect(links.getByRole("link", { name: "Команды и гильдии" })).toHaveAttribute("href", "/teams");
+    await expect(links.getByRole("link", { name: "Войти" })).toHaveAttribute("href", "/auth");
+  });
+});
+
 test("initial leaderboard and tournament cards are rendered by the server without a browser API round trip", async ({ page, request }) => {
   const paths = ["/rating", "/tournaments"] as const;
   for (const path of paths) {
